@@ -224,85 +224,107 @@ class Forecast_Models:
 
         return result_df
 
-    def seasonal_decomposition(self, past_values: int = 3, method: str = 'calendar_years'):
+    def seasonal_decomposition(self, method: str, value: int = 3):
         """
-        Декомпозиция временного ряда с выделением тренда и сезонности.
+            Декомпозиция временного ряда с выделением тренда и сезонности.
                 Args:
-                    past_values: Количество предыдущих фикс.периодов/календарных лет, по которым выполняется прогноз (по умолчанию 3)
-                    method: Метод декомпозиции ('fixed_periods' или 'calendar_years').
+                    method: 'fixed_periods' или 'calendar_years', определяет способ обработки данных.
+                    value: Количество предыдущих фикс.периодов/календарных лет, по которым выполняется прогноз (по умолчанию 3)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
-
-        # Проверка количества доступных данных
-        if len(self.df) < past_values * 12:
-            raise ValueError(
-                f"Недостаточно данных для анализа. Требуется как минимум {past_values * 12} месяцев данных.")
-
         if method not in ['fixed_periods', 'calendar_years']:
-            raise ValueError("Недопустимый метод. Используйте 'fixed_periods' или 'calendar_years'.")
+            raise ValueError("Invalid method. Choose 'fixed_periods' or 'calendar_years'.")
 
         if method == 'fixed_periods':
-            # Данные за последние past_values лет
-            start_date = self.df.index[-1] - pd.DateOffset(years=past_values)
-            past_years = self.df[self.df.index >= start_date]
-
-            if len(past_years) < past_values * 12:
+            # Проверяем, достаточно ли данных
+            min_required_data = 12 * value
+            if len(self.df) < min_required_data:
                 raise ValueError(
-                    "Недостаточно данных для метода 'fixed_periods'. Убедитесь, что данных хватает на указанное количество лет.")
+                    f"Not enough data for 'fixed_periods'. At least {min_required_data} data points are required.")
+
+            # Получаем данные за последние value лет
+            past_years = self.df[self.df.index >= self.df.index[-1] - pd.DateOffset(years=value)]
+
+            # Удаляем тренд
+            detrended = past_years.diff().dropna()
+            detrended['month'] = detrended.index.month
+            average_season_k = detrended.groupby('month').mean()
+            average_season_val = pd.concat([average_season_k] * (len(past_years) // 12), ignore_index=True)
+
+            # Вычитаем сезонность для получения тренда
+            trend = past_years.reset_index(drop=True) - average_season_val
+            trend = trend.dropna()
+
+            # Прогнозируем тренд
+            average_step = detrended.mean()
+            last_value = trend.iloc[-1]
+            next_year_trend = [last_value + (i + 1) * average_step for i in range(self.forecast_periods)]
+
+            next_year_dates = pd.date_range(
+                start=past_years.index[-1] + pd.DateOffset(months=1),
+                periods=self.forecast_periods,
+                freq='ME'
+            )
+
+            next_year_trend_df = pd.DataFrame(next_year_trend, index=next_year_dates, columns=self.df.columns)
+            season_forecast_df = pd.DataFrame(average_season_val.values[:self.forecast_periods],
+                                              index=next_year_dates, columns=self.df.columns)
+
+            forecast_df = season_forecast_df + next_year_trend_df
+
+            return forecast_df
 
         elif method == 'calendar_years':
+            # Проверяем, достаточно ли данных
+            if len(self.df) < 12 * value:
+                raise ValueError(
+                    f"Not enough data for 'calendar_years'. At least {12 * value} data points are required.")
+
+            # Обрабатываем последние value лет
             last_date = self.df.index.max()
             end_year = last_date.year
             last_month = last_date.month
 
-            # Данные за последние past_values календарных лет
             if last_month < 12:
-                past_years = self.df[(self.df.index >= f'{end_year - past_values}-01-01') &
-                                     (self.df.index < f'{end_year}-01-01')]
+                last_years = self.df[
+                    (self.df.index >= f'{end_year - value}-01-01') & (self.df.index < f'{end_year}-01-01')]
             else:
-                past_years = self.df[(self.df.index >= f'{end_year - (past_values - 1)}-01-01') &
-                                     (self.df.index < f'{end_year + 1}-01-01')]
+                last_years = self.df[
+                    (self.df.index >= f'{end_year - (value - 1)}-01-01') & (
+                                self.df.index < f'{end_year + 1}-01-01')]
 
-            if len(past_years) < past_values * 12:
-                raise ValueError(
-                    "Недостаточно данных для метода 'calendar_years'. Убедитесь, что данных хватает на указанное количество календарных лет.")
+            detrended = last_years.diff().dropna()
+            detrended['month'] = detrended.index.month
+            average_season_k = detrended.groupby('month').mean()
+            average_season_val = pd.concat([average_season_k] * (len(last_years) // 12), ignore_index=True)
 
-        # Удаляем тренд с помощью дифференцирования
-        detrended = past_years.diff().dropna()
-        detrended['month'] = detrended.index.month
-        average_season_k = detrended.groupby('month').mean()
-        average_season_val = pd.concat([average_season_k] * (len(past_years) // 12), ignore_index=True)
+            trend = last_years.reset_index(drop=True) - average_season_val
 
-        # Выделяем тренд
-        trend = past_years.reset_index(drop=True) - average_season_val
-        trend = trend.dropna()
+            average_step = detrended.mean()
+            last_value = trend.iloc[-1]
 
-        # Прогноз тренда
-        average_step = detrended.mean()
-        last_value = trend.iloc[-1]
-        next_year_trend = [last_value + (i + 1) * average_step for i in range(self.forecast_periods)]
+            next_year_start = last_date + pd.DateOffset(months=1)
+            months_to_forecast = self.forecast_periods + (last_month if last_month != 12 else 0)
 
-        # Даты для прогноза
-        next_year_start = past_years.index[-1] + pd.DateOffset(months=1)
-        next_year_dates = pd.date_range(
-            start=next_year_start,
-            periods=self.forecast_periods,
-            freq='MS'
-        )
+            next_year_trend = [last_value + (i + 1) * average_step for i in range(months_to_forecast)]
+            next_year_dates = pd.date_range(start=next_year_start, periods=months_to_forecast, freq='ME')
 
-        # Преобразуем результат в DataFrame
-        next_year_trend_df = pd.DataFrame(next_year_trend, index=next_year_dates, columns=self.df.columns)
-        season_forecast_df = pd.DataFrame(
-            average_season_val.values[:self.forecast_periods],
-            index=next_year_dates,
-            columns=self.df.columns
-        )
+            next_year_trend_df = pd.DataFrame(next_year_trend, index=next_year_dates, columns=self.df.columns)
+            season_forecast_df = pd.DataFrame(
+                average_season_val.values[:months_to_forecast],
+                index=next_year_dates,
+                columns=self.df.columns
+            )
 
-        # Финальный прогноз: тренд + сезонность
-        final_forecast = next_year_trend_df + season_forecast_df
+            next_year_dates_fact = pd.date_range(start=next_year_start, periods=self.forecast_periods, freq='ME')
+            if last_month < 12:
+                next_year_trend_df = next_year_trend_df.iloc[last_month:].set_index(next_year_dates_fact)
+                season_forecast_df = season_forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
 
-        return final_forecast
+            final_forecast = next_year_trend_df + season_forecast_df
+
+            return final_forecast
 
     def rolling_mean_fixed_periods(self, past_values: int = 3):
         """
