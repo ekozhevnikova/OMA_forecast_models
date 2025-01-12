@@ -1,3 +1,6 @@
 .DS_Store
 .ipynb_checkpoints
 regions
+.vscode
+TEST
+*/__pycache__
