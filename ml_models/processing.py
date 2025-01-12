@@ -167,6 +167,7 @@ class Forecast_Models:
         return future_predictions, predicted_df
 
     def naive_forecast(self, past_values: int = 3, weigh_error: float = 0):
+        # TODO documentation
         """
             Наивный метод прогнозирования с учетом ошибки (опционально).
 
@@ -312,6 +313,7 @@ class Forecast_Models:
     #     return final_forecast
 
     def seasonal_decomposition(self, method: str, past_values: int = 3):
+        # TODO documentation
 
         """
             Декомпозиция временного ряда с выделением тренда и сезонности.
@@ -385,6 +387,7 @@ class Forecast_Models:
         return forecast_df
 
     def rolling_mean(self, method: str, past_values: int = 3):
+        # TODO documentation
         """
             Декомпозиция временного ряда с применением скользящего среднего.
                 Args:
@@ -437,9 +440,12 @@ class Forecast_Models:
         average_step = np.abs(steps.mean())
         last_value = rolling_mean.iloc[-1]
 
-        # Прогнозируем скользящее среднее на следующие 2 года (24 месяца)
+        # Прогнозируем скользящее среднее
         next_year_rolling_mean = [last_value + (i + 1) * average_step for i in range(months_to_forecast)]
-        next_year_dates = pd.date_range(start=last_date, periods=months_to_forecast, freq='MS')
+        next_year_dates = pd.date_range(start=last_date + pd.DateOffset(months=1),
+                                        periods=months_to_forecast,
+                                        freq='ME'
+                                        )
         next_year_rolling_mean_df = pd.DataFrame(
             next_year_rolling_mean,
             index=next_year_dates,
@@ -460,176 +466,141 @@ class Forecast_Models:
 
         return forecast_df
 
-    # def decomposition_with_trend_fixed_periods(self, years_count, w_1=0.2, w_2=0.8):
-    #     #TODO выбирать количество исторических значений; оставить вес тут или дать пользователю?
-    #     # С трендом мб только по трем годам
-    #     '''
-    #         Создает новый DataFrame с спрогнозированными значениями.
-    #         Прогноз значений выполняется на основе указанного количества предыдущих
-    #         периодов (один период равен 12 месяцев), путем выделения из этих периодов сезонности и тренда.
-    #
-    #         Сезонность рассчитывается как среднее нормированных значений за указанные периоды.
-    #
-    #         Для прогноза на основе одного и двух прошлых периодов, считаем, что тренда нет.
-    #         Будущее значение тренда на основе трёх прошлых периодов рассчитывается как сумма предыдущего значения и средней
-    #         разницы между средними значениями прериодов (где разность между средними значениями для разных периодов имеет
-    #         разные весовые коэффициенты).
-    #
-    #
-    #         :param df: Исходный DataFrame
-    #         :param years_count: Количество предыдущих периодов для анализа (1, 2 или 3)
-    #         :param w_1: Вес для разности между 1 и 2 периодом (по умолчанию 0.2)
-    #         :param w_2: Вес для разности между 2 и 3 периодом (по умолчанию 0.8)
-    #         :return:  Новый DataFrame, список рассатриваемых исторических значений
-    #         '''
-    #
-    #     if len(self.df) < 12 * years_count:
-    #         raise ValueError("В DataFrame недостаточно данных для указанного количества периодов.")
-    #
-    #     yearly_means = []
-    #     last_n_list = []
-    #     yearly_normalized = []
-    #     means_df = pd.DataFrame()
-    #
-    #     # Периоды для анализа
-    #     for i in range(years_count):
-    #         if i == 0:
-    #             last_n = self.df.iloc[-12:]
-    #         elif i == 1:
-    #             last_n = self.df.iloc[-24:-12]
-    #         elif i == 2:
-    #             last_n = self.df.iloc[-36:-24]
-    #
-    #         # Добавляем значения прошлых периодов в список и для каждого периода раасчитываем среднее
-    #         last_n_list.append(last_n)
-    #         last_n_mean = last_n.mean()
-    #
-    #         # Добавляем средние значения за кждый период в список
-    #         yearly_means.append(last_n_mean)
-    #         means_df[f'Period_{i + 1}'] = last_n_mean
-    #
-    #         # Рассчитываем нормированные значения и добавляем в список, сбрасывая индексы
-    #         last_n_normalized = last_n / last_n_mean
-    #         yearly_normalized.append(last_n_normalized.reset_index(drop=True))
-    #
-    #     # Рассчитываем среднее для нормированных значений для прогноза сезонности
-    #     average_normalized = sum(yearly_normalized) / years_count
-    #     # Рассчитываем среднее для всех значений для прогноза тренда
-    #     overall_mean = sum(yearly_means) / years_count
-    #
-    #     # Прогноз по одному или двум прошлым периодам
-    #     if (years_count == 1) or (years_count == 2):
-    #         lst_overall_mean = overall_mean.tolist()
-    #         result_df = average_normalized * lst_overall_mean
-    #     # Прогноз по трем прошлым периодам
-    #     if years_count == 3:
-    #         step = (means_df['Period_2'] - means_df['Period_3']) * w_1 + (
-    #                 means_df['Period_1'] - means_df['Period_2']) * w_2
-    #         forecast_average = step + means_df['Period_1']
-    #         result_df = average_normalized * forecast_average
-    #
-    #     # Обновляем индекс
-    #     new_index = pd.date_range(start=self.df.index.max() + pd.DateOffset(months=1), periods=12, freq='MS')
-    #     result_df.index = new_index
-    #
-    #     return result_df, last_n_list
-    #
-    # def decomposition_with_trend_calendar_years(self, years_count, w_1=0.2, w_2=0.8):
-    #     #TODO выбирать количество исторических значений; оставить вес тут или дать пользователю?
-    #     # С трендом мб только по трем годам
-    #     '''
-    #         Создает новый DataFrame с спрогнозированными значениями.
-    #         Прогноз значений выполняется на основе указанного количества предыдущих лет, путем выделения из них сезонности и
-    #         тренда.
-    #
-    #         Прогноз выполняется на 12 месяцев, даже если исходный ряд не заканчивается концом календарного года.
-    #
-    #         :param df: Исходный DataFrame
-    #         :param years_count: Количество предыдущих периодов для анализа (1, 2 или 3)
-    #         :param w_1: Вес для разности между 1 и 2 периодом (по умолчанию 0.2)
-    #         :param w_2: Вес для разности между 2 и 3 периодом (по умолчанию 0.8)
-    #         :return:  Новый DataFrame, список рассматриваемых исторических значений
-    #         '''
-    #
-    #     # Получение текущего года и последнего месяца
-    #     last_date = self.df.index.max()
-    #     last_year = last_date.year
-    #     last_month = last_date.month
-    #
-    #     current_year = self.df.index.year.max()
-    #
-    #     # Проверка, что данных достаточно
-    #     if (current_year - years_count + 1) not in self.df.index.year.unique():
-    #         raise ValueError("В DataFrame недостаточно данных для указанного количества периодов.")
-    #
-    #     yearly_means = []
-    #     yearly_normalized = []
-    #     means_df = pd.DataFrame()
-    #     last_n_list = []
-    #
-    #     # Периоды для анализа
-    #     for i in range(years_count):
-    #         if last_month < 12:
-    #             year = current_year - (i + 1)
-    #             last_n = self.df[self.df.index.year == year]
-    #         else:
-    #             year = current_year - (i)
-    #             last_n = self.df[self.df.index.year == year]
-    #
-    #         # Расчет среднего значения по каждому периоду для каждого столбца
-    #         last_n_list.append(last_n)
-    #         last_n_mean = last_n.mean()
-    #         yearly_means.append(last_n_mean)
-    #         means_df[f'Period_{i + 1}'] = last_n_mean
-    #
-    #         # Нормализация данных для каждого периода для каждого столбца
-    #         last_n_normalized = last_n / last_n_mean
-    #         yearly_normalized.append(last_n_normalized.reset_index(drop=True))
-    #
-    #     # Расчет средних нормированных значений по всем периодам
-    #     average_normalized = sum(yearly_normalized) / years_count
-    #     # Расчет общего среднего значения
-    #     overall_mean = sum(yearly_means) / years_count
-    #
-    #     # Вычисление тренда в зависимости от количества рассматриваемых лет
-    #     if years_count == 1 or years_count == 2:
-    #         result_df = average_normalized * overall_mean
-    #     elif years_count == 3:
-    #         r = (means_df['Period_2'] - means_df['Period_3']) * w_1 + (
-    #                     means_df['Period_1'] - means_df['Period_2']) * w_2
-    #         res_df = r + means_df['Period_1']
-    #         result_df = average_normalized * res_df
-    #         b = (means_df['Period_1'] - means_df['Period_2']) * w_1 + (result_df.mean() - means_df['Period_1']) * w_2
-    #         r_2 = (b + result_df.mean()) * average_normalized
-    #
-    #     # Определение количества месяцев, которые нужно спрогнозировать
-    #     months_to_forecast = 12
-    #     months_remaining_current_year = 12 - last_month
-    #
-    #     # Если последний месяц не декабрь, сначала прогнозируем на оставшиеся месяцы текущего года
-    #     if months_remaining_current_year > 0:
-    #         # Прогноз на оставшиеся месяцы текущего года с использованием result_df
-    #         forecast_current_year = result_df.tail(months_remaining_current_year)
-    #         new_index_current_year = pd.date_range(start=last_date + pd.DateOffset(months=1),
-    #                                                periods=months_remaining_current_year, freq='MS')
-    #         forecast_current_year.index = new_index_current_year
-    #
-    #         # Прогноз на месяцы следующего года с использованием r_2
-    #         months_next_year = months_to_forecast - months_remaining_current_year
-    #         forecast_next_year = r_2.head(months_next_year)
-    #         new_index_next_year = pd.date_range(start=new_index_current_year[-1] + pd.DateOffset(months=1),
-    #                                             periods=months_next_year, freq='MS')
-    #         forecast_next_year.index = new_index_next_year
-    #
-    #         result_df_forecast = pd.concat([forecast_current_year, forecast_next_year])
-    #
-    #     # Если последний месяц — декабрь, прогнозируем на следующие 12 месяцев
-    #     else:
-    #         result_df_forecast = result_df
-    #         new_index = pd.date_range(start=last_date + pd.DateOffset(months=1), periods=months_to_forecast, freq='MS')
-    #         result_df_forecast.index = new_index
-    #
-    #     return result_df_forecast, last_n_list
+    def decomposition_with_trend_fixed_periods(self, periods_count: int = 3, w_1: float = 0.2, w_2: float = 0.8):
+        # TODO documentation; с трендом мб только для 3+ лет
+        # Проверяем, достаточно ли данных для анализа
+        min_required_months = periods_count * 12
+        if len(self.df) < min_required_months:
+            raise ValueError(f"Недостаточно данных для анализа. Требуется минимум {min_required_months} месяцев.")
+
+        # Инициализация переменных
+        yearly_means = []
+        yearly_normalized = []
+        means_df = pd.DataFrame()
+
+        # Формирование данных для каждого периода
+        for i in range(periods_count):
+            start_idx = -(i + 1) * 12
+            end_idx = -i * 12 if i > 0 else None
+            period_data = self.df.iloc[start_idx:end_idx]
+
+            # Рассчитываем среднее и нормализованные значения
+            period_mean = period_data.mean()
+            yearly_means.append(period_mean)
+            yearly_normalized.append((period_data / period_mean).reset_index(drop=True))
+
+            # Сохраняем средние значения для анализа тренда
+            means_df[f'Period_{i + 1}'] = period_mean
+
+        # Среднее нормированных значений для прогнозирования сезонности
+        average_normalized = sum(yearly_normalized) / periods_count
+        average_normalized = pd.concat(
+            [average_normalized] * self.forecast_periods,
+            ignore_index=True
+        ).iloc[:self.forecast_periods]
+
+        # Среднее всех значений для прогнозирования тренда
+        overall_mean = sum(yearly_means) / periods_count
+
+        # Прогнозируем тренд в зависимости от количества периодов
+        if periods_count in [1, 2]:
+            # Прогноз на основе среднего по всем периодам
+            forecast_average = overall_mean
+        else:
+            # Рассчитываем шаги для прогнозирования тренда
+            total_step = sum(
+                (means_df[f'Period_{i - 1}'] - means_df[f'Period_{i}']) * (w_2 if i == 2 else w_1)
+                for i in range(2, periods_count + 1)
+            )
+            forecast_average = total_step + means_df['Period_1'].values
+
+        # Итоговый прогноз: тренд * сезонность
+        result_df = average_normalized * forecast_average
+
+        # Формируем временной индекс для прогноза
+        new_index = pd.date_range(start=self.df.index.max() + pd.DateOffset(months=1),
+                                  periods=self.forecast_periods,
+                                  freq='ME')
+        result_df.index = new_index
+
+        return result_df
+
+    def decomposition_with_trend_calendar_years(self, periods_count: int = 3, w_1: float = 0.2, w_2: float = 0.8):
+        #TODO documentation; с трендом мб только для 3+ лет
+
+        if self.df.index.year.max() - periods_count + 1 not in self.df.index.year.unique():
+            raise ValueError(f"Недостаточно данных для анализа {periods_count} периодов.")
+
+        # Инициализация переменных
+        last_date = self.df.index.max()
+        last_month = last_date.month
+        yearly_means, yearly_normalized = [], []
+        means_df = pd.DataFrame()
+
+        current_year = self.df.index.year.max()
+        start_year = current_year if last_month == 12 else current_year - 1
+        range_start = periods_count if last_month == 12 else periods_count - 1
+        range_end = -1 if last_month == 12 else 0
+
+        for i in range(range_start, range_end, -1):
+            year = start_year - i
+            period_data = self.df[self.df.index.year == year]
+
+            # Среднее и нормализация
+            period_mean = period_data.mean()
+            yearly_means.append(period_mean)
+            yearly_normalized.append((period_data / period_mean).reset_index(drop=True))
+            means_df[f'Period_{i + 1}'] = period_mean
+
+        months_to_forecast = self.forecast_periods + (last_month if (last_month != 12) else 0)
+        # Среднее нормализованное значение
+        average_normalized = sum(yearly_normalized) / periods_count
+        average_normalized = pd.concat([average_normalized] * self.forecast_periods, ignore_index=True).iloc[
+                             :months_to_forecast]
+
+        # Общее среднее значение
+        overall_mean = sum(yearly_means) / periods_count
+
+        # Расчёт прогноза тренда
+        if periods_count <= 2:
+            forecast_average = overall_mean
+            result_df = average_normalized * forecast_average
+        else:
+            steps = [
+                (means_df[f'Period_{i}'] - means_df[f'Period_{i + 1}']) * (w_2 if i == 1 else w_1)
+                for i in range(1, periods_count)
+            ]
+            forecast_average = sum(steps) + means_df['Period_1']
+            result_dff = average_normalized * forecast_average.values
+
+            # Дополнительная корректировка
+            adjustment = (
+                    (means_df['Period_1'] - means_df['Period_2']) * w_1 +
+                    (result_dff.mean() - means_df['Period_1']) * w_2
+            )
+            forecast_average_adjusted = adjustment + result_dff.mean()
+            result_df_dop = forecast_average_adjusted * average_normalized
+            result_df = pd.concat([result_dff, result_df_dop], axis=0)
+
+        if last_month != 12:
+            # Прогноз для оставшихся месяцев текущего года
+            result_df_forecast = result_df.iloc[last_month:months_to_forecast]
+            new_index_current_year = pd.date_range(
+                start=last_date + pd.DateOffset(months=1), periods=self.forecast_periods, freq='ME'
+            )
+            result_df_forecast.index = new_index_current_year
+
+        else:
+            # Прогноз на 12 месяцев, начиная с января
+            result_df_forecast = result_df.iloc[:months_to_forecast]
+            new_index = pd.date_range(
+                start=last_date + pd.DateOffset(months=1),
+                periods=self.forecast_periods,
+                freq='ME'
+            )
+            result_df_forecast.index = new_index
+
+        return result_df_forecast
     #
     # def decomposition_without_trend_fixed_periods(self, years_count, w_1=0.2, w_2=0.8):
     #     #TODO выбирать количество исторических значений; оставить вес тут или дать пользователю?
@@ -818,6 +789,10 @@ class Forecast_Models:
     #     return result_df_forecast, last_n_list
     #
     #
+
+
+
+
     # def auto_arima_forecast(self, plot=False):
     #
     # def prophet_forecast(self):
