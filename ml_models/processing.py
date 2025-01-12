@@ -774,5 +774,7 @@ class Forecast_Models:
 
 
     def auto_arima_forecast(self, plot=False):
+        pass
 
     def prophet_forecast(self):
+        pass
