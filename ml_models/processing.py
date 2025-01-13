@@ -59,14 +59,18 @@ class Forecast_Models:
         #TODO
 
     
-    def regression_model(self, param: str):
+    def regression_model(self, method: str):
         """
             Модель Регрессии
                 Args:
-                    param: Линейный тренд (linear trend) или Логистический тренд (logistic trend)
+                    param: Линейный тренд (linear_trend) или Логистический тренд (logistic_trend)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
+        # Проверка на корректность метода
+        if method not in ['linear_trend', 'logistic_trend']:
+            raise ValueError("Метод должен быть 'linear_trend' или 'logistic_trend'.")
+        
         data = self.df.copy()
         # Сброс индекса и добавление названий месяцев
         data.reset_index(inplace = True)
@@ -82,9 +86,9 @@ class Forecast_Models:
         encoded_df_0 = pd.DataFrame(encoded_months, columns = encoder.get_feature_names_out(['month_name']))
 
         # Колонка с трендом (наклон)
-        if param == 'linear trend':
+        if method == 'linear trend':
             encoded_df_trend = pd.DataFrame({'Linear_Trend': np.arange(1, data.shape[0] + 1)})
-        elif param == 'logistic trend':
+        elif method == 'logistic trend':
             encoded_df_trend = pd.DataFrame({'Log_Trend': np.log(np.arange(1, data.shape[0] + 1))})
         else:
             raise ValueError('Неверно выбран тип тренда.')
