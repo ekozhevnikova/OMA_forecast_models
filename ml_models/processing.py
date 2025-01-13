@@ -60,14 +60,18 @@ class Forecast_Models:
         #TODO
 
     
-    def regression_model(self, param: str):
+    def regression_model(self, method: str):
         """
             Модель Регрессии
                 Args:
-                    param: Линейный тренд (linear trend) или Логистический тренд (logistic trend)
+                    param: Линейный тренд (linear_trend) или Логистический тренд (logistic_trend)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
+        # Проверка на корректность метода
+        if method not in ['linear_trend', 'logistic_trend']:
+            raise ValueError("Метод должен быть 'linear_trend' или 'logistic_trend'.")
+        
         data = self.df.copy()
         # Сброс индекса и добавление названий месяцев
         data.reset_index(inplace = True)
@@ -83,9 +87,9 @@ class Forecast_Models:
         encoded_df_0 = pd.DataFrame(encoded_months, columns = encoder.get_feature_names_out(['month_name']))
 
         # Колонка с трендом (наклон)
-        if param == 'linear trend':
+        if method == 'linear trend':
             encoded_df_trend = pd.DataFrame({'Linear_Trend': np.arange(1, data.shape[0] + 1)})
-        elif param == 'logistic trend':
+        elif method == 'logistic trend':
             encoded_df_trend = pd.DataFrame({'Log_Trend': np.log(np.arange(1, data.shape[0] + 1))})
         else:
             raise ValueError('Неверно выбран тип тренда.')
@@ -212,16 +216,16 @@ class Forecast_Models:
             forecast_values = [average] * self.forecast_periods
             forecast_df = pd.DataFrame(
                 {column: forecast_values},
-                index=pd.date_range(
-                    start=self.df.index[-1] + pd.DateOffset(months=1),
-                    periods=self.forecast_periods,
-                    freq='ME'
+                index = pd.date_range(
+                    start = self.df.index[-1] + pd.DateOffset(months = 1),
+                    periods = self.forecast_periods,
+                    freq = 'ME'
                 )
             )
 
             forecast_results[column] = forecast_df
         # Объединение всех столбцов в один DataFrame
-        result_df = pd.concat(forecast_results.values(), axis=1)
+        result_df = pd.concat(forecast_results.values(), axis = 1)
 
         return result_df
 
@@ -230,8 +234,8 @@ class Forecast_Models:
             Декомпозиция временного ряда с выделением тренда и сезонности.
             Используется для прогноза ВР с сезонностью и неявно выраженным трендом.
 
-                Из временного ряда выделяются данные за последние past_values фиксированных периода(период = 12 мес)/
-            календарных года. Удаляется тренд с помощью дифференцирования временного ряда. Сезонность рассчитывается как
+                Из временного ряда выделяются данные за последние past_values фиксированных периодов(период = 12 мес)/
+            календарных лет. Удаляется тренд с помощью дифференцирования временного ряда. Сезонность рассчитывается как
             среднее значение разностей за последние past_values. Из исходного временного ряда вычитается рассчитанная
             сезонность и остается тренд.
                 Прогнозируются тренд и сезонность. Финальный прогноз на следующий год строится как сумма прогнозов
@@ -257,7 +261,7 @@ class Forecast_Models:
         end_year, last_month, last_date = preprocessing.search_last_fact_data()
 
         if method == 'fixed_periods':
-            past_years = self.df[self.df.index >= self.df.index[-1] - pd.DateOffset(years=past_values)]
+            past_years = self.df[self.df.index >= self.df.index[-1] - pd.DateOffset(years = past_values)]
 
         elif method == 'calendar_years':
             # Получаем последние past_values лет данных
@@ -273,31 +277,31 @@ class Forecast_Models:
         detrended = past_years.diff().dropna()
         detrended['month'] = detrended.index.month
         average_season_k = detrended.groupby('month').mean()
-        average_season_val = pd.concat([average_season_k] * (len(past_years) // 12), ignore_index=True)
+        average_season_val = pd.concat([average_season_k] * (len(past_years) // 12), ignore_index = True)
 
         # Из исходного временного ряда вычитаем сезонность, и остается тренд
-        trend = past_years.reset_index(drop=True) - average_season_val
+        trend = past_years.reset_index(drop = True) - average_season_val
         trend = trend.dropna()
 
         # Прогнозируем тренд
         average_step = (detrended.mean())
         last_value = trend.iloc[-1]
-        next_year_start = last_date + pd.DateOffset(months=1)
+        next_year_start = last_date + pd.DateOffset(months = 1)
         months_to_forecast = self.forecast_periods + (
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
         next_year_trend = [last_value + (i + 1) * average_step for i in range(months_to_forecast)]
-        next_year_dates = pd.date_range(start=next_year_start, periods=months_to_forecast, freq='ME')
-        next_year_trend_df = pd.DataFrame(next_year_trend, index=next_year_dates, columns=self.df.columns)
+        next_year_dates = pd.date_range(start = next_year_start, periods = months_to_forecast, freq = 'ME')
+        next_year_trend_df = pd.DataFrame(next_year_trend, index = next_year_dates, columns = self.df.columns)
         season_forecast_df = pd.DataFrame(
             average_season_val.values[:months_to_forecast],
-            index=next_year_dates,
-            columns=self.df.columns
+            index = next_year_dates,
+            columns = self.df.columns
         )
         forecast_df = next_year_trend_df + season_forecast_df
 
         if method == 'calendar_years':
             # Корректируем прогнозы для случаев, когда last_month < 12
-            next_year_dates_fact = pd.date_range(start=next_year_start, periods=self.forecast_periods, freq='ME')
+            next_year_dates_fact = pd.date_range(start = next_year_start, periods = self.forecast_periods, freq = 'ME')
             if last_month < 12:
                 next_year_trend_df = next_year_trend_df.iloc[last_month:].set_index(next_year_dates_fact)
                 season_forecast_df = season_forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
@@ -336,7 +340,7 @@ class Forecast_Models:
         end_year, last_month, last_date = preprocessing.search_last_fact_data()
 
         if method == 'fixed_periods':
-            past_years = self.df[self.df.index >= self.df.index[-1] - pd.DateOffset(years=past_values)]
+            past_years = self.df[self.df.index >= self.df.index[-1] - pd.DateOffset(years = past_values)]
 
         elif method == 'calendar_years':
 
@@ -353,13 +357,13 @@ class Forecast_Models:
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
 
         # Удаляем тренд с помощью дифференцирования
-        rolling_mean = past_years.rolling(window=13).mean()
+        rolling_mean = past_years.rolling(window = self.forecast_periods).mean()
         detrended = (past_years - rolling_mean).dropna()
-        detrended['month'] = detrended.index.month
+        detrended[self.column_name_with_date] = detrended.index.month
 
         # Прогнозируем сезонность
-        aver_season = detrended.groupby('month').mean()
-        seasonatily_pred = pd.concat([aver_season] * (len(past_years) // 12), ignore_index=True)
+        aver_season = detrended.groupby(self.column_name_with_date).mean()
+        seasonatily_pred = pd.concat([aver_season] * (len(past_years) // 12), ignore_index = True)
         seasonatily = seasonatily_pred.iloc[:months_to_forecast]
 
         steps = rolling_mean.diff().dropna()
@@ -368,14 +372,14 @@ class Forecast_Models:
 
         # Прогнозируем скользящее среднее
         next_year_rolling_mean = [last_value + (i + 1) * average_step for i in range(months_to_forecast)]
-        next_year_dates = pd.date_range(start=last_date + pd.DateOffset(months=1),
-                                        periods=months_to_forecast,
-                                        freq='ME'
+        next_year_dates = pd.date_range(start = last_date + pd.DateOffset(months = 1),
+                                        periods = months_to_forecast,
+                                        freq = 'ME'
                                         )
         next_year_rolling_mean_df = pd.DataFrame(
             next_year_rolling_mean,
-            index=next_year_dates,
-            columns=self.df.columns
+            index = next_year_dates,
+            columns = self.df.columns
         )
 
         seasonal_forecast = np.tile(seasonatily.values, (1, 1)).T
