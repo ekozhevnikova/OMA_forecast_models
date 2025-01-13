@@ -353,7 +353,7 @@ class Forecast_Models:
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
 
         # Удаляем тренд с помощью дифференцирования
-        rolling_mean = past_years.rolling(window=13).mean()
+        rolling_mean = past_years.rolling(window=12).mean()
         detrended = (past_years - rolling_mean).dropna()
         detrended['month'] = detrended.index.month
 
@@ -378,9 +378,9 @@ class Forecast_Models:
             columns=self.df.columns
         )
 
-        seasonal_forecast = np.tile(seasonatily.values, (1, 1)).T
+        seasonal_forecast = np.tile(seasonatily.values, (1, 1))
         # Финальный прогноз: сложение тренда и сезонности
-        final_forecast = next_year_rolling_mean_df + seasonal_forecast.T
+        final_forecast = next_year_rolling_mean_df + seasonal_forecast
         forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
 
         if method == 'calendar_years':
