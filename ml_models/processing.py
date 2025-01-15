@@ -363,7 +363,7 @@ class Forecast_Models:
         seasonatily = seasonatily_pred.iloc[:months_to_forecast]
 
         steps = rolling_mean.diff().dropna()
-        average_step = np.abs(steps.mean())
+        average_step = steps.mean()
         last_value = rolling_mean.iloc[-1]
 
         # Прогнозируем скользящее среднее
@@ -460,7 +460,7 @@ class Forecast_Models:
             else:
                 # Рассчитываем шаги для прогнозирования тренда
                 total_step = sum(
-                    (means_df[f'Period_{i - 1}'] - means_df[f'Period_{i}']) * (w_2 if i == 2 else w_1)
+                    (means_df[f'Period_{i - 1}'] - means_df[f'Period_{i}']) * (w_2 if i == 2 else w_1/(past_values - 2))
                     for i in range(2, past_values + 1)
                 )
                 forecast_average = total_step + means_df['Period_1'].values
@@ -545,7 +545,7 @@ class Forecast_Models:
                 result_df = average_normalized * forecast_average
             else:
                 steps = [
-                    (means_df[f'Period_{i}'] - means_df[f'Period_{i + 1}']) * (w_2 if i == 1 else w_1)
+                    (means_df[f'Period_{i}'] - means_df[f'Period_{i + 1}']) * (w_2 if i == 1 else w_1/(past_values - 2))
                     for i in range(1, past_values)
                 ]
                 forecast_average = sum(steps) + means_df['Period_1']
