@@ -6,6 +6,7 @@ from datetime import datetime
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
+from OMA_tools.ml_models.postprocessing import Postprocessing
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -15,7 +16,9 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
 import os
+#это я для себя:
 from preprocessing import *
+from postprocessing import Postprocessing
 
 
 @contextmanager
@@ -58,11 +61,12 @@ class Forecast_Models:
         #TODO
 
     
-    def regression_model(self, method: str):
+    def regression_model(self, method: str, plots: bool = False):
         """
             Модель Регрессии
                 Args:
-                    param: Линейный тренд (linear_trend) или Логистический тренд (logistic_trend)
+                    method: Линейный тренд (linear_trend) или Логистический тренд (logistic_trend)
+                    plots: Построение графиков (по умолчанию False)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -141,9 +145,9 @@ class Forecast_Models:
         encoded_future_df_0 = pd.DataFrame(encoded_future_months, columns = encoder.get_feature_names_out(['month_name']))
 
         # Тренд для новых дат
-        if param == 'linear trend':
+        if method == 'linear trend':
             encoded_future_df_trend = pd.DataFrame({'Linear_Trend': np.arange(len(data) + 1, len(data) + (self.forecast_periods + 1))})
-        elif param == 'logistic trend':
+        elif method == 'logistic trend':
             encoded_future_df_trend = pd.DataFrame({'Log_Trend': np.log(np.arange(len(data) + 1, len(data) + (self.forecast_periods + 1)))}) 
 
         # Свободный член (интерсепт)
@@ -167,9 +171,24 @@ class Forecast_Models:
             # Добавляем прогнозируемые значения в DataFrame
             future_predictions[f'{column}'] = y_future_pred
 
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots and method == 'linear_trend':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=future_predictions,
+                save_dir='plots_for_ML_models/regression_model_linear_trend',
+            )
+        if plots and method == 'logistic_trend':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=future_predictions,
+                save_dir='plots_for_ML_models/regression_model_logistic_trend',
+            )
+
         return future_predictions, predicted_df
 
-    def naive_forecast(self, past_values: int = 3, weigh_error: float = 0):
+    def naive_forecast(self, past_values: int = 3, weigh_error: float = 0, plots: bool = False):
         """
             Наивный метод прогнозирования с учетом ошибки (опционально).
             Используется для прогноза ВР без тренда и сезонности.
@@ -177,6 +196,7 @@ class Forecast_Models:
                     past_values: Количество предыдущих месяцев, по которым выполняется прогноз (по умолчанию 3).
                     weigh_error: Вес, с которым учитывается ошибка [0:1].
                                         Если 0, то используется простой наивный метод (по умолчанию 0).
+                    plots: Построение графиков (по умолчанию False)
 
                 Returns:
                     Новый DataFrame с прогнозом.
@@ -225,9 +245,24 @@ class Forecast_Models:
         # Объединение всех столбцов в один DataFrame
         result_df = pd.concat(forecast_results.values(), axis = 1)
 
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots and weigh_error > 0:
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=result_df,
+                save_dir='plots_for_ML_models/naive_forecast_weigh_error',
+            )
+        if plots and weigh_error == 0:
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=result_df,
+                save_dir='plots_for_ML_models/naive_forecast',
+            )
+
         return result_df
 
-    def seasonal_decomposition(self, method: str, past_values: int = 3):
+    def seasonal_decomposition(self, method: str, past_values: int = 3, plots: bool = False):
         """
             Декомпозиция временного ряда с выделением тренда и сезонности.
             Используется для прогноза ВР с сезонностью и неявно выраженным трендом.
@@ -243,6 +278,7 @@ class Forecast_Models:
                     method: 'fixed_periods' или 'calendar_years', определяет способ обработки данных.
                     past_values: Количество предыдущих фикс.периодов (период = 12 мес)/календарных лет, по которым
                     выполняется прогноз (по умолчанию 3).
+                    plots: Построение графиков (по умолчанию False)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -306,9 +342,24 @@ class Forecast_Models:
                 # Финальный прогноз
                 forecast_df = next_year_trend_df + season_forecast_df
 
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots and method == 'calendar_years':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=forecast_df,
+                save_dir='plots_for_ML_models/seasonal_decomposition_calendar_years',
+            )
+        if plots and method == 'fixed_periods':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=forecast_df,
+                save_dir='plots_for_ML_models/seasonal_decomposition_fixed_periods',
+            )
+
         return forecast_df
 
-    def rolling_mean(self, method: str, past_values: int = 3):
+    def rolling_mean(self, method: str, past_values: int = 3, plots: bool = False):
         """
             Декомпозиция временного ряда с применением скользящего среднего.
             Используется для прогноза ВР с неявно выраженным трендом и сезонностью.
@@ -322,6 +373,7 @@ class Forecast_Models:
                     method: 'fixed_periods' или 'calendar_years', определяет способ обработки данных.
                     past_values: Количество предыдущих фикс.периодов (период = 12 мес)/календарных лет, по которым
                     выполняется прогноз (по умолчанию 3).
+                    plots: Построение графиков (по умолчанию False)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -341,7 +393,6 @@ class Forecast_Models:
             past_years = self.df[self.df.index >= self.df.index[-1] - pd.DateOffset(years = past_values)]
 
         elif method == 'calendar_years':
-
             # Получаем последние past_values лет данных
             if last_month < 12:
                 past_years = self.df[(self.df.index >= f'{end_year - past_values}-01-01') &
@@ -393,9 +444,24 @@ class Forecast_Models:
             if last_month < 12:
                 forecast_df = forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
 
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots and method == 'calendar_years':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=forecast_df,
+                save_dir='plots_for_ML_models/rolling_mean_calendar_years',
+            )
+        if plots and method == 'fixed_periods':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=forecast_df,
+                save_dir='plots_for_ML_models/rolling_mean_fixed_periods',
+            )
+
         return forecast_df
 
-    def decomposition_fixed_periods(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8):
+    def decomposition_fixed_periods(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8, plots: bool = False):
         """
             Ручная декомпозиция временного ряда по фиксированным периодам.
             Используется для прогноза ВР с трендом (если указан method: 'with_trend') и сезонностью.
@@ -416,6 +482,7 @@ class Forecast_Models:
                     исходном ВР.
                     past_values: Количество предыдущих фиксированных периодов (период = 12 мес), по которым выполняется
                     прогноз (по умолчанию 3).
+                    plots: Построение графиков (по умолчанию False)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -468,7 +535,7 @@ class Forecast_Models:
                 )
                 forecast_average = total_step + means_df['Period_1'].values
 
-        # Итоговый прогноз: тренд * сезонность
+            # Итоговый прогноз: тренд * нормированная сезонность
             result_df = average_normalized * forecast_average
 
         elif method == 'without_trend':
@@ -480,10 +547,25 @@ class Forecast_Models:
                                   freq='ME')
         result_df.index = new_index
 
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots and method == 'without_trend':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=result_df,
+                save_dir='plots_for_ML_models/decomposition_fixed_periods_without_trend',
+            )
+        if plots and method == 'with_trend':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=result_df,
+                save_dir='plots_for_ML_models/decomposition_fixed_periods_with_trend',
+            )
+
         return result_df
 
 
-    def decomposition_calendar_years(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8):
+    def decomposition_calendar_years(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8, plots: bool = False):
         """
             Ручная декомпозиция временного ряда по календарным годам.
             Используется для прогноза ВР с трендом (если указан method: 'with_trend') и сезонностью.
@@ -504,6 +586,7 @@ class Forecast_Models:
                     исходном ВР.
                     past_values: Количество предыдущих фиксированных периодов (период = 12 мес), по которым выполняется
                     прогноз (по умолчанию 3).
+                    plots: Построение графиков (по умолчанию False)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -575,7 +658,7 @@ class Forecast_Models:
             result_df_forecast.index = new_index_current_year
 
         else:
-            # Прогноз на 12 месяцев, начиная с января
+            # Прогноз на `months_to_forecast` месяцев, начиная с января
             result_df_forecast = result_df.iloc[:months_to_forecast]
             new_index = pd.date_range(
                 start=last_date + pd.DateOffset(months=1),
@@ -584,12 +667,29 @@ class Forecast_Models:
             )
             result_df_forecast.index = new_index
 
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots and method == 'without_trend':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=result_df_forecast,
+                save_dir='plots_for_ML_models/decomposition_calendar_years_without_trend',
+            )
+        if plots and method == 'with_trend':
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=result_df_forecast,
+                save_dir='plots_for_ML_models/decomposition_calendar_years_with_trend',
+            )
+
         return result_df_forecast
 
-    def prophet_forecast(self):
+    def prophet_forecast(self, plots: bool = False):
         """
             Метод PROPHET.
             Универсальный для всех ВР.
+                Args:
+                    plots: Построение графиков (по умолчанию False)
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -673,12 +773,24 @@ class Forecast_Models:
 
         forecast_df.set_index('ds', inplace=True)
         forecast_df = forecast_df.tail(forecast_periods)
+
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots:
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=forecast_df,
+                save_dir='plots_for_ML_models/prophet_forecast',
+            )
+
         return forecast_df
 
-    def auto_arima_forecast(self):
+    def auto_arima_forecast(self, plots: bool = False):
         """
             Метод auto_arima.
             Универсальный для всех ВР.
+                Args:
+                    plots: Построение графиков (по умолчанию False)
 
                 Параметры модели ARIMA:
                     - seasonal (bool): Определяет, учитывать ли сезонность временного ряда при построении модели.
@@ -760,6 +872,15 @@ class Forecast_Models:
             index=pd.date_range(start=self.df.index[-1] + pd.DateOffset(months=1), periods=self.forecast_periods,
                                 freq='ME')
         )
+
+        # Вызов графиков
+        postprocessor = Postprocessing(self.df)
+        if plots:
+            postprocessor.get_plot(
+                column_name_with_date=self.column_name_with_date,
+                forecast_df=forecast_df,
+                save_dir='plots_for_ML_models/auto_arima_forecast',
+            )
 
         return forecast_df
 
