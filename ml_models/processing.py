@@ -74,44 +74,41 @@ class Forecast_Models:
         if method not in ['linear_trend', 'logistic_trend']:
             raise ValueError("Метод должен быть 'linear_trend' или 'logistic_trend'.")
         
-        data = self.df.copy()
+        data_copy = self.df.copy()
         # Сброс индекса и добавление названий месяцев
-        data.reset_index(inplace = True)
+        data_copy.reset_index(inplace = True)
         #Предварительная кодировка в признак
-        data['month_name'] = data[self.column_name_with_date].dt.strftime("%B") #преобразование даты ('2020-01-01') в текстовый формат типа 'Январь'
+        data_copy['month_name'] = data_copy[self.column_name_with_date].dt.strftime("%B") #преобразование даты ('2020-01-01') в текстовый формат типа 'Январь'
 
         #С текстовыми данными работать не можем => применяется OneHotEncoder кодировщик для преобразования категориальных или текстовых данных в числа
         #Числа заменяются на единицы и нули, в зависимости от того, какому столбцу какое значение присуще.
         encoder = OneHotEncoder(categories = 'auto', drop = 'first', sparse_output = False)
-        encoded_months = encoder.fit_transform(data[['month_name']])#конвертация в массив закодированного столбца
+        encoded_months = encoder.fit_transform(data_copy[['month_name']])#конвертация в массив закодированного столбца
 
         # Матрица сезонных признаков
         encoded_df_0 = pd.DataFrame(encoded_months, columns = encoder.get_feature_names_out(['month_name']))
 
         # Колонка с трендом (наклон)
-        if method == 'linear trend':
-            encoded_df_trend = pd.DataFrame({'Linear_Trend': np.arange(1, data.shape[0] + 1)})
-        elif method == 'logistic trend':
-            encoded_df_trend = pd.DataFrame({'Log_Trend': np.log(np.arange(1, data.shape[0] + 1))})
+        if method == 'linear_trend':
+            encoded_df_trend = pd.DataFrame({'Linear_Trend': np.arange(1, data_copy.shape[0] + 1)})
+        elif method == 'logistic_trend':
+            encoded_df_trend = pd.DataFrame({'Log_Trend': np.log(np.arange(1, data_copy.shape[0] + 1))})
         else:
             raise ValueError('Неверно выбран тип тренда.')
 
         # Свободный член в модели регресии (интерсепт)
-        encoded_df_free_var = pd.DataFrame({'free_variable': np.ones(data.shape[0])})
+        encoded_df_free_var = pd.DataFrame({'free_variable': np.ones(data_copy.shape[0])})
 
         # Итоговая матрица признаков (сезонность, тренд, интерсепт)
         encoded_df = pd.concat([encoded_df_0, encoded_df_trend, encoded_df_free_var], axis = 1)
-
-        # Новый DataFrame для хранения спрогнозированных значений
-        predicted_df = pd.DataFrame({'Date': data[self.column_name_with_date]})
 
         # Словарь для хранения коэффициентов модели для каждого столбца
         model_coefficients_dict = {}
 
         # Прогнозирование для каждого столбца
-        for column in self.df.columns[1:-1]:  # Пропускаем столбцы column_name_with_date и "month_name"
+        for column in data_copy.columns[1:-1]:  # Пропускаем столбцы column_name_with_date и "month_name"
             A = encoded_df.values
-            b = data[column].values.reshape((int(encoded_df.shape[0]), 1))
+            b = data_copy[column].values.reshape((int(encoded_df.shape[0]), 1))
 
             # Решаем систему уравнений с помощью метода наименьших квадратов
             k, *_ = linalg.lstsq(A, b)
@@ -120,21 +117,12 @@ class Forecast_Models:
             model_coefficients = k.reshape((1, encoded_df.shape[1])).tolist()[0]
             model_coefficients_dict[column] = model_coefficients
 
-            # Прогнозируем значения на обученных данных
-            y_pred = [
-                sum(np.multiply(encoded_df.iloc[i, :].tolist(), model_coefficients))
-                for i in range(encoded_df.shape[0])
-            ]
-
-            # Добавляем прогнозируемые значения в новый DataFrame
-            predicted_df[f'{column}'] = y_pred
-
         # Прогнозирование на N месяцев вперед
         # Определяем последний месяц в данных
-        last_date = data[self.column_name_with_date].max()
+        last_date = data_copy[self.column_name_with_date].max()
 
         # Создаем новые даты для следующего года
-        future_dates = pd.date_range(last_date + pd.DateOffset(months = 1), periods = self.forecast_periods, freq = 'MS')
+        future_dates = pd.date_range(last_date + pd.DateOffset(months = 1), periods = self.forecast_periods, freq='ME')
 
         # Создаем DataFrame для будущих дат
         future_df = pd.DataFrame({self.column_name_with_date: future_dates})
@@ -146,9 +134,11 @@ class Forecast_Models:
 
         # Тренд для новых дат
         if method == 'linear trend':
-            encoded_future_df_trend = pd.DataFrame({'Linear_Trend': np.arange(len(data) + 1, len(data) + (self.forecast_periods + 1))})
-        elif method == 'logistic trend':
-            encoded_future_df_trend = pd.DataFrame({'Log_Trend': np.log(np.arange(len(data) + 1, len(data) + (self.forecast_periods + 1)))}) 
+            encoded_future_df_trend = pd.DataFrame(
+                {'Linear_Trend': np.arange(len(data_copy) + 1, len(data_copy) + (self.forecast_periods + 1))})
+        else:
+            encoded_future_df_trend = pd.DataFrame(
+                {'Log_Trend': np.log(np.arange(len(data_copy) + 1, len(data_copy) + (self.forecast_periods + 1)))})
 
         # Свободный член (интерсепт)
         encoded_future_df_free_var = pd.DataFrame({'free_variable': np.ones(self.forecast_periods)})
@@ -160,7 +150,7 @@ class Forecast_Models:
         future_predictions = pd.DataFrame({self.column_name_with_date: future_df[self.column_name_with_date]})
 
         # Прогнозирование для каждого столбца на следующий год
-        for column in data.columns[1:-1]:  # Пропускаем столбцы column_name_with_date и "month_name"
+        for column in data_copy.columns[1:-1]:  # Пропускаем столбцы column_name_with_date и "month_name"
             model_coefficients = model_coefficients_dict[column]
 
             y_future_pred = [
@@ -170,7 +160,7 @@ class Forecast_Models:
 
             # Добавляем прогнозируемые значения в DataFrame
             future_predictions[f'{column}'] = y_future_pred
-
+        future_predictions.set_index(self.column_name_with_date, inplace=True)
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and method == 'linear_trend':
@@ -186,7 +176,7 @@ class Forecast_Models:
                 save_dir='plots_for_ML_models/regression_model_logistic_trend',
             )
 
-        return future_predictions, predicted_df
+        return future_predictions
 
     def naive_forecast(self, past_values: int = 3, weigh_error: float = 0, plots: bool = False):
         """
