@@ -15,7 +15,7 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
 import os
-from preprocessing import *
+from OMA_tools.ml_models.preprocessing import Preprocessing
 
 
 @contextmanager
