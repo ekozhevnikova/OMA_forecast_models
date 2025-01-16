@@ -18,6 +18,15 @@ import os
 from preprocessing import *
 
 
+@contextmanager
+def suppress_stdout():
+    with open(os.devnull, 'w') as fnull:
+        old_stdout = sys.stdout
+        sys.stdout = fnull
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
 
 class Forecast_Models:
     """
@@ -34,17 +43,6 @@ class Forecast_Models:
         self.forecast_periods = forecast_periods
         self.column_name_with_date = column_name_with_date
     
-
-    @contextmanager
-    def suppress_stdout():
-        with open(os.devnull, 'w') as fnull:
-            old_stdout = sys.stdout
-            sys.stdout = fnull
-            try:
-                yield
-            finally:
-                sys.stdout = old_stdout
-
 
     def main(self, filename, list_of_replacements: list):
         """
