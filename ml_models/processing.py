@@ -358,6 +358,7 @@ class Forecast_Models:
 
         # Удаляем тренд с помощью дифференцирования
         rolling_mean = past_years.rolling(window = self.forecast_periods).mean()
+        rolling_mean = past_years.rolling(window=12).mean()
         detrended = (past_years - rolling_mean).dropna()
         detrended[self.column_name_with_date] = detrended.index.month
 
@@ -382,9 +383,9 @@ class Forecast_Models:
             columns = self.df.columns
         )
 
-        seasonal_forecast = np.tile(seasonatily.values, (1, 1)).T
+        seasonal_forecast = np.tile(seasonatily.values, (1, 1))
         # Финальный прогноз: сложение тренда и сезонности
-        final_forecast = next_year_rolling_mean_df + seasonal_forecast.T
+        final_forecast = next_year_rolling_mean_df + seasonal_forecast
         forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
 
         if method == 'calendar_years':
@@ -680,6 +681,34 @@ class Forecast_Models:
         """
             Метод auto_arima.
             Универсальный для всех ВР.
+
+                Параметры модели ARIMA:
+                    - seasonal (bool): Определяет, учитывать ли сезонность временного ряда при построении модели.
+                    - D (int): Порядок сезонного дифференцирования. Это количество раз, которое сезонные данные
+                    дифференцируются, чтобы устранить сезонность и сделать временной ряд стационарным.
+                    - m (int): Частота сезонности - период, через который повторяются сезонные колебания.
+                    - stationary (bool): Указывает, является ли временной ряд стационарным.
+                    - test (str): Определяет тест для проверки стационарности и выбора порядка интеграции (d):
+                        adf: Тест Дики-Фуллера.
+                        pp: Тест Филлипса-Перрона.
+                        kpss: Тест KPSS.
+                    - information_criterion (str): Критерий для выбора лучшей модели ARIMA. Основные варианты:
+                        aic (информационный критерий Акаике): Хорош для моделей с большим числом параметров.
+                        bic (байесовский информационный критерий): Предпочтителен, если данных мало.
+                        hqic (критерий Ханна-Куинна): Балансирует между AIC и BIC, рекомендуется для сложных моделей.
+                    - stepwise (bool): Включает пошаговый (итеративный) поиск наилучшей комбинации параметров (p, d, q).
+                    - suppress_warnings (bool): Подавление предупреждений во время обучения модели.
+                    - max_p (int): Максимальный порядок авторегрессии (p). Этот параметр определяет, сколько прошлых
+                    значений временного ряда используется для предсказания текущего значения.
+                    - max_q (int): Максимальный порядок скользящей средней (q). Это количество прошлых ошибок прогноза,
+                    используемых для корректировки текущего предсказания.
+                    - max_d (int): Максимальное количество дифференцирований для достижения стационарности.
+                    - max_P (int): Максимальный сезонный порядок авторегрессии (P).
+                    - max_Q (int): Максимальный сезонный порядок скользящей средней (Q).
+                    - max_D (int): Максимальный порядок сезонного дифференцирования (D).
+                    Используется для устранения сезонных трендов.
+                    - trace (bool): Показ выводов в процессе подбора параметров.
+
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
@@ -699,17 +728,17 @@ class Forecast_Models:
                 # Построение модели
                 model = auto_arima(
                     ts,
-                    seasonal=True,
-                    D=1,
-                    m=12,
-                    stationary=False,
-                    test='pp',
-                    information_criterion='hqic',
-                    stepwise=True,
-                    suppress_warnings=True,
-                    max_p=5, max_q=5, max_d=1,
-                    max_P=2, max_Q=2, max_D=1,
-                    trace=False
+                    seasonal=True,                      # Использовать сезонность
+                    D=1,                                # Порядок сезонного дифференцирования
+                    m=12,                               # Частота сезонности (12 месяцев)
+                    stationary=False,                   # Определение стационарности
+                    test='pp',                          # Тест на стационарность
+                    information_criterion='hqic',       # Критерий для выбора лучшей модели
+                    stepwise=True,                      # Пошаговый подбор параметров
+                    suppress_warnings=False,            # Подавление предупреждений
+                    max_p=5, max_q=5, max_d=1,          # Максимальные значения p, q, d
+                    max_P=2, max_Q=2, max_D=1,          # Максимальные значения P, Q, D
+                    trace=False                         # Вывод логов
                 )
 
                 # Обучение модели
