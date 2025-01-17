@@ -17,8 +17,8 @@ from scipy import linalg
 from contextlib import contextmanager
 import os
 #это я для себя:
-from preprocessing import *
-from postprocessing import Postprocessing
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.postprocessing import Postprocessing
 
 
 @contextmanager

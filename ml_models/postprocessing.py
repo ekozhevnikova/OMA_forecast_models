@@ -11,8 +11,9 @@ class Postprocessing:
     """
         Класс для постобработки ДатаФреймов Временных Рядов, полученных в результате ML-моделей.
     """
-    def __init__(self, ts):
-        self.ts = ts
+    def __init__(self, df, forecast_df):
+        self.df = df
+        self.forecast_df = forecast_df
 
     @staticmethod
     def calculate_average_forecast(list_of_forecasts: list):
@@ -38,8 +39,7 @@ class Postprocessing:
     
 
     def get_plot(self, 
-             column_name_with_date: str, 
-             forecast_df, 
+             column_name_with_date: str,
              save_dir, 
              last_n_list = None, 
              nrows = 3, 
@@ -58,14 +58,14 @@ class Postprocessing:
                 График с историческими данными и прогнозными
         """
         #Проверка на то, что индексом в исходном DataFrame является столбец с датами
-        if self.ts.index.name != column_name_with_date:
-            self.ts.set_index(column_name_with_date, inplace = True)
+        if self.df.index.name != column_name_with_date:
+            self.df.set_index(column_name_with_date, inplace = True)
             
         #Проверка на то, что индексом в DataFrame с прогнозом является столбец с датами
-        if forecast_df.index.name != column_name_with_date:
-            forecast_df = forecast_df.reset_index()
-            forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: column_name_with_date})
-            forecast_df.set_index(column_name_with_date, inplace = True)   
+        if self.forecast_df.index.name != column_name_with_date:
+            self.forecast_df = self.forecast_df.reset_index()
+            self.forecast_df = self.forecast_df.rename(columns = {self.forecast_df.columns[0]: column_name_with_date})
+            self.forecast_df.set_index(column_name_with_date, inplace = True)   
         
         # Создаем папку для сохранения графиков, если она не существует
         os.makedirs(save_dir, exist_ok = True)
@@ -98,14 +98,14 @@ class Postprocessing:
                         list_of_y_label_min.append(min(list(last_n[column])))
                         list_of_y_label_max.append(max(list(last_n[column])))
                     #построение графика для прогнозируемых значений
-                    axs[r, c].plot(forecast_df.index.strftime('%b'), 
-                                forecast_df[column], 
+                    axs[r, c].plot(self.forecast_df.index.strftime('%b'), 
+                                self.forecast_df[column], 
                                 label = 'Forecast', 
                                 linestyle = 'dashed',
                                 linewidth = 2.0,
                                 color = 'red')
-                    list_of_y_label_min.append(min(list(forecast_df[column])))
-                    list_of_y_label_max.append(max(list(forecast_df[column])))
+                    list_of_y_label_min.append(min(list(self.forecast_df[column])))
+                    list_of_y_label_max.append(max(list(self.forecast_df[column])))
                     y_label_min = min(list_of_y_label_min) #поиск минимального значения из всех минимумов по оси y
                     y_label_max = max(list_of_y_label_max) #поиск максимального значения из всех максимумов по оси y
                     axs[r, c].set_ylim(y_label_min - 0.5, y_label_max + 0.5)
@@ -115,28 +115,28 @@ class Postprocessing:
                         if months_ago > 12:
                             start_idx = -months_ago
                             end_idx = start_idx + 12
-                            historical_data = self.ts.iloc[start_idx:end_idx]
+                            historical_data = self.df.iloc[start_idx:end_idx]
                             axs[r, c].plot(historical_data.index.strftime('%b'), 
                                         historical_data[column],
                                         label = f'{historical_data.index.year[0]}')
                             list_of_y_label_min.append(min(list(historical_data[column])))
                             list_of_y_label_max.append(max(list(historical_data[column])))
                         elif months_ago <= 12:
-                            historical_data = self.ts.iloc[-12:]
+                            historical_data = self.df.iloc[-12:]
                             axs[r, c].plot(historical_data.index.strftime('%b'), 
                                         historical_data[column],
                                         label = f'{historical_data.index.year[0]}')
                             list_of_y_label_min.append(min(list(historical_data[column])))
                             list_of_y_label_max.append(max(list(historical_data[column])))
                     # График для прогнозируемых значений
-                    axs[r, c].plot(forecast_df.index.strftime('%b'), 
-                                forecast_df[column], 
+                    axs[r, c].plot(self.forecast_df.index.strftime('%b'), 
+                                self.forecast_df[column], 
                                 label = 'Forecast', 
                                 linestyle = 'dashed',
                                 linewidth = 2.0,
                                 color = 'red')
-                    list_of_y_label_min.append(min(list(forecast_df[column])))
-                    list_of_y_label_max.append(max(list(forecast_df[column])))
+                    list_of_y_label_min.append(min(list(self.forecast_df[column])))
+                    list_of_y_label_max.append(max(list(self.forecast_df[column])))
                     y_label_min = min(list_of_y_label_min) #поиск минимального значения из всех минимумов по оси y
                     y_label_max = max(list_of_y_label_max) #поиск максимального значения из всех максимумов по оси y
                     axs[r, c].set_ylim(y_label_min - 0.5, y_label_max + 0.5)
@@ -145,7 +145,7 @@ class Postprocessing:
                 #Выводим на графике только прогнозируемый период
                 axs[nrows - 1, c].set_xlabel('Месяц', fontsize = 12, color = 'black')
                 axs[r, 0].set_ylabel('Share', fontsize = 12, color = 'black')
-                axs[r, c].set_xticklabels(labels = forecast_df.index.strftime('%b'), rotation = 30)
+                axs[r, c].set_xticklabels(labels = self.forecast_df.index.strftime('%b'), rotation = 30)
                 axs[r, c].legend(title = 'Год', loc = 'best', ncol = 2, fontsize = 7)
 
                 if col_idx % ncols == 0:
