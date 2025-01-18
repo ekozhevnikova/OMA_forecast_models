@@ -1,0 +1,173 @@
+//GROUP 1 Cезонность и тренд (последний месяц НЕ декабрь): GROUP_1_not_december
+//GROUP 1 Cезонность и тренд (последний месяц декабрь): GROUP_1_december
+//GROUP 2: Тренд без сезонности (последний месяц НЕ декабрь): GROUP_2_not_december
+//GROUP 2: Тренд без сезонности (последний месяц декабрь): GROUP_2_december
+//GROUP 3: Сезонность без тренда: GROUP_3
+//GROUP 4: Без тренда и без сезонности (последний месяц НЕ декабрь): GROUP_4_not_december
+//GROUP 4: Без тренда и без сезонности (последний месяц декабрь): GROUP_4_december
+
+//ARIMA: ARIMA
+//Prophet: Prophet
+//Наивный метод/Наивный метод с ошибкой (naive_forecast): Naive/Naive_error
+//Скользящее среднее фиксированные периоды/календарные годы (rolling_mean): RollMean_periods/RollMean_years
+//Сезонная декомпозиция фиксированные периоды/календарные годы (seasonal_decomposition): SeasonDec_periods/SeasonDec_years
+//Декомпозиция с/без тренда фиксированные периоды (decomposition_fixed_periods): Dec_with_trend_periods/Dec_without_trend_periods
+//Декомпозиция с/без тренда календарные годы (decomposition_calendar_years): Dec_with_trend_years/Dec_without_trend_years
+//Регрессия с линейным/логарифмическим трендом (regressio_model): regr_lin/regr_log
+{
+    "GROUP_1_not_december": [
+      {
+        "ARIMA": "0.1"
+      },
+      {
+        "Prophet": "0.3"
+      },
+      {
+        "Dec_with_trend_periods": "0.025"
+      },
+      {
+        "RollMean_periods": "0.15"
+      },
+      {
+        "SeasonDec_periods": "0.2"
+      },
+      {
+        "RollMean_years": "0.2"
+      },
+      {
+        "regr_log": "0.025" 
+      }
+    ],
+    "GROUP_1_december": [
+      {
+        "ARIMA": "0.05"
+      },
+      {
+        "Prophet": "0.45"
+      },
+      {
+        "Dec_with_trend_years": "0.03"
+      },
+      {
+        "RollMean_periods": "0.35"
+      },
+      {
+        "SeasonDec_periods": "0.1"
+      },
+      {
+        "regr_log": "0.07" 
+      }
+    ],
+    "GROUP_2_not_december": [
+      {
+        "ARIMA": "0.06"
+      },
+      {
+        "Prophet": "0.06"
+      },
+      {
+        "regr_lin": "0.2"
+      },
+      {
+        "regr_log": "0.25"
+      },
+      {
+        "SeasonDec_periods": "0.08"
+      },
+      {
+        "Naive_error": "0.35"
+      }
+    ],
+    "GROUP_2_december": [
+      {
+        "ARIMA": "0.05"
+      },
+      {
+        "Prophet": "0.15"
+      },
+      {
+        "regr_lin": "0.55"
+      },
+      {
+        "SeasonDec_periods": "0.05"
+      },
+      {
+        "Naive_error": "0.1"
+      }
+    ],
+    "GROUP_3": [
+      {
+        "ARIMA": "0.1"
+      },
+      {
+        "Prophet": "0.15"
+      },
+      {
+        "Dec_without_trend_years": [0.06, 0.08]
+      },
+      {
+        "Dec_without_trend_periods": "0.08"
+      },
+      {
+        "RollMean_periods": "0.05"
+      },
+      {
+        "SeasonDec_periods": "0.05"
+      },
+      {
+        "RollMean_years": "0.1"
+      },
+      {
+        "SeasonDec_years": "0.1"
+      },
+      {
+        "regr_lin": "0.1"
+      }
+    ],
+    "GROUP_4_not_december": [
+      {
+        "ARIMA": "0.03"
+      },
+      {
+        "Prophet": "0.04"
+      },
+      {
+        "Naive": "0.25"
+      },
+      {
+        "Dec_without_trend_periods": "0.03"
+      },
+      {
+        "regr_lin": "0.15"
+      },
+      {
+        "regr_log": "0.05"
+      },
+      {
+        "SeasonDec_periods": "0.2"
+      },
+      {
+        "Naive_error": "0.25"
+      }
+    ],
+    "GROUP_4_december": [
+      {
+        "ARIMA": "0.35"
+      },
+      {
+        "Prophet": "0.155"
+      },
+      {
+        "Naive": "0.01"
+      },
+      {
+        "regr_log": "0.01"
+      },
+      {
+        "SeasonDec_periods": "0.02"
+      },
+      {
+        "Naive_error_last_6_months": "0.2225"
+      }
+    ]
+}
