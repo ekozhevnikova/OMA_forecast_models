@@ -28,8 +28,8 @@ class Postprocessing:
         avg_forecast = combined_forecasts.groupby(combined_forecasts.columns, axis = 1).sum()
         return avg_forecast
     
-
-    def testing(self, *avg_forecasts):
+    @staticmethod
+    def testing(df, *avg_forecasts):
         if not avg_forecasts:  # Проверка, есть ли хотя бы один прогноз
             raise ValueError('Не передано ни одного прогноза для тестирования.')
 

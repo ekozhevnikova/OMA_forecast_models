@@ -60,16 +60,16 @@ class Preprocessing:
             p-value < 0.05 свидетельствует о стационарности ВР.
             p-value > 0.05 свидетельствует о плохой стационарности ВР.
         """
-        result = adfuller(ts)
+        result = adfuller(self.ts)
         return result[1] < 0.05
 
-    @staticmethod
-    def make_stationary(ts):
+
+    def make_stationary(self):
         """
             Приведение нестационарного ряда к стационарному виду путём дифференцирования.
             Удаление тренда из ВР.
         """
-        return ts.diff().dropna()
+        return self.ts.diff().dropna()
 
     @staticmethod
     def inverse_difference(forecast, last_observation):

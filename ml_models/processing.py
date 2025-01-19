@@ -1,4 +1,5 @@
 import sys
+import json
 import numpy as np
 import pandas as pd
 import datetime
@@ -46,22 +47,8 @@ class Forecast_Models:
         self.forecast_periods = forecast_periods
         self.column_name_with_date = column_name_with_date
     
-
-    def main(self, filename, list_of_replacements: list):
-        """
-            Функция для запуска ансамбля ML-моделей для прогнозирования ВР.
-        """
-        dict_data = File(filename).from_file(0, 0)
-        dict_data_new = Dict_Operations(dict_data).replace_keys_in_dict(list_of_replacements)
-        merged_df = Dict_Operations(dict_data_new).combine_dict_into_one_dataframe(self.column_name_with_date)
-        merged_df[self.column_name_with_date] = pd.to_datetime(merged_df[self.column_name_with_date], format = '%d.%m.%Y')
-        merged_df = merged_df.sort_values(by = self.column_name_with_date)
-        merged_df.set_index(self.column_name_with_date, inplace = True)
-
-        #TODO
-
     
-    def regression_model(self, method: str, plots: bool = False):
+    def regression_model(self, method: str):
         """
             Модель Регрессии
 
@@ -162,6 +149,7 @@ class Forecast_Models:
             # Добавляем прогнозируемые значения в DataFrame
             future_predictions[f'{column}'] = y_future_pred
         future_predictions.set_index(self.column_name_with_date, inplace=True)
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and method == 'linear_trend':
@@ -176,10 +164,11 @@ class Forecast_Models:
                 forecast_df=future_predictions,
                 save_dir='plots_for_ML_models/regression_model_logistic_trend',
             )
+        '''
 
         return future_predictions
 
-    def naive_forecast(self, past_values: int = 3, weigh_error: float = 0, plots: bool = False):
+    def naive_forecast(self, past_values: int = 3, weigh_error: float = 0):
         """
             Наивный метод прогнозирования с учетом ошибки (опционально).
             Используется для прогноза ВР без тренда и сезонности.
@@ -242,6 +231,7 @@ class Forecast_Models:
         # Объединение всех столбцов в один DataFrame
         result_df = pd.concat(forecast_results.values(), axis = 1)
 
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and weigh_error > 0:
@@ -256,10 +246,10 @@ class Forecast_Models:
                 forecast_df=result_df,
                 save_dir='plots_for_ML_models/naive_forecast',
             )
-
+        '''
         return result_df
 
-    def seasonal_decomposition(self, method: str, past_values: int = 3, plots: bool = False):
+    def seasonal_decomposition(self, method: str, past_values: int = 3):
         """
             Декомпозиция временного ряда с выделением тренда и сезонности.
             Используется для прогноза ВР с сезонностью и неявно выраженным трендом.
@@ -341,7 +331,7 @@ class Forecast_Models:
                 season_forecast_df = season_forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
                 # Финальный прогноз
                 forecast_df = next_year_trend_df + season_forecast_df
-
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and method == 'calendar_years':
@@ -356,10 +346,10 @@ class Forecast_Models:
                 forecast_df=forecast_df,
                 save_dir='plots_for_ML_models/seasonal_decomposition_fixed_periods',
             )
-
+        '''
         return forecast_df
 
-    def rolling_mean(self, method: str, past_values: int = 3, plots: bool = False):
+    def rolling_mean(self, method: str, past_values: int = 3):
         """
             Декомпозиция временного ряда с применением скользящего среднего.
             Используется для прогноза ВР с неявно выраженным трендом и сезонностью.
@@ -412,7 +402,7 @@ class Forecast_Models:
 
         # Удаляем тренд с помощью дифференцирования
         rolling_mean = past_years.rolling(window = self.forecast_periods).mean()
-        rolling_mean = past_years.rolling(window=12).mean()
+        rolling_mean = past_years.rolling(window = 12).mean()
         detrended = (past_years - rolling_mean).dropna()
         detrended[self.column_name_with_date] = detrended.index.month
 
@@ -440,15 +430,15 @@ class Forecast_Models:
         seasonal_forecast = np.tile(seasonatily.values, (1, 1))
         # Финальный прогноз: сложение тренда и сезонности
         final_forecast = next_year_rolling_mean_df + seasonal_forecast
-        forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
+        forecast_df = pd.DataFrame(final_forecast, index = next_year_dates, columns = self.df.columns)
 
         if method == 'calendar_years':
-            next_year_dates_fact = pd.date_range(start=last_date + pd.DateOffset(months=1),
-                                                 periods=self.forecast_periods,
-                                                 freq='ME')
+            next_year_dates_fact = pd.date_range(start = last_date + pd.DateOffset(months=1),
+                                                 periods = self.forecast_periods,
+                                                 freq = 'ME')
             if last_month < 12:
                 forecast_df = forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
-
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and method == 'calendar_years':
@@ -463,10 +453,10 @@ class Forecast_Models:
                 forecast_df=forecast_df,
                 save_dir='plots_for_ML_models/rolling_mean_fixed_periods',
             )
-
+        '''
         return forecast_df
 
-    def decomposition_fixed_periods(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8, plots: bool = False):
+    def decomposition_fixed_periods(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8):
         """
             Ручная декомпозиция временного ряда по фиксированным периодам.
             Используется для прогноза ВР с трендом (если указан method: 'with_trend') и сезонностью.
@@ -519,7 +509,7 @@ class Forecast_Models:
             # Рассчитываем среднее и нормализованные значения
             period_mean = period_data.mean()
             yearly_means.append(period_mean)
-            yearly_normalized.append((period_data / period_mean).reset_index(drop=True))
+            yearly_normalized.append((period_data / period_mean).reset_index(drop = True))
 
             # Сохраняем средние значения для анализа тренда
             means_df[f'Period_{i + 1}'] = period_mean
@@ -541,7 +531,7 @@ class Forecast_Models:
             else:
                 # Рассчитываем шаги для прогнозирования тренда
                 total_step = sum(
-                    (means_df[f'Period_{i - 1}'] - means_df[f'Period_{i}']) * (w_2 if i == 2 else w_1/(past_values - 2))
+                    (means_df[f'Period_{i - 1}'] - means_df[f'Period_{i}']) * (w_2 if i == 2 else w_1 / (past_values - 2))
                     for i in range(2, past_values + 1)
                 )
                 forecast_average = total_step + means_df['Period_1'].values
@@ -558,6 +548,7 @@ class Forecast_Models:
                                   freq='ME')
         result_df.index = new_index
 
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and method == 'without_trend':
@@ -572,11 +563,11 @@ class Forecast_Models:
                 forecast_df=result_df,
                 save_dir='plots_for_ML_models/decomposition_fixed_periods_with_trend',
             )
-
+        '''
         return result_df
 
 
-    def decomposition_calendar_years(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8, plots: bool = False):
+    def decomposition_calendar_years(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8):
         """
             Ручная декомпозиция временного ряда по календарным годам.
             Используется для прогноза ВР с трендом (если указан method: 'with_trend') и сезонностью.
@@ -631,7 +622,7 @@ class Forecast_Models:
             # Среднее и нормализация
             period_mean = period_data.mean()
             yearly_means.append(period_mean)
-            yearly_normalized.append((period_data / period_mean).reset_index(drop=True))
+            yearly_normalized.append((period_data / period_mean).reset_index(drop = True))
             if last_month == 12:
                 means_df[f'Period_{i + 1}'] = period_mean
             else:
@@ -639,7 +630,7 @@ class Forecast_Models:
         months_to_forecast = self.forecast_periods + (last_month if (last_month != 12) else 0)
         # Среднее нормализованное значение
         average_normalized = sum(yearly_normalized) / past_values
-        average_normalized = pd.concat([average_normalized] * self.forecast_periods, ignore_index=True).iloc[
+        average_normalized = pd.concat([average_normalized] * self.forecast_periods, ignore_index = True).iloc[
                              :months_to_forecast]
 
         # Общее среднее значение
@@ -651,7 +642,7 @@ class Forecast_Models:
                 result_df = average_normalized * forecast_average
             else:
                 steps = [
-                    (means_df[f'Period_{i}'] - means_df[f'Period_{i + 1}']) * (w_2 if i == 1 else w_1/(past_values - 2))
+                    (means_df[f'Period_{i}'] - means_df[f'Period_{i + 1}']) * (w_2 if i == 1 else w_1 / (past_values - 2))
                     for i in range(1, past_values)
                 ]
                 forecast_average = sum(steps) + means_df['Period_1']
@@ -664,7 +655,7 @@ class Forecast_Models:
                 )
                 forecast_average_adjusted = adjustment + result_dff.mean()
                 result_df_dop = forecast_average_adjusted * average_normalized
-                result_df = pd.concat([result_dff, result_df_dop], axis=0)
+                result_df = pd.concat([result_dff, result_df_dop], axis = 0)
 
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
@@ -673,7 +664,7 @@ class Forecast_Models:
             # Прогноз для оставшихся месяцев текущего года
             result_df_forecast = result_df.iloc[last_month:months_to_forecast]
             new_index_current_year = pd.date_range(
-                start=last_date + pd.DateOffset(months=1), periods=self.forecast_periods, freq='ME'
+                start = last_date + pd.DateOffset(months=1), periods=self.forecast_periods, freq = 'ME'
             )
             result_df_forecast.index = new_index_current_year
 
@@ -681,12 +672,13 @@ class Forecast_Models:
             # Прогноз на `months_to_forecast` месяцев, начиная с января
             result_df_forecast = result_df.iloc[:months_to_forecast]
             new_index = pd.date_range(
-                start=last_date + pd.DateOffset(months=1),
-                periods=self.forecast_periods,
-                freq='ME'
+                start = last_date + pd.DateOffset(months = 1),
+                periods = self.forecast_periods,
+                freq = 'ME'
             )
             result_df_forecast.index = new_index
-
+        
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots and method == 'without_trend':
@@ -701,10 +693,10 @@ class Forecast_Models:
                 forecast_df=result_df_forecast,
                 save_dir='plots_for_ML_models/decomposition_calendar_years_with_trend',
             )
-
+        '''
         return result_df_forecast
 
-    def prophet_forecast(self, plots: bool = False):
+    def prophet_forecast(self):
         """
             Метод PROPHET.
             Универсальный для всех ВР.
@@ -734,9 +726,9 @@ class Forecast_Models:
         }
 
         # Сортировка и подготовка данных
-        df.reset_index(inplace=True)
+        df.reset_index(inplace = True)
         df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-        df = df.sort_values(by=self.column_name_with_date)
+        df = df.sort_values(by = self.column_name_with_date)
 
         # Разделение на обучающую и тестовую выборки
         train = df.iloc[:-forecast_periods]
@@ -756,18 +748,18 @@ class Forecast_Models:
             best_params = None
 
             for params in ParameterGrid(param_grid):
-                model = Prophet(seasonality_mode=params['seasonality_mode'],
-                                n_changepoints=params['n_changepoints'],
-                                changepoint_prior_scale=params['changepoint_prior_scale'])
+                model = Prophet(seasonality_mode = params['seasonality_mode'],
+                                n_changepoints = params['n_changepoints'],
+                                changepoint_prior_scale = params['changepoint_prior_scale'])
                 model.fit(series_df)
 
                 # Прогнозирование
-                future = model.make_future_dataframe(periods=forecast_periods, freq='M')
+                future = model.make_future_dataframe(periods = forecast_periods, freq='M')
                 forecast = model.predict(future)
 
                 # Вычисление MAPE
                 test_series = test[[self.column_name_with_date, series]].rename(
-                    columns={self.column_name_with_date: 'ds', series: 'y'})
+                    columns = {self.column_name_with_date: 'ds', series: 'y'})
                 forecast_test_period = forecast[-forecast_periods:]
 
                 # Сравнение только по датам тестового набора
@@ -787,23 +779,24 @@ class Forecast_Models:
         forecast_df = pd.DataFrame()
         for series, best_params, _ in results:
             series_df = df[[self.column_name_with_date, series]].rename(
-                columns={self.column_name_with_date: 'ds', series: 'y'})
+                columns = {self.column_name_with_date: 'ds', series: 'y'})
 
-            model = Prophet(seasonality_mode=best_params['seasonality_mode'],
-                            n_changepoints=best_params['n_changepoints'],
-                            changepoint_prior_scale=best_params['changepoint_prior_scale'])
+            model = Prophet(seasonality_mode = best_params['seasonality_mode'],
+                            n_changepoints = best_params['n_changepoints'],
+                            changepoint_prior_scale = best_params['changepoint_prior_scale'])
 
             model.fit(series_df)
-            future = model.make_future_dataframe(periods=forecast_periods, freq='M')
+            future = model.make_future_dataframe(periods = forecast_periods, freq = 'M')
             forecast = model.predict(future)
 
             if forecast_df.empty:
                 forecast_df['ds'] = forecast['ds']
             forecast_df[series] = forecast['yhat']
 
-        forecast_df.set_index('ds', inplace=True)
+        forecast_df.set_index('ds', inplace = True)
         forecast_df = forecast_df.tail(forecast_periods)
 
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots:
@@ -812,10 +805,11 @@ class Forecast_Models:
                 forecast_df=forecast_df,
                 save_dir='plots_for_ML_models/prophet_forecast',
             )
+        '''
 
         return forecast_df
 
-    def auto_arima_forecast(self, plots: bool = False):
+    def auto_arima_forecast(self):
         """
             Метод auto_arima.
             Универсальный для всех ВР.
@@ -860,25 +854,25 @@ class Forecast_Models:
             was_non_stationary = False
 
             # Проверка на стационарность
-            if not Preprocessing.check_stationarity(ts):
-                ts = Preprocessing.make_stationary(ts)
+            if not Preprocessing(ts).check_stationarity():
+                ts = Preprocessing(ts).make_stationary()
                 was_non_stationary = True
 
             try:
                 # Построение модели
                 model = auto_arima(
                     ts,
-                    seasonal=True,                      # Использовать сезонность
-                    D=1,                                # Порядок сезонного дифференцирования
-                    m=12,                               # Частота сезонности (12 месяцев)
-                    stationary=False,                   # Определение стационарности
-                    test='pp',                          # Тест на стационарность
-                    information_criterion='hqic',       # Критерий для выбора лучшей модели
-                    stepwise=True,                      # Пошаговый подбор параметров
-                    suppress_warnings=False,            # Подавление предупреждений
-                    max_p=5, max_q=5, max_d=1,          # Максимальные значения p, q, d
-                    max_P=2, max_Q=2, max_D=1,          # Максимальные значения P, Q, D
-                    trace=False                         # Вывод логов
+                    seasonal = True,                      # Использовать сезонность
+                    D = 1,                                # Порядок сезонного дифференцирования
+                    m = 12,                               # Частота сезонности (12 месяцев)
+                    stationary = False,                   # Определение стационарности
+                    test = 'pp',                          # Тест на стационарность
+                    information_criterion = 'hqic',       # Критерий для выбора лучшей модели
+                    stepwise = True,                      # Пошаговый подбор параметров
+                    suppress_warnings = False,            # Подавление предупреждений
+                    max_p = 5, max_q = 5, max_d = 1,          # Максимальные значения p, q, d
+                    max_P = 2, max_Q = 2, max_D = 1,          # Максимальные значения P, Q, D
+                    trace = False                         # Вывод логов
                 )
 
                 # Обучение модели
@@ -899,10 +893,10 @@ class Forecast_Models:
         # Формирование DataFrame с прогнозом
         forecast_df = pd.DataFrame(
             forecasts,
-            index=pd.date_range(start=self.df.index[-1] + pd.DateOffset(months=1), periods=self.forecast_periods,
-                                freq='ME')
+            index = pd.date_range(start = self.df.index[-1] + pd.DateOffset(months = 1), periods = self.forecast_periods,
+                                freq = 'ME')
         )
-
+        '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
         if plots:
@@ -911,12 +905,670 @@ class Forecast_Models:
                 forecast_df=forecast_df,
                 save_dir='plots_for_ML_models/auto_arima_forecast',
             )
-
+        '''
         return forecast_df
 
 
+class GROUPS(Forecast_Models):
+    
+    def __init__(self, forecast_periods: int, column_name_with_date: str):
+        super().__init__(None, forecast_periods, column_name_with_date)
+        
+        
+    def make_forecast_for_group(self, 
+                                model_name: str, 
+                                type_of_group: str,
+                                weights_filepath: str,
+                                filepath: str,
+                                plots = False):
+        """
+            Функция для прогноза по четырём различным группам.
+            
+                Args:
+                    model_name: Имя модели.
+                        Введены следующие сокращения к рассматриваемым моделям:
+                        - ARIMA: ARIMA;
+                        - Prophet: Prophet;
+                        - Наивный метод/Наивный метод с ошибкой (naive_forecast): Naive/Naive_with_error;
+                            Наивный метод последние 3 месяца/Наивный метод последние 6 месяце: Naive_last_3_months/Naive_last_6_months
+                            Наивный метод с учетом ошибки последние 3 месяца/Наивный метод с учетом ошибки последние 6 месяце: Naive_with_error_last_3_months/Naive_with_error_last_6_months
+                        - Скользящее среднее фиксированные периоды/календарные годы (rolling_mean): RollMean_periods/RollMean_years;
+                        - Сезонная декомпозиция фиксированные периоды/календарные годы (seasonal_decomposition): SeasonDec_periods/SeasonDec_years;
+                        - Декомпозиция с/без тренда фиксированные периоды (decomposition_fixed_periods): Dec_with_trend_periods/Dec_without_trend_periods;
+                        - Декомпозиция с/без тренда календарные годы (decomposition_calendar_years): Dec_with_trend_years/Dec_without_trend_years;
+                            Декомпозиция с/без тренда последние 3 года/Декомпозиция с/без тренда последние 2 года: Dec_without_trend_2_years/Dec_without_trend_3_years
+                        - Регрессия с линейным/логарифмическим трендом (regression_model): Regr_lin/Regr_log.
+                        
+                    type_of_group: Тип рассматриваемой группы.
+                        - GROUP_1: ВР с сезонной и трендовой компонентами;
+                        - GROUP_2: ВР с трендовой, но без сезонной компоненты;
+                        - GROUP_3: ВР с сезонной, но без трендовой компоненты;
+                        - GROUP_4: ВР без сезонной и без трендовой компонент.
+                        
+                    weights_filepath: Полный путь к конфиг-файлу с весами каждой модели и группы.
+                    
+                    filepath: Путь, куда будут сохраняться графики.
+                    
+                    plots: По умолчанию False (т.е не строятся).
+                    
+                Returns:
+                    avg_forecast: усредненный прогноз по всем моделям для каждый из групп.
+        """
+        last_month_in_df = Preprocessing(self.df).search_last_fact_data()[1]
+
+        #Чтение config.json для корректного указания веса каждой из моделей
+        with open(f'{weights_filepath}') as f:
+            file_content = f.read()
+            groups = json.loads(file_content)
+
+        forecasts = []
+        print('ПРОГНОЗ НА ' + str(self.forecast_periods) + ' МЕСЯЦЕВ ' + 'ПО РЯДУ ML-МОДЕЛЕЙ:', end = '\n\n')
+        ############################################################ GROUP 1 (Сезонность и тренд) #########################################################   
+        if type_of_group == 'GROUP_1':
+            path_to_save = f'{filepath}/Сезонность и тренд' #ВР с трендом и сезонностью
+            #Случай, если последний месяц в исходном DataFrame не равен 12 (не декабрь)
+            if last_month_in_df != 12:
+                match model_name:
+                    case 'ARIMA':
+                        forecast_df = self.auto_arima_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/ARIMA')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][0]['ARIMA'])
+                        
+                    case 'Prophet':
+                        forecast_df = self.prophet_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/PROPHET')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][1]['Prophet'])
+
+                    case 'Dec_with_trend_periods':
+                        forecast_df = self.decomposition_fixed_periods(method = 'with_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Декомпозиция с трендом 3 последних НЕ КАЛЕНДАРНЫХ года (seasonality_with_trend_periods)',
+                                forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Декомпозиция с трендом (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][2]['Dec_with_trend_periods'])
+
+                    case 'RollMean_periods':
+                        forecast_df = self.rolling_mean(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ скользящее среднее последние 3 ПЕРИОДА (rolling_mean)', 
+                                forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Скользящее среднее (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][3]['RollMean_periods'])
+
+                    case 'SeasonDec_periods':
+                        forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (тренд - дифференцированием), 3 периода (season_dec_periods)',
+                                forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][4]['SeasonDec_periods'])
 
 
+                    case 'RollMean_years':
+                        forecast_df = self.rolling_mean(method = 'calendar_years')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ скользящее среднее последние 3 ПЕРИОДА (rolling_mean)', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Скользящее среднее (календарные годы)')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][5]['RollMean_years'])
+
+                    case 'Regr_log':
+                        forecast_df = self.regression_model(method = 'logistic_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Логистическая регрессия (regression_model)', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (логарифм)')
+                        forecasts.append(forecast_df * groups['GROUP_1_not_december'][6]['Regr_log'])
+            #Случай, если последний месяц в исходном DataFrame равен 12 (декабрь)               
+            elif last_month_in_df == 12:
+                match model_name:
+                    case 'ARIMA':
+                        forecast_df = self.auto_arima_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA')
+                        print(forecast_df.round(4), sep='\n', end='\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/ARIMA')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][0]['ARIMA'])
+                        
+                    case 'Prophet':
+                        forecast_df = self.prophet_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/PROPHET')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][1]['Prophet'])
+
+                    case 'Dec_with_trend_periods':
+                        forecast_df = self.decomposition_fixed_periods(method = 'with_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Декомпозиция с трендом (фиксированные периоды) (decomposition_fixed_periods)', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Декомпозиция с трендом (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][2]['Dec_with_trend_periods'])
+
+                    case 'RollMean_periods':
+                        forecast_df = self.rolling_mean(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ скользящее среднее последние 3 ПЕРИОДА (rolling_mean)', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Скользящее среднее (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][3]['RollMean_periods'])
+
+                    case 'SeasonDec_periods':
+                        forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (тренд - дифференцированием), фиксированные периоды (seasonal_decomposition)',
+                                forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][4]['SeasonDec_periods'])
+
+                    case 'Regr_log':
+                        forecast_df = self.regression_model(method = 'logistic_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Логистическая регрессия (regression_model)', forecast_df.round(4), sep = '\n', end = '\n\n')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][5]['Regr_log'])
+            
+        ############################################################ GROUP 2 (Тренд без сезонности) #########################################################               
+        elif type_of_group == 'GROUP_2':
+            path_to_save = f'{filepath}/Тренд без сезонности' #ВР с трендом и сезонностью
+            #Случай, если последний месяц в исходном DataFrame не равен 12 (не декабрь)
+            if last_month_in_df != 12:
+                match model_name:
+                    case 'ARIMA':
+                        forecast_df = self.auto_arima_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/ARIMA')
+                        forecasts.append(forecast_df * groups['GROUP_2_not_december'][0]['ARIMA'])
+                        
+                    case 'Prophet':
+                        forecast_df = self.prophet_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/PROPHET')
+                        forecasts.append(forecast_df * groups['GROUP_2_not_december'][1]['Prophet'])
+
+                    case 'Regr_lin':
+                        forecast_df = self.regression_model(method = 'linear_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Линейная регрессия (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_2_not_december'][2]['Regr_lin'])
+
+                    case 'Regr_log':
+                        forecast_df = self.regression_model(method = 'logistic_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Логистическая регрессия (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_2_not_december'][3]['Regr_log'])
+
+                    case 'SeasonDec_periods':
+                        forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (фиксированные периоды) (seasonal_decomposition_fixed_periods)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_2_not_december'][4]['SeasonDec_periods'])
 
 
+                    case 'Naive_with_error':
+                        forecast_df = self.naive_forecast(past_values = 6, weigh_error = 0.8)
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
+                        forecasts.append(forecast_df * groups['GROUP_2_not_december'][5]['Naive_with_error'])
+                            
+            #Случай, если последний месяц в исходном DataFrame равен 12 (декабрь)               
+            elif last_month_in_df == 12:
+                match model_name:
+                    case 'ARIMA':
+                        forecast_df = self.auto_arima_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/ARIMA')
+                        forecasts.append(forecast_df * groups['GROUP_2_december'][0]['ARIMA'])
+                        
+                    case 'Prophet':
+                        forecast_df = self.prophet_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/PROPHET')
+                        forecasts.append(forecast_df * groups['GROUP_2_december'][1]['Prophet'])
 
+                    case 'Regr_lin':
+                        forecast_df = self.regression_model(method = 'linear_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с линейным трендом (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_2_december'][2]['Regr_lin'])
+
+                    case 'SeasonDec_periods':
+                        forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (тренд - дифференцированием)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_2_december'][3]['SeasonDec_periods'])
+
+                    case 'Naive_with_error_last_3_months':
+                        forecast_df = self.naive_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
+                        forecasts.append(forecast_df * groups['GROUP_2_december'][4]['Naive_with_error'])
+
+                    case 'Naive_with_error_last_6_months':
+                        forecast_df = self.naive_forecast(past_values = 6)
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
+                        forecasts.append(forecast_df * groups['GROUP_2_december'][4]['Naive_with_error'])
+                            
+        ############################################################ GROUP 3 (Сезонность без тренда) #########################################################
+        elif type_of_group == 'GROUP_3':
+            path_to_save = f'{filepath}/Сезонность без тренда' #ВР с трендом и сезонностью
+            match model_name:
+                case 'ARIMA':
+                    forecast_df = self.auto_arima_forecast()
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/ARIMA')
+                    forecasts.append(forecast_df * groups['GROUP_3'][0]['ARIMA'])
+                    
+                case 'Prophet':
+                    forecast_df = self.prophet_forecast()
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/PROPHET')
+                    forecasts.append(forecast_df * groups['GROUP_3'][1]['Prophet'])
+
+                case 'Dec_without_trend_3_years':
+                    forecast_df = self.decomposition_calendar_years(method = 'without_trend')
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ decomposition_calendar_years')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Декомпозиция без тренда (календарные годы)')
+                    forecasts.append(forecast_df * groups['GROUP_3'][2]['Dec_without_trend_years'][0])
+
+                case 'Dec_without_trend_2_years':
+                    forecast_df = self.decomposition_calendar_years(method = 'without_trend', past_values = 2)
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ decomposition_calendar_years')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Декомпозиция без тренда (календарные годы) последние 2 года')
+                    forecasts.append(forecast_df * groups['GROUP_3'][2]['Dec_without_trend_years'][1])
+
+                case 'Dec_without_trend_3_periods':
+                    forecast_df = self.decomposition_fixed_periods(method = 'without_trend')
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ decomposition_fixed_periods')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Декомпозиция без тренда (фиксированные периоды) последние 3 года')
+                    forecasts.append(forecast_df * groups['GROUP_3'][3]['Dec_without_trend_periods'])
+
+
+                case 'Dec_without_trend_2_periods':
+                    forecast_df = self.decomposition_fixed_periods(method = 'without_trend', past_values = 2)
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ decomposition_fixed_periods')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Декомпозиция без тренда (фиксированные периоды) последние 2 года')
+                    forecasts.append(forecast_df * groups['GROUP_3'][3]['Dec_without_trend_periods'])
+
+                case 'RollMean_periods':
+                    forecast_df = self.rolling_mean(method = 'fixed_periods')
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Скользящее среднее (фиксированные периоды) rolling_mean')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Скользящее среднее (фиксированные периоды)')
+                    forecasts.append(forecast_df * groups['GROUP_3'][4]['RollMean_periods'])
+
+                case 'SeasonDec_periods':
+                    forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (фиксированные периоды) seasonal_decomposition')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                    forecasts.append(forecast_df * groups['GROUP_3'][5]['SeasonDec_periods'])
+
+                case 'RollMean_years':
+                    forecast_df = self.rolling_mean(method = 'calendar_years')
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Скользящее среднее (календарные годы) rolling_mean')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Скользящее среднее (календарные годы)')
+                    forecasts.append(forecast_df * groups['GROUP_3'][6]['RollMean_years'])
+
+                case 'SeasonDec_years':
+                    forecast_df = self.seasonal_decomposition(method = 'calendar_years')
+                    print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (календарные годы) seasonal_decomposition')
+                    if plots:
+                        Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                        forecast_df = forecast_df, 
+                                                                        save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (календарные годы)')
+                    forecasts.append(forecast_df * groups['GROUP_3'][6]['SeasonDec_years'])
+
+                case 'Regr_lin':
+                        forecast_df = self.regression_model(method = 'linear_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с линейным трендом (regr_lin)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_3'][7]['Regr_lin'])
+
+        ############################################################ GROUP 4 (Без сезонности и без тренда) #########################################################   
+        if type_of_group == 'GROUP_4':
+            path_to_save = f'{filepath}/Без сезонности и без тренда' #ВР с трендом и сезонностью
+            #Случай, если последний месяц в исходном DataFrame не равен 12 (не декабрь)
+            if last_month_in_df != 12:
+                match model_name:
+                    case 'ARIMA':
+                        forecast_df = self.auto_arima_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/ARIMA')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][0]['ARIMA'])
+                        
+                    case 'Prophet':
+                        forecast_df = self.prophet_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/PROPHET')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][1]['Prophet'])
+
+                    case 'Naive':
+                        forecast_df = self.naive_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][2]['Naive'])
+
+                    case 'Dec_without_trend_periods':
+                        forecast_df = self.decomposition_fixed_periods(method = 'without_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Декомпозиция без тренда (фиксированные периоды) (decomposition_fixed_periods)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Декомпозиция без тренда (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][3]['Dec_without_trend_periods'])
+
+                    case 'Regr_lin':
+                        forecast_df = self.regression_model(method = 'linear_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с линейныйм трендом (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][4]['Regr_lin'])
+
+
+                    case 'Regr_log':
+                        forecast_df = self.regression_model(method = 'logistic_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с логарифмическим трендом (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][5]['Regr_log'])
+
+                    case 'SeasonDec_periods':
+                        forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (фиксированные периоды) seasonal_decomposition')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][6]['SeasonDec_periods'])
+
+                    case 'Naive_with_error_last_6_months':
+                        forecast_df = self.naive_forecast(past_values = 6)
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
+                        forecasts.append(forecast_df * groups['GROUP_4_not_december'][7]['Naive_with_error'])
+            #Случай, если последний месяц в исходном DataFrame равен 12 (декабрь)               
+            elif last_month_in_df == 12:
+                match model_name:
+                    case 'ARIMA':
+                        forecast_df = self.auto_arima_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ ARIMA')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/ARIMA')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][0]['ARIMA'])
+                        
+                    case 'Prophet':
+                        forecast_df = self.prophet_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ PROPHET')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/PROPHET')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][1]['Prophet'])
+
+                    case 'Naive_last_3_months':
+                        forecast_df = self.naive_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз последние 3 месяца')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][2]['Naive'])
+
+                    case 'Naive_last_6_months':
+                        forecast_df = self.naive_forecast(past_values = 6)
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз последние 6 месяцев')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][2]['Naive'])
+
+                    case 'Regr_log':
+                        forecast_df = self.regression_model(method = 'logistic_trend')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с логарифмическим трендом (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][3]['Regr_log'])
+
+                    case 'SeasonDec_periods':
+                        forecast_df = self.seasonal_decomposition(method = 'fixed_periods')
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Сезонная декомпозиция (фиксированные периоды) (regression_model)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][4]['SeasonDec_periods'])    
+
+                    case 'Naive_with_error_last_3_months':
+                        forecast_df = self.naive_forecast()
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 3 месяца')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][5]['Naive_with_error'])  
+
+                    case 'Naive_with_error_last_6_months':
+                        forecast_df = self.naive_forecast(past_values = 6)
+                        print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)')
+                        if plots:
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
+                                                                            forecast_df = forecast_df, 
+                                                                            save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
+                        forecasts.append(forecast_df * groups['GROUP_4_december'][5]['Naive_with_error'])                
+                        
+        #Усредненный прогноз по всем методам               
+        avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
+        return avg_forecast
+    
+    def main(self,
+             filename, 
+             list_of_replacements: list, 
+             model_name_list_group_1: list, 
+             model_name_list_group_2: list, 
+             model_name_list_group_3: list,
+             model_name_list_group_4: list,
+             plots = False):
+        """
+            Функция для запуска ансамбля ML-моделей для прогнозирования ВР.
+        """
+        self.df = Preprocessing.get_data_for_forecast(filename, list_of_replacements, self.column_name_with_date)
+        df = self.df.head(42)
+
+        df_list_1 = []
+        df_list_2 = []
+        df_list_3 = []
+        df_list_4 = []
+        for column in self.df.columns:
+            time_series = pd.Series(self.df[column])
+            lagged_series = time_series.shift(12)
+            correlation = time_series.corr(lagged_series)
+            trend_test_result = mk.original_test(time_series)
+            # Есть сезонность, есть тренд
+            if ((correlation >= 0.7) and trend_test_result.h):
+                df_list_1.append(self.df[column])
+
+            # Нет сезонности, есть тренд
+            if ((correlation < 0.7) and trend_test_result.h):
+                df_list_2.append(self.df[column])
+
+            # Есть сезонность, нет тренда
+            if ((correlation >= 0.7) and not trend_test_result.h):
+                df_list_3.append(self.df[column])
+
+            # Нет сезонности, нет тренда
+            if ((correlation < 0.7) and not trend_test_result.h):
+                df_list_4.append(self.df[column])
+
+        group_1 = pd.DataFrame(df_list_1).T
+        group_2 = pd.DataFrame(df_list_2).T
+        group_3 = pd.DataFrame(df_list_3).T
+        group_4 = pd.DataFrame(df_list_4).T
+
+        avg_forecasts = []
+        if not group_1.empty:
+            print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и трендом', 
+                sep = '\n', end = '\n\n')
+            for i in range(len(model_name_list_group_1)):
+                avg_forecast_1 = self.make_forecast_for_group(model_name = model_name_list_group_1[i], 
+                                                            type_of_group = 'GROUP_1', 
+                                                            weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
+                                                            filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                            plots = False)
+            Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность и тренд')
+            avg_forecasts.append(avg_forecast_1)
+
+        if not group_2.empty:
+            print('', 'Результаты работы различных методов для ТВ-каналов с трендом без сезонности', sep='\n', end='\n\n')
+            for i in range(len(model_name_list_group_2)):
+                avg_forecast_2 = self.make_forecast_for_group(model_name = model_name_list_group_2[i], 
+                                                                type_of_group = 'GROUP_2', 
+                                                                weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
+                                                                filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                                plots = False)
+            Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Тренд без сезонности')
+            avg_forecasts.append(avg_forecast_1)
+
+        if not group_3.empty:
+            print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и без тренда', 
+                  sep = '\n', end = '\n\n')
+            for i in range(len(model_name_list_group_3)):
+                avg_forecast_3 = self.make_forecast_for_group(model_name = model_name_list_group_3[i],
+                                                                type_of_group = 'GROUP_3', 
+                                                                weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
+                                                                filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                                plots = False)
+            Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность без тренда')
+            avg_forecasts.append(avg_forecast_3)
+
+        if not group_4.empty:
+            print('','Результаты работы различных методов для ТВ-каналов без сезонности и без тренда', 
+                  sep = '\n', end = '\n\n')
+            for i in range(len(model_name_list_group_4)):
+                avg_forecast_4 = self.make_forecast_for_group(model_name = model_name_list_group_4[i], 
+                                                                type_of_group = 'GROUP_4', 
+                                                                weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
+                                                                filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                                plots = False)
+            Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Без сезонности и без тренда')
+            avg_forecasts.append(avg_forecast_4) 
+            
+        general_df = Postprocessing.testing(self.df, *avg_forecasts)
+        #TODO Добавить testing
+        return general_df
