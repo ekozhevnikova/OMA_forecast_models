@@ -112,5 +112,5 @@ class Preprocessing:
         last_date = self.ts.index.max()
         end_year = last_date.year
         last_month = last_date.month
-        return end_year, last_month
+        return end_year, last_month, last_date
     

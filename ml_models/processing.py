@@ -915,7 +915,8 @@ class GROUPS(Forecast_Models):
         super().__init__(None, forecast_periods, column_name_with_date)
         
         
-    def make_forecast_for_group(self, 
+    def make_forecast_for_group(self,
+                                forecasts,
                                 model_name: str, 
                                 type_of_group: str,
                                 weights_filepath: str,
@@ -961,7 +962,6 @@ class GROUPS(Forecast_Models):
             file_content = f.read()
             groups = json.loads(file_content)
 
-        forecasts = []
         #print('ПРОГНОЗ НА ' + str(self.forecast_periods) + ' МЕСЯЦЕВ ' + 'ПО РЯДУ ML-МОДЕЛЕЙ:', end = '\n\n')
         ############################################################ GROUP 1 (Сезонность и тренд) #########################################################   
         if type_of_group == 'GROUP_1':
@@ -1093,9 +1093,6 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
                         forecasts.append(forecast_df * groups['GROUP_1_december'][5]['Regr_log'])
-            #Усредненный прогноз по всем методам               
-            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
-            
         ############################################################ GROUP 2 (Тренд без сезонности) #########################################################               
         elif type_of_group == 'GROUP_2':
             path_to_save = f'{filepath}/Тренд без сезонности' #ВР с трендом и сезонностью
@@ -1213,8 +1210,6 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
                         forecasts.append(forecast_df * groups['GROUP_2_december'][4]['Naive_with_error'])
-            #Усредненный прогноз по всем методам               
-            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
                             
         ############################################################ GROUP 3 (Сезонность без тренда) #########################################################
         elif type_of_group == 'GROUP_3':
@@ -1319,8 +1314,6 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
                         forecasts.append(forecast_df * groups['GROUP_3'][7]['Regr_lin'])
-            #Усредненный прогноз по всем методам               
-            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
 
         ############################################################ GROUP 4 (Без сезонности и без тренда) #########################################################   
         if type_of_group == 'GROUP_4':
@@ -1474,10 +1467,6 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
                         forecasts.append(forecast_df * groups['GROUP_4_december'][5]['Naive_with_error'])                
-                        
-            #Усредненный прогноз по всем методам               
-            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
-        return avg_forecast
     
     def main(self,
              filename, 
@@ -1542,53 +1531,69 @@ class GROUPS(Forecast_Models):
         if not group_1.empty:
             print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и трендом', 
                 sep = '\n', end = '\n\n')
+            forecasts = []
             for i in range(len(model_name_list_group_1)):
-                avg_forecast_1 = self.make_forecast_for_group(model_name = model_name_list_group_1[i], 
-                                                            type_of_group = 'GROUP_1', 
-                                                            weights_filepath = weights_filepath, 
-                                                            filepath = filepath_for_graphs,
-                                                            plots = False)
-                Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '{filepath_for_avg_graphs}Сезонность и тренд')
-                avg_forecasts.append(avg_forecast_1)
+                self.make_forecast_for_group(forecasts = forecasts,
+                                            model_name = model_name_list_group_1[i], 
+                                            type_of_group = 'GROUP_1', 
+                                            weights_filepath = weights_filepath, 
+                                            filepath = filepath_for_graphs,
+                                            plots = False)
+            avg_forecast_1 = Postprocessing.calculate_average_forecast(forecasts)
+
+            Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '{filepath_for_avg_graphs}Сезонность и тренд')
+            avg_forecasts.append(avg_forecast_1)
 
         if not group_2.empty:
             print('', 'Результаты работы различных методов для ТВ-каналов с трендом без сезонности', sep='\n', end='\n\n')
+            forecasts = []
             for i in range(len(model_name_list_group_2)):
-                avg_forecast_2 = self.make_forecast_for_group(model_name = model_name_list_group_2[i], 
-                                                                type_of_group = 'GROUP_2', 
-                                                                weights_filepath = weights_filepath, 
-                                                                filepath = filepath_for_graphs,
-                                                                plots = False)
-                Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '{filepath_for_avg_graphs}Тренд без сезонности')
-                avg_forecasts.append(avg_forecast_2)
+                self.make_forecast_for_group(forecasts = forecasts,
+                                            model_name = model_name_list_group_2[i], 
+                                            type_of_group = 'GROUP_2', 
+                                            weights_filepath = weights_filepath, 
+                                            filepath = filepath_for_graphs,
+                                            plots = False)
+            avg_forecast_2 = Postprocessing.calculate_average_forecast(forecasts)
+
+            Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '{filepath_for_avg_graphs}Тренд без сезонности')
+            avg_forecasts.append(avg_forecast_2)
 
         if not group_3.empty:
             print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и без тренда', 
                   sep = '\n', end = '\n\n')
+            forecasts = []
             for i in range(len(model_name_list_group_3)):
-                avg_forecast_3 = self.make_forecast_for_group(model_name = model_name_list_group_3[i],
-                                                                type_of_group = 'GROUP_3', 
-                                                                weights_filepath = weights_filepath, 
-                                                                filepath = filepath_for_graphs,
-                                                                plots = False)
-                Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '{filepath_for_avg_graphs}Сезонность без тренда')
-                avg_forecasts.append(avg_forecast_3)
+                self.make_forecast_for_group(forecasts = forecasts,
+                                            model_name = model_name_list_group_3[i],
+                                            type_of_group = 'GROUP_3', 
+                                            weights_filepath = weights_filepath, 
+                                            filepath = filepath_for_graphs,
+                                            plots = False)
+            avg_forecast_3 = Postprocessing.calculate_average_forecast(forecasts)
+
+            Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '{filepath_for_avg_graphs}Сезонность без тренда')
+            avg_forecasts.append(avg_forecast_3)
 
         if not group_4.empty:
             print('','Результаты работы различных методов для ТВ-каналов без сезонности и без тренда', 
                   sep = '\n', end = '\n\n')
+            forecasts = []
             for i in range(len(model_name_list_group_4)):
-                avg_forecast_4 = self.make_forecast_for_group(model_name = model_name_list_group_4[i], 
-                                                                type_of_group = 'GROUP_4', 
-                                                                weights_filepath = weights_filepath, 
-                                                                filepath = filepath_for_graphs,
-                                                                plots = False)
-                Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '{filepath_for_avg_graphs}Без сезонности и без тренда')
-                avg_forecasts.append(avg_forecast_4) 
+                self.make_forecast_for_group(forecasts = forecasts,
+                                            model_name = model_name_list_group_4[i], 
+                                            type_of_group = 'GROUP_4', 
+                                            weights_filepath = weights_filepath, 
+                                            filepath = filepath_for_graphs,
+                                            plots = False)
+            avg_forecast_4 = Postprocessing.calculate_average_forecast(forecasts)
+
+            Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = '{filepath_for_avg_graphs}Без сезонности и без тренда')
+            avg_forecasts.append(avg_forecast_4) 
             
         general_df = Postprocessing.testing(self.df, *avg_forecasts, *avg_forecasts)
         #TODO Добавить testing
