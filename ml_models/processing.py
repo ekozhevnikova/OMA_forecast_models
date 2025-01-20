@@ -1542,7 +1542,7 @@ class GROUPS(Forecast_Models):
             avg_forecast_1 = Postprocessing.calculate_average_forecast(forecasts)
 
             Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '{filepath_for_avg_graphs}Сезонность и тренд')
+                                                            save_dir = f'{filepath_for_avg_graphs}Сезонность и тренд')
             avg_forecasts.append(avg_forecast_1)
 
         if not group_2.empty:
@@ -1558,7 +1558,7 @@ class GROUPS(Forecast_Models):
             avg_forecast_2 = Postprocessing.calculate_average_forecast(forecasts)
 
             Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '{filepath_for_avg_graphs}Тренд без сезонности')
+                                                            save_dir = f'{filepath_for_avg_graphs}Тренд без сезонности')
             avg_forecasts.append(avg_forecast_2)
 
         if not group_3.empty:
@@ -1575,7 +1575,7 @@ class GROUPS(Forecast_Models):
             avg_forecast_3 = Postprocessing.calculate_average_forecast(forecasts)
 
             Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '{filepath_for_avg_graphs}Сезонность без тренда')
+                                                            save_dir = f'{filepath_for_avg_graphs}Сезонность без тренда')
             avg_forecasts.append(avg_forecast_3)
 
         if not group_4.empty:
@@ -1592,7 +1592,7 @@ class GROUPS(Forecast_Models):
             avg_forecast_4 = Postprocessing.calculate_average_forecast(forecasts)
 
             Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '{filepath_for_avg_graphs}Без сезонности и без тренда')
+                                                            save_dir = f'{filepath_for_avg_graphs}Без сезонности и без тренда')
             avg_forecasts.append(avg_forecast_4) 
             
         general_df = Postprocessing.testing(self.df, *avg_forecasts, *avg_forecasts)
