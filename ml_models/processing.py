@@ -1486,9 +1486,25 @@ class GROUPS(Forecast_Models):
              model_name_list_group_2: list, 
              model_name_list_group_3: list,
              model_name_list_group_4: list,
+             weights_filepath: str,
+             filepath_for_graphs: str,
+             filepath_for_avg_graphs: str,
              plots = False):
         """
             Функция для запуска ансамбля ML-моделей для прогнозирования ВР.
+
+                Args:
+                    filename: файл с фактическими данными по месячным значениям долей;
+                    list_of_replacements: Список листов, взодящих в состав файла с фактическими значениями;
+                    model_name_list_group_1: Список из моделей, которые используются в GROUP_1;
+                    model_name_list_group_2: Список из моделей, которые используются в GROUP_2;
+                    model_name_list_group_3: Список из моделей, которые используются в GROUP_3;
+                    model_name_list_group_4: Список из моделей, которые используются в GROUP_4;
+                    weights_filepath: Полный путь к config-файлу с весами для каждой из моделей;
+                    filepath_for_graphs: Путь к директории, куда будут сохраняться графики с прогнозами.
+                    filepath_for_avg_graphs: Путь к директории, куда будут сохраняться графики ансамблей из моделей с результирующим прогнозом.
+                Returns:
+                    Прогнозный DataFrame, полученный в результате работы ансамбля ML-моделей.
         """
         self.df = Preprocessing.get_data_for_forecast(filename, list_of_replacements, self.column_name_with_date)
 
@@ -1529,11 +1545,11 @@ class GROUPS(Forecast_Models):
             for i in range(len(model_name_list_group_1)):
                 avg_forecast_1 = self.make_forecast_for_group(model_name = model_name_list_group_1[i], 
                                                             type_of_group = 'GROUP_1', 
-                                                            weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
-                                                            filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                            weights_filepath = weights_filepath, 
+                                                            filepath = filepath_for_graphs,
                                                             plots = False)
                 Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность и тренд')
+                                                                save_dir = '{filepath_for_avg_graphs}Сезонность и тренд')
                 avg_forecasts.append(avg_forecast_1)
 
         if not group_2.empty:
@@ -1541,11 +1557,11 @@ class GROUPS(Forecast_Models):
             for i in range(len(model_name_list_group_2)):
                 avg_forecast_2 = self.make_forecast_for_group(model_name = model_name_list_group_2[i], 
                                                                 type_of_group = 'GROUP_2', 
-                                                                weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
-                                                                filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                                weights_filepath = weights_filepath, 
+                                                                filepath = filepath_for_graphs,
                                                                 plots = False)
                 Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Тренд без сезонности')
+                                                                save_dir = '{filepath_for_avg_graphs}Тренд без сезонности')
                 avg_forecasts.append(avg_forecast_2)
 
         if not group_3.empty:
@@ -1554,11 +1570,11 @@ class GROUPS(Forecast_Models):
             for i in range(len(model_name_list_group_3)):
                 avg_forecast_3 = self.make_forecast_for_group(model_name = model_name_list_group_3[i],
                                                                 type_of_group = 'GROUP_3', 
-                                                                weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
-                                                                filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                                weights_filepath = weights_filepath, 
+                                                                filepath = filepath_for_graphs,
                                                                 plots = False)
                 Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность без тренда')
+                                                                save_dir = '{filepath_for_avg_graphs}Сезонность без тренда')
                 avg_forecasts.append(avg_forecast_3)
 
         if not group_4.empty:
@@ -1567,13 +1583,13 @@ class GROUPS(Forecast_Models):
             for i in range(len(model_name_list_group_4)):
                 avg_forecast_4 = self.make_forecast_for_group(model_name = model_name_list_group_4[i], 
                                                                 type_of_group = 'GROUP_4', 
-                                                                weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
-                                                                filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
+                                                                weights_filepath = weights_filepath, 
+                                                                filepath = filepath_for_graphs,
                                                                 plots = False)
                 Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Без сезонности и без тренда')
+                                                                save_dir = '{filepath_for_avg_graphs}Без сезонности и без тренда')
                 avg_forecasts.append(avg_forecast_4) 
             
-        general_df = Postprocessing.testing(self.df, *avg_forecasts)
+        general_df = Postprocessing.testing(self.df, *avg_forecasts, *avg_forecasts)
         #TODO Добавить testing
         return general_df
