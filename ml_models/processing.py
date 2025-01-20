@@ -411,7 +411,6 @@ class Forecast_Models:
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
 
         # Удаляем тренд с помощью дифференцирования
-        rolling_mean = past_years.rolling(window = self.forecast_periods).mean()
         rolling_mean = past_years.rolling(window=12).mean()
         detrended = (past_years - rolling_mean).dropna()
         detrended[self.column_name_with_date] = detrended.index.month

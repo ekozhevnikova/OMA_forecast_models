@@ -1,3 +1,4 @@
+import matplotlib
 import numpy as np
 import os
 import img2pdf
@@ -6,6 +7,8 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 mpl.rc('font',family = 'Arial')
+
+
 
 class Postprocessing:
     """
@@ -77,7 +80,7 @@ class Postprocessing:
 
         for npl in range(nplots):
             fig, axs = plt.subplots(nrows, ncols, figsize = figsize)
-        
+
             c, r = 0, 0
             for col_idx in range(nrows * ncols * npl, min(nrows * ncols * (npl + 1), len(column_names))):
                 axs[r, c].tick_params(axis = 'both', which = 'major', labelsize = 9)
