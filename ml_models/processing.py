@@ -991,7 +991,7 @@ class GROUPS(Forecast_Models):
                         print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Декомпозиция с трендом 3 последних НЕ КАЛЕНДАРНЫХ года (seasonality_with_trend_periods)',
                                 forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
-                            Postprocessing(self.df, forecast_df).get_plot(cself.column_name_with_date, f'{path_to_save}/Декомпозиция с трендом (фиксированные периоды)')
+                            Postprocessing(self.df, forecast_df).get_plot(self.column_name_with_date, f'{path_to_save}/Декомпозиция с трендом (фиксированные периоды)')
                         forecasts.append(forecast_df * groups['GROUP_1_not_december'][2]['Dec_with_trend_periods'])
 
 
@@ -1140,7 +1140,7 @@ class GROUPS(Forecast_Models):
                         print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)', 
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
-                            Postprocessing(self.df, forecast_df).get_plot(cself.column_name_with_date, f'{path_to_save}/Наивный прогноз с учетом ошибки')
+                            Postprocessing(self.df, forecast_df).get_plot(self.column_name_with_date, f'{path_to_save}/Наивный прогноз с учетом ошибки')
                         forecasts.append(forecast_df * groups['GROUP_2_not_december'][5]['Naive_with_error'])
                             
             #Случай, если последний месяц в исходном DataFrame равен 12 (декабрь)               
@@ -1169,7 +1169,7 @@ class GROUPS(Forecast_Models):
                         print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с линейным трендом (regression_model)', 
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
-                            Postprocessing(self.df, forecast_df).get_plot(cself.column_name_with_date, f'{path_to_save}/Регрессия (линейный тренд)')
+                            Postprocessing(self.df, forecast_df).get_plot(self.column_name_with_date, f'{path_to_save}/Регрессия (линейный тренд)')
                         forecasts.append(forecast_df * groups['GROUP_2_december'][2]['Regr_lin'])
 
 
@@ -1375,7 +1375,7 @@ class GROUPS(Forecast_Models):
                         print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Наивный прогноз с учетом ошибки (naive_forecast)', 
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
-                            Postprocessing(self.df, forecast_df).get_plot(cself.column_name_with_date, f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
+                            Postprocessing(self.df, forecast_df).get_plot(self.column_name_with_date, f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
                         forecasts.append(forecast_df * groups['GROUP_4_not_december'][7]['Naive_with_error'])
             #Случай, если последний месяц в исходном DataFrame равен 12 (декабрь)               
             elif last_month_in_df == 12:
