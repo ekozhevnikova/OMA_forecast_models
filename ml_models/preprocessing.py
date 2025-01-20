@@ -71,14 +71,14 @@ class Preprocessing:
         """
         return self.ts.diff().dropna()
 
-    @staticmethod
-    def inverse_difference(forecast, last_observation):
+
+    def inverse_difference(self, last_observation):
         """
             Приведение ВР к размерности исходного вида с использованием кумулятивной суммы.
             Args:
                 last_observation: последние фактические данные в DataFrame.
         """
-        return forecast.cumsum() + last_observation
+        return self.ts.cumsum() + last_observation
 
     # def check_stationarity(self):
     #     """

@@ -70,7 +70,7 @@ class Postprocessing:
         # Создаем папку для сохранения графиков, если она не существует
         os.makedirs(save_dir, exist_ok = True)
         
-        column_names = list(self.ts.columns)
+        column_names = list(self.df.columns)
         
         #определение количества графиков
         nplots = len(column_names) // (nrows * ncols) if len(column_names) % (nrows * ncols) == 0 else len(column_names) // (nrows * ncols) + 1

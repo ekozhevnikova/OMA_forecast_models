@@ -716,13 +716,13 @@ class Forecast_Models:
                     Новый ДатаФрейм с прогнозом
         """
         df = self.df.copy()
-        forecast_periods = self.forecast_periods
+        #forecast_periods = self.forecast_periods
 
         # Параметры для перебора
         param_grid = {
             'seasonality_mode': ['additive', 'multiplicative'],
-            'n_changepoints': [12, 18, 24],
-            'changepoint_prior_scale': [0.01, 0.05, 0.1]
+            'n_changepoints': [12, 18, 24, 36],
+            'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5]
         }
 
         # Сортировка и подготовка данных
@@ -731,8 +731,8 @@ class Forecast_Models:
         df = df.sort_values(by = self.column_name_with_date)
 
         # Разделение на обучающую и тестовую выборки
-        train = df.iloc[:-forecast_periods]
-        test = df.iloc[-forecast_periods:]
+        train = df.iloc[:-self.forecast_periods]
+        test = df.iloc[-self.forecast_periods:]
 
         # Список временных рядов для прогнозирования
         series_list = [col for col in train.columns if col != self.column_name_with_date]
@@ -742,7 +742,7 @@ class Forecast_Models:
         for series in series_list:
             # Подготовка данных для Prophet
             series_df = train[[self.column_name_with_date, series]].rename(
-                columns={self.column_name_with_date: 'ds', series: 'y'})
+                columns = {self.column_name_with_date: 'ds', series: 'y'})
 
             best_mape = float('inf')
             best_params = None
@@ -754,13 +754,13 @@ class Forecast_Models:
                 model.fit(series_df)
 
                 # Прогнозирование
-                future = model.make_future_dataframe(periods = forecast_periods, freq='M')
+                future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
                 forecast = model.predict(future)
 
                 # Вычисление MAPE
                 test_series = test[[self.column_name_with_date, series]].rename(
                     columns = {self.column_name_with_date: 'ds', series: 'y'})
-                forecast_test_period = forecast[-forecast_periods:]
+                forecast_test_period = forecast[-self.forecast_periods:]
 
                 # Сравнение только по датам тестового набора
                 aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
@@ -786,7 +786,7 @@ class Forecast_Models:
                             changepoint_prior_scale = best_params['changepoint_prior_scale'])
 
             model.fit(series_df)
-            future = model.make_future_dataframe(periods = forecast_periods, freq = 'M')
+            future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
             forecast = model.predict(future)
 
             if forecast_df.empty:
@@ -794,7 +794,7 @@ class Forecast_Models:
             forecast_df[series] = forecast['yhat']
 
         forecast_df.set_index('ds', inplace = True)
-        forecast_df = forecast_df.tail(forecast_periods)
+        forecast_df = forecast_df.tail(self.forecast_periods)
 
         '''
         # Вызов графиков
@@ -877,12 +877,12 @@ class Forecast_Models:
 
                 # Обучение модели
                 model.fit(ts)
-                forecast = model.predict(n_periods=self.forecast_periods)
+                forecast = model.predict(n_periods = self.forecast_periods)
 
                 # Преобразование прогноза в исходный масштаб
                 if was_non_stationary:
                     last_observation = original_series.iloc[-1]
-                    forecast = Preprocessing.inverse_difference(pd.Series(forecast), last_observation)
+                    forecast = Preprocessing(pd.Series(forecast)).inverse_difference(last_observation)
 
                 forecasts[channel] = forecast
 
@@ -894,7 +894,7 @@ class Forecast_Models:
         forecast_df = pd.DataFrame(
             forecasts,
             index = pd.date_range(start = self.df.index[-1] + pd.DateOffset(months = 1), periods = self.forecast_periods,
-                                freq = 'ME')
+                                freq = 'MS')
         )
         '''
         # Вызов графиков
@@ -962,7 +962,7 @@ class GROUPS(Forecast_Models):
             groups = json.loads(file_content)
 
         forecasts = []
-        print('ПРОГНОЗ НА ' + str(self.forecast_periods) + ' МЕСЯЦЕВ ' + 'ПО РЯДУ ML-МОДЕЛЕЙ:', end = '\n\n')
+        #print('ПРОГНОЗ НА ' + str(self.forecast_periods) + ' МЕСЯЦЕВ ' + 'ПО РЯДУ ML-МОДЕЛЕЙ:', end = '\n\n')
         ############################################################ GROUP 1 (Сезонность и тренд) #########################################################   
         if type_of_group == 'GROUP_1':
             path_to_save = f'{filepath}/Сезонность и тренд' #ВР с трендом и сезонностью
@@ -1057,14 +1057,14 @@ class GROUPS(Forecast_Models):
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         forecasts.append(forecast_df * groups['GROUP_1_december'][1]['Prophet'])
 
-                    case 'Dec_with_trend_periods':
-                        forecast_df = self.decomposition_fixed_periods(method = 'with_trend')
+                    case 'Dec_with_trend_years':
+                        forecast_df = self.decomposition_calendar_years(method = 'with_trend')
                         print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Декомпозиция с трендом (фиксированные периоды) (decomposition_fixed_periods)', forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
                                                                             forecast_df = forecast_df, 
-                                                                            save_dir = f'{path_to_save}/Декомпозиция с трендом (фиксированные периоды)')
-                        forecasts.append(forecast_df * groups['GROUP_1_december'][2]['Dec_with_trend_periods'])
+                                                                            save_dir = f'{path_to_save}/Декомпозиция с трендом (календарные годы)')
+                        forecasts.append(forecast_df * groups['GROUP_1_december'][2]['Dec_with_trend_years'])
 
                     case 'RollMean_periods':
                         forecast_df = self.rolling_mean(method = 'fixed_periods')
@@ -1093,6 +1093,8 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
                         forecasts.append(forecast_df * groups['GROUP_1_december'][5]['Regr_log'])
+            #Усредненный прогноз по всем методам               
+            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
             
         ############################################################ GROUP 2 (Тренд без сезонности) #########################################################               
         elif type_of_group == 'GROUP_2':
@@ -1211,6 +1213,8 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
                         forecasts.append(forecast_df * groups['GROUP_2_december'][4]['Naive_with_error'])
+            #Усредненный прогноз по всем методам               
+            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
                             
         ############################################################ GROUP 3 (Сезонность без тренда) #########################################################
         elif type_of_group == 'GROUP_3':
@@ -1315,6 +1319,8 @@ class GROUPS(Forecast_Models):
                                                                             forecast_df = forecast_df, 
                                                                             save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
                         forecasts.append(forecast_df * groups['GROUP_3'][7]['Regr_lin'])
+            #Усредненный прогноз по всем методам               
+            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
 
         ############################################################ GROUP 4 (Без сезонности и без тренда) #########################################################   
         if type_of_group == 'GROUP_4':
@@ -1469,8 +1475,8 @@ class GROUPS(Forecast_Models):
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
                         forecasts.append(forecast_df * groups['GROUP_4_december'][5]['Naive_with_error'])                
                         
-        #Усредненный прогноз по всем методам               
-        avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
+            #Усредненный прогноз по всем методам               
+            avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
         return avg_forecast
     
     def main(self,
@@ -1485,7 +1491,6 @@ class GROUPS(Forecast_Models):
             Функция для запуска ансамбля ML-моделей для прогнозирования ВР.
         """
         self.df = Preprocessing.get_data_for_forecast(filename, list_of_replacements, self.column_name_with_date)
-        df = self.df.head(42)
 
         df_list_1 = []
         df_list_2 = []
@@ -1527,9 +1532,9 @@ class GROUPS(Forecast_Models):
                                                             weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
                                                             filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
                                                             plots = False)
-            Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность и тренд')
-            avg_forecasts.append(avg_forecast_1)
+                Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date = self.column_name_with_date,
+                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность и тренд')
+                avg_forecasts.append(avg_forecast_1)
 
         if not group_2.empty:
             print('', 'Результаты работы различных методов для ТВ-каналов с трендом без сезонности', sep='\n', end='\n\n')
@@ -1539,9 +1544,9 @@ class GROUPS(Forecast_Models):
                                                                 weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
                                                                 filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
                                                                 plots = False)
-            Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Тренд без сезонности')
-            avg_forecasts.append(avg_forecast_1)
+                Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date = self.column_name_with_date,
+                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Тренд без сезонности')
+                avg_forecasts.append(avg_forecast_2)
 
         if not group_3.empty:
             print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и без тренда', 
@@ -1552,9 +1557,9 @@ class GROUPS(Forecast_Models):
                                                                 weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
                                                                 filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
                                                                 plots = False)
-            Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность без тренда')
-            avg_forecasts.append(avg_forecast_3)
+                Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date = self.column_name_with_date,
+                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Сезонность без тренда')
+                avg_forecasts.append(avg_forecast_3)
 
         if not group_4.empty:
             print('','Результаты работы различных методов для ТВ-каналов без сезонности и без тренда', 
@@ -1565,9 +1570,9 @@ class GROUPS(Forecast_Models):
                                                                 weights_filepath = '/Users/kkozhevnikova/Documents/NSC/OMA_tools/ml_models/config.json', 
                                                                 filepath = '/Users/kkozhevnikova/Documents/NSC/groups/PLOTS_NEW/',
                                                                 plots = False)
-            Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Без сезонности и без тренда')
-            avg_forecasts.append(avg_forecast_4) 
+                Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date = self.column_name_with_date,
+                                                                save_dir = '/Users/kkozhevnikova/Documents/NSC/groups/RESULT_NEW/Без сезонности и без тренда')
+                avg_forecasts.append(avg_forecast_4) 
             
         general_df = Postprocessing.testing(self.df, *avg_forecasts)
         #TODO Добавить testing
