@@ -20,6 +20,7 @@ import os
 #это я для себя:
 from OMA_tools.ml_models.preprocessing import Preprocessing
 from OMA_tools.ml_models.postprocessing import Postprocessing
+from OMA_tools.regions.ttv_forecast.constants import Holidays
 
 
 @contextmanager
@@ -722,7 +723,8 @@ class Forecast_Models:
         param_grid = {
             'seasonality_mode': ['additive', 'multiplicative'],
             'n_changepoints': [12, 18, 24, 36],
-            'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5]
+            'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
+            'holidays_prior_scale': [5, 10, 15, 25, 30]
         }
 
         # Сортировка и подготовка данных
@@ -748,9 +750,11 @@ class Forecast_Models:
             best_params = None
 
             for params in ParameterGrid(param_grid):
-                model = Prophet(seasonality_mode = params['seasonality_mode'],
+                model = Prophet(holidays = Holidays().holidays,
+                                seasonality_mode = params['seasonality_mode'],
                                 n_changepoints = params['n_changepoints'],
-                                changepoint_prior_scale = params['changepoint_prior_scale'])
+                                changepoint_prior_scale = params['changepoint_prior_scale'],
+                                holidays_prior_scale = params['holidays_prior_scale'])
                 model.fit(series_df)
 
                 # Прогнозирование
