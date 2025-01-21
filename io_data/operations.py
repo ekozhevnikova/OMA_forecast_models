@@ -6,8 +6,9 @@ import docx
 from docx.shared import Inches, Cm
 import pickle
 import copy
-from OMA_tools.io_data.dates import Dates_Operations
+# from OMA_tools.io_data.dates import Dates_Operations
 import locale
+from io_data.dates import Dates_Operations
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 
 

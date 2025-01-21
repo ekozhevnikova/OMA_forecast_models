@@ -6,8 +6,8 @@ import datetime
 from datetime import datetime
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
-from OMA_tools.io_data.operations import File, Table, Dict_Operations
-from OMA_tools.ml_models.postprocessing import Postprocessing
+# from OMA_tools.io_data.operations import File, Table, Dict_Operations
+# from OMA_tools.ml_models.postprocessing import Postprocessing
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -18,8 +18,9 @@ from scipy import linalg
 from contextlib import contextmanager
 import os
 #это я для себя:
-from preprocessing import *
+from preprocessing import Preprocessing
 from postprocessing import Postprocessing
+from io_data.operations import File, Table, Dict_Operations
 
 
 @contextmanager

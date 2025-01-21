@@ -37,7 +37,7 @@ class Postprocessing:
             raise ValueError('Не передано ни одного прогноза для тестирования.')
 
         general_df = pd.concat(avg_forecasts, axis = 1) # Объединяем доступные прогнозы
-        general_df = general_df[self.ts.columns]  # Упорядочиваем колонки в соответствии с исходными данными
+        general_df = general_df[df.columns]  # Упорядочиваем колонки в соответствии с исходными данными
         return 'Объединенный DataFrame прогнозов:\n', general_df
     
 

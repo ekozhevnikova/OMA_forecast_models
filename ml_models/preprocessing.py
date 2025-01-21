@@ -6,8 +6,8 @@ from datetime import datetime
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 from statsmodels.tsa.stattools import adfuller
-from OMA_tools.io_data.operations import File, Table, Dict_Operations
-
+# from OMA_tools.io_data.operations import File, Table, Dict_Operations
+from io_data.operations import File, Table, Dict_Operations
 
 class Preprocessing:
     """
@@ -30,6 +30,8 @@ class Preprocessing:
         dict_data = File(filename).from_file(0, 0)
         dict_data_new = Dict_Operations(dict_data).replace_keys_in_dict(list_of_replacements)
         merged_df = Dict_Operations(dict_data_new).combine_dict_into_one_dataframe(column_name_with_date)
+        merged_df.reset_index(inplace=True)
+        print(merged_df.index)
         #Замена формата дат типа Январь 2021 на 01.01.2021
         dates = list(merged_df[column_name_with_date])
         dates_converted = []
