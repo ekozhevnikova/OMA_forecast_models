@@ -23,9 +23,9 @@ from ml_models.postprocessing import Postprocessing
 from io_data.operations import File, Table, Dict_Operations
 import warnings
 warnings.filterwarnings('ignore')
-from OMA_tools.ml_models.preprocessing import Preprocessing
-from OMA_tools.ml_models.postprocessing import Postprocessing
-from OMA_tools.regions.ttv_forecast.constants import Holidays
+# from OMA_tools.ml_models.preprocessing import Preprocessing
+# from OMA_tools.ml_models.postprocessing import Postprocessing
+from regions.ttv_forecast.constants import Holidays
 
 
 @contextmanager
@@ -116,7 +116,7 @@ class Forecast_Models:
         last_date = data_copy[self.column_name_with_date].max()
 
         # Создаем новые даты для следующего года
-        future_dates = pd.date_range(last_date + pd.DateOffset(months = 1), periods = self.forecast_periods, freq='ME')
+        future_dates = pd.date_range(last_date + pd.DateOffset(months = 1), periods = self.forecast_periods, freq='MS')
 
         # Создаем DataFrame для будущих дат
         future_df = pd.DataFrame({self.column_name_with_date: future_dates})
@@ -331,7 +331,7 @@ class Forecast_Models:
 
         if method == 'calendar_years':
             # Корректируем прогнозы для случаев, когда last_month < 12
-            next_year_dates_fact = pd.date_range(start = next_year_start, periods = self.forecast_periods, freq = 'ME')
+            next_year_dates_fact = pd.date_range(start = next_year_start, periods = self.forecast_periods, freq = 'MS')
             if last_month < 12:
                 next_year_trend_df = next_year_trend_df.iloc[last_month:].set_index(next_year_dates_fact)
                 season_forecast_df = season_forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
@@ -424,7 +424,7 @@ class Forecast_Models:
         next_year_rolling_mean = [last_value + (i + 1) * average_step for i in range(months_to_forecast)]
         next_year_dates = pd.date_range(start = last_date + pd.DateOffset(months = 1),
                                         periods = months_to_forecast,
-                                        freq = 'ME'
+                                        freq = 'MS'
                                         )
         next_year_rolling_mean_df = pd.DataFrame(
             next_year_rolling_mean,
@@ -440,7 +440,7 @@ class Forecast_Models:
         if method == 'calendar_years':
             next_year_dates_fact = pd.date_range(start=last_date + pd.DateOffset(months=1),
                                                  periods=self.forecast_periods,
-                                                 freq='ME')
+                                                 freq='MS')
             if last_month < 12:
                 forecast_df = forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
         '''
@@ -550,7 +550,7 @@ class Forecast_Models:
         # Формируем временной индекс для прогноза
         new_index = pd.date_range(start=self.df.index.max() + pd.DateOffset(months=1),
                                   periods=self.forecast_periods,
-                                  freq='ME')
+                                  freq='MS')
         result_df.index = new_index
 
         '''
@@ -669,7 +669,7 @@ class Forecast_Models:
             # Прогноз для оставшихся месяцев текущего года
             result_df_forecast = result_df.iloc[last_month:months_to_forecast]
             new_index_current_year = pd.date_range(
-                start = last_date + pd.DateOffset(months=1), periods=self.forecast_periods, freq = 'ME'
+                start = last_date + pd.DateOffset(months=1), periods=self.forecast_periods, freq = 'MS'
             )
             result_df_forecast.index = new_index_current_year
 
@@ -679,7 +679,7 @@ class Forecast_Models:
             new_index = pd.date_range(
                 start = last_date + pd.DateOffset(months = 1),
                 periods = self.forecast_periods,
-                freq = 'ME'
+                freq = 'MS'
             )
             result_df_forecast.index = new_index
         
@@ -728,7 +728,6 @@ class Forecast_Models:
             'seasonality_mode': ['additive', 'multiplicative'],
             'n_changepoints': [12, 18, 24, 36],
             'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
-            'holidays_prior_scale': [5, 10, 15, 25, 30]
         }
 
         # Сортировка и подготовка данных
@@ -754,11 +753,11 @@ class Forecast_Models:
             best_params = None
 
             for params in ParameterGrid(param_grid):
-                model = Prophet(holidays = Holidays().holidays,
+                model = Prophet(
                                 seasonality_mode = params['seasonality_mode'],
                                 n_changepoints = params['n_changepoints'],
-                                changepoint_prior_scale = params['changepoint_prior_scale'],
-                                holidays_prior_scale = params['holidays_prior_scale'])
+                                changepoint_prior_scale = params['changepoint_prior_scale'])
+
                 model.fit(series_df)
 
                 # Прогнозирование
@@ -968,10 +967,12 @@ class GROUPS(Forecast_Models):
         original_df = self.df
 
         # Если тестирование включено, вырезаем train_data и test_data
-        if test:
+        if test and self.forecast_periods <= 12:
             train_data = self.df.iloc[:-self.forecast_periods]
             test_data = self.df.iloc[-self.forecast_periods:]
             self.df = train_data
+        else:
+            test = False
 
         last_month_in_df = Preprocessing(self.df).search_last_fact_data()[1]
 
@@ -992,7 +993,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/ARIMA')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1010,7 +1010,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1028,7 +1027,6 @@ class GROUPS(Forecast_Models):
                                 forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Декомпозиция с трендом (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1046,7 +1044,6 @@ class GROUPS(Forecast_Models):
                                 forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Скользящее среднее (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1064,7 +1061,6 @@ class GROUPS(Forecast_Models):
                                 forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1082,7 +1078,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Скользящее среднее (календарные годы)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1100,7 +1095,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифм)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1119,7 +1113,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/ARIMA')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1136,7 +1129,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1153,7 +1145,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Декомпозиция с трендом (календарные годы)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1170,7 +1161,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Скользящее среднее (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1188,7 +1178,6 @@ class GROUPS(Forecast_Models):
                                 forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1206,7 +1195,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1220,7 +1208,6 @@ class GROUPS(Forecast_Models):
             avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
 
         ############################################################ GROUP 2 (Тренд без сезонности) #########################################################
-        ############################################################ GROUP 2 (Тренд без сезонности) #########################################################
         elif type_of_group == 'GROUP_2':
             path_to_save = f'{filepath}/Тренд без сезонности' #ВР с трендом и сезонностью
             #Случай, если последний месяц в исходном DataFrame не равен 12 (не декабрь)
@@ -1232,7 +1219,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/ARIMA')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1249,7 +1235,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1266,7 +1251,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1283,7 +1267,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1300,7 +1283,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1318,7 +1300,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1338,8 +1319,8 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/ARIMA')
+
                         if test:
                             # Восстанавливаем оригинальный DataFrame
                             self.df = original_df
@@ -1355,7 +1336,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1371,8 +1351,7 @@ class GROUPS(Forecast_Models):
                         print('РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ Регрессия с линейным трендом (regression_model)',
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
-                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date, 
-                                                                            forecast_df = forecast_df, 
+                            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
                                                                             save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
                         forecasts.append(forecast_df * groups['GROUP_2_december'][2]['Regr_lin'])
 
@@ -1382,7 +1361,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1399,7 +1377,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1416,7 +1393,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1440,7 +1416,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/ARIMA')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1457,7 +1432,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/PROPHET')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1474,7 +1448,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Декомпозиция без тренда (календарные годы)')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1491,7 +1464,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Декомпозиция без тренда (календарные годы) последние 2 года')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1508,7 +1480,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Декомпозиция без тренда (фиксированные периоды) последние 3 года')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1526,7 +1497,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Декомпозиция без тренда (фиксированные периоды) последние 2 года')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1543,7 +1513,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Скользящее среднее (фиксированные периоды)')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1560,7 +1529,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1577,7 +1545,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Скользящее среднее (календарные годы)')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1594,7 +1561,6 @@ class GROUPS(Forecast_Models):
                           forecast_df.round(4), sep = '\n', end = '\n\n')
                     if plots:
                         Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                        forecast_df = forecast_df,
                                                                         save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (календарные годы)')
                     if test:
                         # Восстанавливаем оригинальный DataFrame
@@ -1611,7 +1577,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1634,7 +1599,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/ARIMA')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1651,7 +1615,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1669,7 +1632,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1686,7 +1648,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Декомпозиция без тренда (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1704,7 +1665,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (линейный тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1722,7 +1682,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1739,7 +1698,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1756,7 +1714,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1775,7 +1732,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/ARIMA')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1792,7 +1748,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/PROPHET')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1809,7 +1764,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз последние 3 месяца')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1826,7 +1780,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз последние 6 месяцев')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1843,7 +1796,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Регрессия (логарифмический тренд)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1860,7 +1812,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Сезонная декомпозиция, тренд дифференцированием (фиксированные периоды)')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1877,7 +1828,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 3 месяца')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1894,7 +1844,6 @@ class GROUPS(Forecast_Models):
                               forecast_df.round(4), sep = '\n', end = '\n\n')
                         if plots:
                             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                                            forecast_df = forecast_df,
                                                                             save_dir = f'{path_to_save}/Наивный прогноз с учетом ошибки последние 6 месяцев')
                         if test:
                             # Восстанавливаем оригинальный DataFrame
@@ -1907,7 +1856,7 @@ class GROUPS(Forecast_Models):
 
             #Усредненный прогноз по всем методам
             avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
-        return avg_forecast
+        return avg_forecast, test_data
 
     def main(self,
              filename,
@@ -1938,7 +1887,7 @@ class GROUPS(Forecast_Models):
                     Прогнозный DataFrame, полученный в результате работы ансамбля ML-моделей.
         """
         self.df = Preprocessing.get_data_for_forecast(filename, list_of_replacements, self.column_name_with_date)
-
+        copy = self.df.copy()
         df_list_1 = []
         df_list_2 = []
         df_list_3 = []
@@ -1998,7 +1947,8 @@ class GROUPS(Forecast_Models):
                                             type_of_group = 'GROUP_2',
                                             weights_filepath = weights_filepath,
                                             filepath = filepath_for_graphs,
-                                            plots = plots)
+                                            plots = plots,
+                                            test = test)
             avg_forecast_2 = Postprocessing.calculate_average_forecast(forecasts)
 
             if plots:
@@ -2007,7 +1957,7 @@ class GROUPS(Forecast_Models):
             avg_forecasts.append(avg_forecast_2)
 
         if not group_3.empty:
-            print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и без тренда', 
+            print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и без тренда',
                   sep = '\n', end = '\n\n')
             forecasts = []
             for i in range(len(model_name_list_group_3)):
@@ -2016,7 +1966,8 @@ class GROUPS(Forecast_Models):
                                             type_of_group = 'GROUP_3',
                                             weights_filepath = weights_filepath,
                                             filepath = filepath_for_graphs,
-                                            plots = plots)
+                                            plots = plots,
+                                            test = test)
             avg_forecast_3 = Postprocessing.calculate_average_forecast(forecasts)
 
             if plots:
@@ -2025,7 +1976,7 @@ class GROUPS(Forecast_Models):
             avg_forecasts.append(avg_forecast_3)
 
         if not group_4.empty:
-            print('','Результаты работы различных методов для ТВ-каналов без сезонности и без тренда', 
+            print('','Результаты работы различных методов для ТВ-каналов без сезонности и без тренда',
                   sep = '\n', end = '\n\n')
             forecasts = []
             for i in range(len(model_name_list_group_4)):
@@ -2034,7 +1985,8 @@ class GROUPS(Forecast_Models):
                                             type_of_group = 'GROUP_4',
                                             weights_filepath = weights_filepath,
                                             filepath = filepath_for_graphs,
-                                            plots = plots)
+                                            plots = plots,
+                                            test = test)
             avg_forecast_4 = Postprocessing.calculate_average_forecast(forecasts)
 
             if plots:
@@ -2043,19 +1995,19 @@ class GROUPS(Forecast_Models):
             avg_forecasts.append(avg_forecast_4)
 
         general_df = Postprocessing.testing(self.df, *avg_forecasts)
-        # Тестирование итогового прогноза general_df
-        if test:
-            test_data = self.df.iloc[-len(general_df):]  # Тестовые данные (последние строки)
+        print('Итоговый прогноз: \n', general_df)
+        if test and self.forecast_periods <= 12:
+            test_data = copy.iloc[-self.forecast_periods:]
             error_df, mean_error = Postprocessing.calculate_forecast_error(
                 forecast_df=general_df,
                 test_data=test_data
             )
-            print("Ошибки прогноза для общего DataFrame:\n", error_df)
-            print("Средняя процентная ошибка прогноза для общего DataFrame:\n", mean_error)
+            # print("Ошибки прогноза для общего DataFrame:\n", error_df)
+            # print("Средняя процентная ошибка прогноза для общего DataFrame:\n", mean_error)
 
         return general_df
 
-forecast_periods = 12
+forecast_periods = 11
 column_name_with_date = 'Date'
 
 model_name_list_group_1 = ['ARIMA', 'Prophet', 'Dec_with_trend_periods',
@@ -2082,4 +2034,4 @@ general_df = GROUPS(forecast_periods, column_name_with_date).main('Data_by_month
                          filepath_for_graphs = 'groups\PLOTS_NEW',
                          filepath_for_avg_graphs = 'groups\RESULT_NEW',
                          plots = True,
-                         test = False)
+                         test = True)

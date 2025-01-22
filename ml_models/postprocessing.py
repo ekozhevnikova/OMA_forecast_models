@@ -38,7 +38,7 @@ class Postprocessing:
 
         general_df = pd.concat(avg_forecasts, axis = 1) # Объединяем доступные прогнозы
         general_df = general_df[df.columns]  # Упорядочиваем колонки в соответствии с исходными данными
-        return 'Объединенный DataFrame прогнозов:\n', general_df
+        return general_df
     
 
     def get_plot(self, 
@@ -197,11 +197,11 @@ class Postprocessing:
         """
         # Вычисляем ошибки прогноза
         error_df = test_data - forecast_df
-        print("Ошибки прогноза:\n", error_df)
+        print("Абсолютные ошибки прогноза:\n", error_df)
 
         # Вычисляем процентные ошибки
         percentage_error = (100 - (forecast_df / test_data) * 100)
         mean_error = percentage_error.mean()
 
-        print("Средняя ошибка прогноза:\n", mean_error)
+        print("Средняя ошибка прогноза MAPE, %:\n", mean_error)
         return error_df, mean_error
