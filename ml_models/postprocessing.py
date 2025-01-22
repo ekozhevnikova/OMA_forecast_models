@@ -181,3 +181,27 @@ class Postprocessing:
         # Запись контента в PDF - файл
         with open(f'{directory_path}output_filename', 'wb') as file:
             file.write(pdf_data)
+
+    @staticmethod
+    def calculate_forecast_error(forecast_df, test_data):
+        """
+        Вычисляет ошибки прогноза и среднюю процентную ошибку.
+
+        Args:
+            forecast_df: DataFrame с прогнозными значениями.
+            test_data: Тестовые данные для сравнения.
+
+        Returns:
+            error_df: DataFrame с абсолютными ошибками прогноза.
+            mean_error: Средняя процентная ошибка.
+        """
+        # Вычисляем ошибки прогноза
+        error_df = test_data - forecast_df
+        print("Ошибки прогноза:\n", error_df)
+
+        # Вычисляем процентные ошибки
+        percentage_error = (100 - (forecast_df / test_data) * 100)
+        mean_error = percentage_error.mean()
+
+        print("Средняя ошибка прогноза:\n", mean_error)
+        return error_df, mean_error
