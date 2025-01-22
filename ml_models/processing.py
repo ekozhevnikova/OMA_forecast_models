@@ -17,15 +17,8 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
 import os
-#это я для себя:
-from ml_models.preprocessing import Preprocessing
-from ml_models.postprocessing import Postprocessing
-from io_data.operations import File, Table, Dict_Operations
-import warnings
-warnings.filterwarnings('ignore')
-# from OMA_tools.ml_models.preprocessing import Preprocessing
-# from OMA_tools.ml_models.postprocessing import Postprocessing
-from regions.ttv_forecast.constants import Holidays
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.postprocessing import Postprocessing
 
 
 @contextmanager
@@ -1833,8 +1826,8 @@ class GROUPS(Forecast_Models):
                             # Восстанавливаем оригинальный DataFrame
                             self.df = original_df
                             Postprocessing.calculate_forecast_error(
-                                forecast_df=forecast_df,
-                                test_data=test_data
+                                forecast_df = forecast_df,
+                                test_data = test_data
                             )
                         forecasts.append(forecast_df * groups['GROUP_4_december'][5]['Naive_with_error'])
 
@@ -1849,14 +1842,14 @@ class GROUPS(Forecast_Models):
                             # Восстанавливаем оригинальный DataFrame
                             self.df = original_df
                             Postprocessing.calculate_forecast_error(
-                                forecast_df=forecast_df,
-                                test_data=test_data
+                                forecast_df = forecast_df,
+                                test_data = test_data
                             )
                         forecasts.append(forecast_df * groups['GROUP_4_december'][5]['Naive_with_error'])
 
             #Усредненный прогноз по всем методам
             avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
-        return avg_forecast, test_data
+        return avg_forecast
 
     def main(self,
              filename,
@@ -1999,39 +1992,10 @@ class GROUPS(Forecast_Models):
         if test and self.forecast_periods <= 12:
             test_data = copy.iloc[-self.forecast_periods:]
             error_df, mean_error = Postprocessing.calculate_forecast_error(
-                forecast_df=general_df,
-                test_data=test_data
+                forecast_df = general_df,
+                test_data = test_data
             )
             # print("Ошибки прогноза для общего DataFrame:\n", error_df)
             # print("Средняя процентная ошибка прогноза для общего DataFrame:\n", mean_error)
 
         return general_df
-
-forecast_periods = 11
-column_name_with_date = 'Date'
-
-model_name_list_group_1 = ['ARIMA', 'Prophet', 'Dec_with_trend_periods',
-                           'RollMean_periods', 'SeasonDec_periods', 'RollMean_years', 'Regr_log']
-model_name_list_group_2 = ['ARIMA', 'Prophet', 'Regr_lin', 'Regr_log', 'SeasonDec_periods',
-                           'Naive_with_error', 'Naive_with_error_last_3_months', 'Naive_with_error_last_6_months']
-model_name_list_group_3 = ['ARIMA', 'Prophet', 'Dec_without_trend_3_years', 'Dec_without_trend_2_years',
-                           'Dec_without_trend_3_periods', 'Dec_without_trend_2_periods', 'RollMean_periods',
-                           'SeasonDec_periods', 'RollMean_years', 'SeasonDec_years', 'Regr_lin']
-model_name_list_group_4 = ['ARIMA', 'Prophet', 'Naive', 'Dec_without_trend_periods', 'Regr_lin',
-                           'Regr_log', 'SeasonDec_periods', 'Naive_with_error_last_6_months', 'Naive_last_3_months',
-                           'Naive_last_6_months', 'Regr_log', 'SeasonDec_periods', 'Naive_with_error_last_3_months']
-
-list_of_replacements = ['All 18+', 'All 14-59', 'All 10-45', 'All 14-44',
-                      'All 14-54', 'All 25-49', 'All 25-54', 'All 4-45', 'All 6-54', 'W 14-44', 'W 25-59']
-
-general_df = GROUPS(forecast_periods, column_name_with_date).main('Data_by_months_TEST.xlsx',
-                         list_of_replacements,
-                         model_name_list_group_1,
-                         model_name_list_group_2,
-                         model_name_list_group_3,
-                         model_name_list_group_4,
-                         weights_filepath = 'config.json',
-                         filepath_for_graphs = 'groups\PLOTS_NEW',
-                         filepath_for_avg_graphs = 'groups\RESULT_NEW',
-                         plots = True,
-                         test = True)
