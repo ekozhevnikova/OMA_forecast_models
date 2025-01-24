@@ -9,7 +9,7 @@ GROUP 4: Без тренда и без сезонности (последний 
 
 ARIMA: ARIMA
 Prophet: Prophet
-Наивный метод/Наивный метод с ошибкой (naive_forecast): Naive/Naive_error
+Наивный метод/Наивный метод с ошибкой (naive_forecast): Naive/Naive_with_error
 Скользящее среднее фиксированные периоды/календарные годы (rolling_mean): RollMean_periods/RollMean_years
 Сезонная декомпозиция фиксированные периоды/календарные годы (seasonal_decomposition): SeasonDec_periods/SeasonDec_years
 Декомпозиция с/без тренда фиксированные периоды (decomposition_fixed_periods): Dec_with_trend_periods/Dec_without_trend_periods

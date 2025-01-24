@@ -229,6 +229,11 @@ class Forecast_Models:
             forecast_results[column] = forecast_df
         # Объединение всех столбцов в один DataFrame
         result_df = pd.concat(forecast_results.values(), axis = 1)
+        # МОЙ КУСОК
+        result_df = result_df.reset_index()
+        result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+        result_df.set_index(self.column_name_with_date, inplace = True)  
+
 
         '''
         # Вызов графиков
@@ -322,6 +327,11 @@ class Forecast_Models:
         )
         forecast_df = next_year_trend_df + season_forecast_df
 
+        # МОЙ КУСОК
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)  
+
         if method == 'calendar_years':
             # Корректируем прогнозы для случаев, когда last_month < 12
             next_year_dates_fact = pd.date_range(start = next_year_start, periods = self.forecast_periods, freq = 'MS')
@@ -330,6 +340,10 @@ class Forecast_Models:
                 season_forecast_df = season_forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
                 # Финальный прогноз
                 forecast_df = next_year_trend_df + season_forecast_df
+                # МОЙ КУСОК
+                forecast_df = forecast_df.reset_index()
+                forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+                forecast_df.set_index(self.column_name_with_date, inplace = True)  
         '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
@@ -402,7 +416,7 @@ class Forecast_Models:
         # Удаляем тренд с помощью дифференцирования
         rolling_mean = past_years.rolling(window=12).mean()
         detrended = (past_years - rolling_mean).dropna()
-        detrended[self.column_name_with_date] = detrended.index.month
+        #detrended[self.column_name_with_date] = detrended.index.month
 
         # Прогнозируем сезонность
         aver_season = detrended.groupby(self.column_name_with_date).mean()
@@ -429,6 +443,10 @@ class Forecast_Models:
         # Финальный прогноз: сложение тренда и сезонности
         final_forecast = next_year_rolling_mean_df + seasonal_forecast
         forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
+        # МОЙ КУСОК
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)  
 
         if method == 'calendar_years':
             next_year_dates_fact = pd.date_range(start=last_date + pd.DateOffset(months=1),
@@ -436,6 +454,10 @@ class Forecast_Models:
                                                  freq='MS')
             if last_month < 12:
                 forecast_df = forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
+                # МОЙ КУСОК
+                forecast_df = forecast_df.reset_index()
+                forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+                forecast_df.set_index(self.column_name_with_date, inplace = True)  
         '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
@@ -536,9 +558,17 @@ class Forecast_Models:
 
             # Итоговый прогноз: тренд * нормированная сезонность
             result_df = average_normalized * forecast_average
+            # МОЙ КУСОК
+            result_df = result_df.reset_index()
+            result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+            result_df.set_index(self.column_name_with_date, inplace = True)  
 
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
+            # МОЙ КУСОК
+            result_df = result_df.reset_index()
+            result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+            result_df.set_index(self.column_name_with_date, inplace = True)  
 
         # Формируем временной индекс для прогноза
         new_index = pd.date_range(start=self.df.index.max() + pd.DateOffset(months=1),
@@ -655,8 +685,15 @@ class Forecast_Models:
                 result_df_dop = forecast_average_adjusted * average_normalized
                 result_df = pd.concat([result_dff, result_df_dop], axis = 0)
 
+
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
+            # МОЙ КУСОК
+            result_df = result_df.reset_index()
+            result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+            # МОЙ КУСОК
+            result_df = result_df.reset_index()
+            result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
 
         if last_month != 12:
             # Прогноз для оставшихся месяцев текущего года
@@ -665,6 +702,10 @@ class Forecast_Models:
                 start = last_date + pd.DateOffset(months=1), periods=self.forecast_periods, freq = 'MS'
             )
             result_df_forecast.index = new_index_current_year
+            # МОЙ КУСОК
+            result_df_forecast = result_df_forecast.reset_index()
+            result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
+            result_df_forecast.set_index(self.column_name_with_date, inplace = True)  
 
         else:
             # Прогноз на `months_to_forecast` месяцев, начиная с января
@@ -675,6 +716,10 @@ class Forecast_Models:
                 freq = 'MS'
             )
             result_df_forecast.index = new_index
+            # МОЙ КУСОК
+            result_df_forecast = result_df_forecast.reset_index()
+            result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
+            result_df_forecast.set_index(self.column_name_with_date, inplace = True)  
         
         '''
         # Вызов графиков
@@ -794,6 +839,11 @@ class Forecast_Models:
             forecast_df[series] = forecast['yhat']
 
         forecast_df.set_index('ds', inplace = True)
+        # МОЙ КУСОК
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)  
+
         forecast_df = forecast_df.tail(self.forecast_periods)
 
         '''
@@ -896,6 +946,10 @@ class Forecast_Models:
             index = pd.date_range(start = self.df.index[-1] + pd.DateOffset(months = 1), periods = self.forecast_periods,
                                 freq = 'MS')
         )
+        # МОЙ КУСОК
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)  
         '''
         # Вызов графиков
         postprocessor = Postprocessing(self.df)
@@ -907,14 +961,191 @@ class Forecast_Models:
             )
         '''
         return forecast_df
-
-
-class GROUPS(Forecast_Models):
     
-    def __init__(self, forecast_periods: int, column_name_with_date: str):
-        super().__init__(None, forecast_periods, column_name_with_date)
+
+    def process_model(self, 
+                      model_name: str, 
+                      #original_df = None,
+                      plots_dir: str = None, 
+                      plots: bool = False, 
+                      test: bool = False):
+        """
+            Функция для применения интересующей ML-модели.
+            Args:
+                model_name: Сокращённое имя ML_модели
+                model_method: Метод используемой модели (fixed periods, calendar_years, linear_trend, logistic_trend)
+                type_of_group: Тип группы (GROUP 1, GROUP 2, GROUP 3, GROUP 4)
+                weight: вес используемой модели
+                plots_dir: путь к директории, куда будут сохраняться графики, если параметр plots = True
+                plots: переменная типа bool. Если True, то графики с прогнозам строятся. В противном случае нет.
+                test: переменная типа bool. Если True, то тестинг модели проводится. В противном случае нет.
+            Returns:
+                forecast_df: Прогнозный DataFrame.
+        """
+        method_map = {
+                'ARIMA': self.auto_arima_forecast,
+                'Prophet': self.prophet_forecast,
+            
+                'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
+                'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
+            
+                'Naive': self.naive_forecast, #по умолчанию past_values = 3
+                'Naive_last_6_months': lambda: self.naive_forecast(past_values = 6),
+            
+                'Naive_with_error': lambda: self.naive_forecast(past_values = 3, weigh_error = 0.8), #по умолчанию past_values = 3
+                'Naive_with_error_last_6_months': lambda: self.naive_forecast(past_values = 6, weigh_error = 0.8),
+            
+                'RollMean_periods': lambda: self.rolling_mean(method = 'fixed_periods'),
+                'RollMean_years': lambda: self.rolling_mean(method = 'calendar_years'),
+            
+                'SeasonDec_periods': lambda: self.seasonal_decomposition(method = 'fixed_periods'),
+                'SeasonDec_years': lambda: self.seasonal_decomposition(method = 'calendar_years'),
+            
+                'Dec_with_trend_periods': lambda: self.decomposition_fixed_periods(method = 'with_trend'),
+                'Dec_with_trend_years': lambda: self.decomposition_calendar_years(method = 'with_trend'),
+            
+                'Dec_without_trend_periods': lambda: self.decomposition_fixed_periods(method = 'without_trend'), #по умолчанию past_values = 3
+                'Dec_without_trend_last_2_periods': lambda: self.decomposition_fixed_periods(method = 'without_trend', past_values = 2),
+            
+                'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
+                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
+            }
+        if model_name not in method_map:
+                raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
         
+        if test and self.forecast_periods <= 12:
+            train_data = self.df.iloc[:-self.forecast_periods]
+            test_data = self.df.iloc[-self.forecast_periods:]
+            self.df = train_data
+        forecast_df = method_map[model_name]()
+        print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}", 
+            forecast_df.round(4), sep = '\n', end = '\n\n')
+        if plots and plots_dir is not None:
+            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
+                                                            save_dir = f'{plots_dir}/{model_name}')
+        if test:
+            Postprocessing.calculate_forecast_error(
+                                forecast_df = forecast_df,
+                                test_data = test_data
+                            )
+
+        return forecast_df
+
+
+class GROUPS():
+    """
+        Класс для процессинга ML-моделей.
+    """
+    
+    def __init__(self, df):
+        self.df = df
+    
+
+    def initiate_group(self):
+        """
+            Функция для определения принадлежности к GROUP_1 / GROUP_2 / GROUP_3 / GROUP_4
+        """
+        df_list_1 = []
+        df_list_2 = []
+        df_list_3 = []
+        df_list_4 = []
+
+        for column in self.df.columns:
+            time_series = pd.Series(self.df[column])
+            lagged_series = time_series.shift(12)
+            correlation = time_series.corr(lagged_series)
+            trend_test_result = mk.original_test(time_series)
+            
+            #Есть сезонность и есть тренд
+            if (correlation >= 0.7) and trend_test_result.h == True:
+                df_list_1.append(self.df[column])
+
+            #Нет сезонности и нет тренда
+            if (correlation < 0.7) and trend_test_result.h == True:
+                df_list_2.append(self.df[column])
+
+            #Есть сезонность, но нет тренда
+            if (correlation >= 0.7) and trend_test_result.h == False:
+                df_list_3.append(self.df[column])
+            
+            #Нет сезонности и нет тренда
+            if (correlation < 0.7) and trend_test_result.h == False:
+                df_list_4.append(self.df[column])
         
+        group_1 = pd.DataFrame(df_list_1).T
+        group_2 = pd.DataFrame(df_list_2).T
+        group_3 = pd.DataFrame(df_list_3).T
+        group_4 = pd.DataFrame(df_list_4).T
+        
+        return group_1, group_2, group_3, group_4
+    
+
+    def process_group(self,
+                    forecast_periods,
+                    column_name_with_date,
+                    type_of_group,
+                    weights_filepath, 
+                    plots_dir = None, 
+                    plots: bool = False, 
+                    test: bool = False):
+        """
+            Функция для обработки группы моделей
+            Args:
+                type_of_group: Тип группы (GROUP_1, GROUP_2, GROUP_3, GROUP_4);
+                weights_filepath: Полный путь к config-файлу с весами для каждой из ML-моделей;
+                plots_dir: Путь к директории, куда будут сохраняться графики;
+                plots: Переменная типа bool. Если True, графики строятся, в противном случае нет;
+                test: Переменная типа bool. Если True, тестинг моделей проводится, в противном случае нет.
+            Returns:
+                forecasts: список из прогнозов для каждой модели с определённым весом.
+        """
+        #делаем копию исходного DataFrame
+        #original_df = df
+        
+        #поиск последнего месяца в исходном DataFrame
+        last_month_in_df = Preprocessing(self.df).search_last_fact_data()[1]
+        
+        #Чтение config.json для корректного указания веса каждой из моделей
+        with open(f'{weights_filepath}') as f:
+            file_content = f.read()
+            groups = json.loads(file_content)
+        
+        #Определение типа группы в зависимости от последнего месяца в исходном DataFrame
+        group_key = f'{type_of_group}_{"not_december" if last_month_in_df != 12 else "december"}'
+        if group_key not in groups.keys():
+            raise ValueError(f"Такой группы: '{group_key}' не существует! Выберите другую группу.")
+        
+        list_of_model_names = list(groups[group_key].keys())
+            
+        #Формирование папки для сохранения графиков с прогнозами
+        path_to_save = None
+        if type_of_group == 'GROUP_1' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/Сезонность и тренд'
+        if type_of_group == 'GROUP_2' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/Тренд без сезонности'
+        if type_of_group == 'GROUP_3' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/Сезонность без тренда'
+        if type_of_group == 'GROUP_4' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/Без сезонности и без тренда'
+
+        #Обработка группы с моделями
+        forecasts = []
+        for model_name in list_of_model_names:
+            if model_name not in groups[group_key]:
+                    raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
+            else:
+                forecast_df = Forecast_Models(self.df, forecast_periods, column_name_with_date).process_model(model_name = model_name, 
+                                                 plots_dir = path_to_save, 
+                                                 plots = plots, 
+                                                 test = test)
+                forecasts.append(forecast_df * groups[group_key][model_name])
+
+        avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
+        print('\nУсредненный прогноз по всем методам: ')
+        return avg_forecast.round(4)
+    
+    
+'''   
     def make_forecast_for_group(self,
                                 forecasts,
                                 model_name: str, 
@@ -1851,7 +2082,10 @@ class GROUPS(Forecast_Models):
             avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
         return avg_forecast
 
-    def main(self,
+    
+
+
+        def main(self,
              filename,
              list_of_replacements: list,
              model_name_list_group_1: list,
@@ -1893,19 +2127,20 @@ class GROUPS(Forecast_Models):
             # Есть сезонность, есть тренд
             if ((correlation >= 0.7) and trend_test_result.h):
                 df_list_1.append(self.df[column])
-
+            #print(len(df_list_1))
             # Нет сезонности, есть тренд
             if ((correlation < 0.7) and trend_test_result.h):
                 df_list_2.append(self.df[column])
-
+            #print(len(df_list_2))
             # Есть сезонность, нет тренда
             if ((correlation >= 0.7) and not trend_test_result.h):
                 df_list_3.append(self.df[column])
-
+            #print(df_list_3)
             # Нет сезонности, нет тренда
             if ((correlation < 0.7) and not trend_test_result.h):
                 df_list_4.append(self.df[column])
-
+            #print(df_list_4)
+        print(len(df_list_1), len(df_list_2), len(df_list_3), len(df_list_4))
         group_1 = pd.DataFrame(df_list_1).T
         group_2 = pd.DataFrame(df_list_2).T
         group_3 = pd.DataFrame(df_list_3).T
@@ -1999,3 +2234,4 @@ class GROUPS(Forecast_Models):
             # print("Средняя процентная ошибка прогноза для общего DataFrame:\n", mean_error)
 
         return general_df
+'''
