@@ -6,7 +6,7 @@ from datetime import datetime
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 from statsmodels.tsa.stattools import adfuller
-from io_data.operations import File, Table, Dict_Operations
+from OMA_tools.io_data.operations import File, Table, Dict_Operations
 
 
 class Preprocessing:

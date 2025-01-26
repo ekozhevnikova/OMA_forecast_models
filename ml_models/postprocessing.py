@@ -18,6 +18,7 @@ class Postprocessing:
         self.df = df
         self.forecast_df = forecast_df
 
+
     @staticmethod
     def calculate_average_forecast(list_of_forecasts: list):
         """
@@ -31,14 +32,41 @@ class Postprocessing:
         avg_forecast = combined_forecasts.groupby(combined_forecasts.columns, axis = 1).sum()
         return avg_forecast
     
+
     @staticmethod
-    def testing(df, *avg_forecasts):
+    def ensemble_of_models(df, *avg_forecasts):
         if not avg_forecasts:  # Проверка, есть ли хотя бы один прогноз
             raise ValueError('Не передано ни одного прогноза для тестирования.')
 
         general_df = pd.concat(avg_forecasts, axis = 1) # Объединяем доступные прогнозы
         general_df = general_df[df.columns]  # Упорядочиваем колонки в соответствии с исходными данными
         return general_df
+    
+
+    @staticmethod
+    def calculate_forecast_error(forecast_df, test_data):
+        """
+        Вычисляет ошибки прогноза и среднюю процентную ошибку.
+
+        Args:
+            forecast_df: DataFrame с прогнозными значениями.
+            test_data: Тестовые данные для сравнения.
+
+        Returns:
+            error_df: DataFrame с абсолютными ошибками прогноза.
+            mean_error: Средняя процентная ошибка.
+        """
+        # Вычисляем ошибки прогноза
+        error_df = test_data - forecast_df
+        print("Абсолютные ошибки прогноза:\n", error_df.abs())
+
+        # Вычисляем процентные ошибки
+        percentage_error = (1 - (forecast_df / test_data))
+        mean_error = percentage_error.mean()
+        mean_error = mean_error.astype(float)
+
+        print("Средняя ошибка прогноза MAPE, %:\n", np.abs(np.round(mean_error), 2) * 100)
+        return error_df, mean_error
     
 
     def get_plot(self, 
@@ -111,6 +139,7 @@ class Postprocessing:
                     list_of_y_label_max.append(max(list(self.forecast_df[column])))
                     y_label_min = min(list_of_y_label_min) #поиск минимального значения из всех минимумов по оси y
                     y_label_max = max(list_of_y_label_max) #поиск максимального значения из всех максимумов по оси y
+                    axs[r, c].set_xlim(self.forecast_df.index.strftime('%b')[0], self.forecast_df.index.strftime('%b')[-1])
                     axs[r, c].set_ylim(y_label_min - 0.5, y_label_max + 0.5)
                 else:
                     last_3_years = [12, 24, 36]  #последние 12, 24, 36 месяцев
@@ -142,6 +171,7 @@ class Postprocessing:
                     list_of_y_label_max.append(max(list(self.forecast_df[column])))
                     y_label_min = min(list_of_y_label_min) #поиск минимального значения из всех минимумов по оси y
                     y_label_max = max(list_of_y_label_max) #поиск максимального значения из всех максимумов по оси y
+                    axs[r, c].set_xlim(self.forecast_df.index.strftime('%b')[0], self.forecast_df.index.strftime('%b')[-1])
                     axs[r, c].set_ylim(y_label_min - 0.5, y_label_max + 0.5)
 
                     
@@ -159,6 +189,7 @@ class Postprocessing:
             file_path = os.path.join(save_dir, f'{col_idx}.png')
             plt.savefig(file_path, dpi = 300)
             plt.show()
+
 
     @staticmethod
     def save_img_to_pdf(directory_path, img_format: str, output_filename):
@@ -182,26 +213,4 @@ class Postprocessing:
         with open(f'{directory_path}output_filename', 'wb') as file:
             file.write(pdf_data)
 
-    @staticmethod
-    def calculate_forecast_error(forecast_df, test_data):
-        """
-        Вычисляет ошибки прогноза и среднюю процентную ошибку.
-
-        Args:
-            forecast_df: DataFrame с прогнозными значениями.
-            test_data: Тестовые данные для сравнения.
-
-        Returns:
-            error_df: DataFrame с абсолютными ошибками прогноза.
-            mean_error: Средняя процентная ошибка.
-        """
-        # Вычисляем ошибки прогноза
-        error_df = test_data - forecast_df
-        print("Абсолютные ошибки прогноза:\n", error_df)
-
-        # Вычисляем процентные ошибки
-        percentage_error = (100 - (forecast_df / test_data) * 100)
-        mean_error = percentage_error.mean()
-
-        print("Средняя ошибка прогноза MAPE, %:\n", mean_error)
-        return error_df, mean_error
+    
