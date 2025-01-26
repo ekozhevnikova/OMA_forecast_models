@@ -16,6 +16,7 @@ class Preprocessing:
     def __init__(self, ts):
         self.ts = ts
 
+
     @staticmethod
     def get_data_for_forecast(filename, list_of_replacements: list, column_name_with_date: str):
         """
@@ -53,6 +54,7 @@ class Preprocessing:
         merged_df.set_index(column_name_with_date, inplace=True)
         return merged_df
 
+
     def check_stationarity(self):
         """
             Проверка ВР на стационарность.
@@ -62,12 +64,14 @@ class Preprocessing:
         result = adfuller(self.ts)
         return result[1] < 0.05
 
+
     def make_stationary(self):
         """
             Приведение нестационарного ряда к стационарному виду путём дифференцирования.
             Удаление тренда из ВР.
         """
         return self.ts.diff().dropna()
+
 
     def inverse_difference(self, last_observation):
         """
@@ -76,7 +80,6 @@ class Preprocessing:
                 last_observation: последние фактические данные в DataFrame.
         """
         return self.ts.cumsum() + last_observation
-
 
 
     def search_last_fact_data(self):
