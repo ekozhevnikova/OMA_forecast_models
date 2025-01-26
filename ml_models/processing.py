@@ -1856,7 +1856,7 @@ class GROUPS(Forecast_Models):
 
             #Усредненный прогноз по всем методам
             avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
-        return avg_forecast, test_data
+        return avg_forecast
 
     def main(self,
              filename,
