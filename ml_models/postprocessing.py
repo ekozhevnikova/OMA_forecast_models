@@ -62,10 +62,11 @@ class Postprocessing:
 
         # Вычисляем процентные ошибки
         percentage_error = (1 - (forecast_df / test_data))
-        mean_error = percentage_error.mean()
-        mean_error = mean_error.astype(float)
+        mean_error = percentage_error.mean() * 100
+        #mean_error = mean_error.astype(float)
+        mean_error = (np.round(mean_error), 2)
 
-        print("Средняя ошибка прогноза MAPE, %:\n", np.abs(np.round(mean_error), 2) * 100)
+        print("Средняя ошибка прогноза MAPE, %:\n", mean_error)
         return error_df, mean_error
     
 

@@ -155,22 +155,6 @@ class Forecast_Models:
             # Добавляем прогнозируемые значения в DataFrame
             future_predictions[f'{column}'] = y_future_pred
         future_predictions.set_index(self.column_name_with_date, inplace=True)
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots and method == 'linear_trend':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=future_predictions,
-                save_dir='plots_for_ML_models/regression_model_linear_trend',
-            )
-        if plots and method == 'logistic_trend':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=future_predictions,
-                save_dir='plots_for_ML_models/regression_model_logistic_trend',
-            )
-        '''
 
         return future_predictions
 
@@ -241,23 +225,6 @@ class Forecast_Models:
         result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
         result_df.set_index(self.column_name_with_date, inplace = True)
 
-
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots and weigh_error > 0:
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=result_df,
-                save_dir='plots_for_ML_models/naive_forecast_weigh_error',
-            )
-        if plots and weigh_error == 0:
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=result_df,
-                save_dir='plots_for_ML_models/naive_forecast',
-            )
-        '''
         return result_df
 
     def seasonal_decomposition(self, method: str, past_values: int = 3):
@@ -351,22 +318,7 @@ class Forecast_Models:
                 forecast_df = forecast_df.reset_index()
                 forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots and method == 'calendar_years':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=forecast_df,
-                save_dir='plots_for_ML_models/seasonal_decomposition_calendar_years',
-            )
-        if plots and method == 'fixed_periods':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=forecast_df,
-                save_dir='plots_for_ML_models/seasonal_decomposition_fixed_periods',
-            )
-        '''
+
         return forecast_df
 
     def rolling_mean(self, method: str, past_values: int = 3):
@@ -465,22 +417,7 @@ class Forecast_Models:
                 forecast_df = forecast_df.reset_index()
                 forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots and method == 'calendar_years':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=forecast_df,
-                save_dir='plots_for_ML_models/rolling_mean_calendar_years',
-            )
-        if plots and method == 'fixed_periods':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=forecast_df,
-                save_dir='plots_for_ML_models/rolling_mean_fixed_periods',
-            )
-        '''
+
         return forecast_df
 
     def decomposition_fixed_periods(self, method: str, past_values: int = 3, w_1: float = 0.2, w_2: float = 0.8):
@@ -583,22 +520,6 @@ class Forecast_Models:
                                   freq='MS')
         result_df.index = new_index
 
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots and method == 'without_trend':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=result_df,
-                save_dir='plots_for_ML_models/decomposition_fixed_periods_without_trend',
-            )
-        if plots and method == 'with_trend':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=result_df,
-                save_dir='plots_for_ML_models/decomposition_fixed_periods_with_trend',
-            )
-        '''
         return result_df
 
 
@@ -728,22 +649,6 @@ class Forecast_Models:
             result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots and method == 'without_trend':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=result_df_forecast,
-                save_dir='plots_for_ML_models/decomposition_calendar_years_without_trend',
-            )
-        if plots and method == 'with_trend':
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=result_df_forecast,
-                save_dir='plots_for_ML_models/decomposition_calendar_years_with_trend',
-            )
-        '''
         return result_df_forecast
 
     def prophet_forecast(self):
@@ -853,17 +758,6 @@ class Forecast_Models:
 
         forecast_df = forecast_df.tail(self.forecast_periods)
 
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots:
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=forecast_df,
-                save_dir='plots_for_ML_models/prophet_forecast',
-            )
-        '''
-
         return forecast_df
 
     def auto_arima_forecast(self):
@@ -957,16 +851,7 @@ class Forecast_Models:
         forecast_df = forecast_df.reset_index()
         forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace = True)
-        '''
-        # Вызов графиков
-        postprocessor = Postprocessing(self.df)
-        if plots:
-            postprocessor.get_plot(
-                column_name_with_date=self.column_name_with_date,
-                forecast_df=forecast_df,
-                save_dir='plots_for_ML_models/auto_arima_forecast',
-            )
-        '''
+
         return forecast_df
 
 
@@ -1024,6 +909,8 @@ class Forecast_Models:
             train_data = self.df.iloc[:-self.forecast_periods]
             test_data = self.df.iloc[-self.forecast_periods:]
             self.df = train_data
+        else:
+            test = False
         forecast_df = method_map[model_name]()
         print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}",
             forecast_df.round(4), sep = '\n', end = '\n\n')
@@ -2242,3 +2129,117 @@ class GROUPS():
 
         return general_df
 '''
+# == ЭТО Я ДЛЯ СЕБЯ ==
+
+
+
+import warnings
+warnings.filterwarnings('ignore')
+
+prefix = 'C:/Users/Honor Magicbook/Desktop/работа'
+prefix_plots = 'C:/Users/Honor Magicbook/Desktop/работа/TEST_PLOTS/'
+
+
+def main(filename,
+         list_of_replacements,
+         forecast_periods,
+         column_name_with_date,
+         weights_filepath,
+         plots_dir=None,
+         save_dir=None,
+         plots: bool = False,
+         test: bool = False):
+    """
+        Функция для запуска прогноза ансамбля ML-моделей
+        Args:
+            filename: Полный путь к файлу с исходными данными
+            list_of_replacements: Список из листов, находящихся в файле с исходными данными
+            column_name_with_date: Название столбца с датой
+            weights_filepath: Полный путь к файлу с весами для каждой модели
+            plots_dir: Путь к директории, куда будут сохраняться графики для каждой модели
+            save_dir: Путь к директории, куда будут сохраняться итоговые графики с прогнозами
+            plots: Переменная типа bool. Если True, то графики строятся. В противном случае нет.
+            test: Переменная типа bool. Если True, то тестинг проводится. В противном случае нет.
+        Returns:
+    """
+    # Считывание файла с исходными данными
+    df = Preprocessing.get_data_for_forecast(filename, list_of_replacements, column_name_with_date)
+
+    # Определение к какой группе относятся данные по тому или иному каналу
+    group_1, group_2, group_3, group_4 = GROUPS(df).initiate_group()
+
+    avg_forecasts = []
+
+    # GROUP_1
+    if not group_1.empty:
+        print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью и трендом', sep='\n', end='\n')
+        avg_forecast_1 = GROUPS(group_1).process_group(forecast_periods,
+                                                       column_name_with_date,
+                                                       type_of_group='GROUP_1',
+                                                       weights_filepath=weights_filepath,
+                                                       plots_dir=plots_dir,
+                                                       plots=plots,
+                                                       test=test)
+        if plots:
+            Postprocessing(group_1, avg_forecast_1).get_plot(column_name_with_date,
+                                                             f'{save_dir}/Cезонность и тренд')
+        avg_forecasts.append(avg_forecast_1)
+
+    # GROUP_2
+    if not group_2.empty:
+        print('', 'Результаты работы различных методов для ТВ-каналов с трендом без сезонности', sep='\n', end='\n')
+        avg_forecast_2 = GROUPS(group_2).process_group(forecast_periods,
+                                                       column_name_with_date,
+                                                       type_of_group='GROUP_2',
+                                                       weights_filepath=weights_filepath,
+                                                       plots_dir=plots_dir,
+                                                       plots=plots,
+                                                       test=test)
+        print(avg_forecast_2)
+        if plots:
+            Postprocessing(group_2, avg_forecast_2).get_plot(column_name_with_date,
+                                                             f'{save_dir}/Тренд без сезонности')
+        avg_forecasts.append(avg_forecast_2)
+
+    # GROUP_3
+    if not group_3.empty:
+        print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью без тренда', sep='\n', end='\n')
+        avg_forecast_3 = GROUPS(group_3).process_group(forecast_periods,
+                                                       column_name_with_date,
+                                                       type_of_group='GROUP_3',
+                                                       weights_filepath=weights_filepath,
+                                                       plots_dir=plots_dir,
+                                                       plots=plots,
+                                                       test=test)
+        if plots:
+            Postprocessing(group_3, avg_forecast_3).get_plot(column_name_with_date,
+                                                             f'{save_dir}/Тренд без сезонности')
+        avg_forecasts.append(avg_forecast_3)
+
+    # GROUP_4
+    if not group_4.empty:
+        print('', 'Результаты работы различных методов для ТВ-каналов с сезонностью без тренда', sep='\n', end='\n')
+        avg_forecast_4 = GROUPS(group_4).process_group(forecast_periods,
+                                                       column_name_with_date,
+                                                       type_of_group='GROUP_4',
+                                                       weights_filepath=weights_filepath,
+                                                       plots_dir=plots_dir,
+                                                       plots=plots,
+                                                       test=test)
+        if plots:
+            Postprocessing(group_4, avg_forecast_4).get_plot(column_name_with_date,
+                                                             f'{save_dir}/Без сезонности и без тренда')
+        avg_forecasts.append(avg_forecast_4)
+    general_df = Postprocessing.ensemble_of_models(df, *avg_forecasts)
+    return general_df
+
+general_df = main(filename = 'Data_by_months_TEST.xlsx',
+                  list_of_replacements = ['All 18+', 'All 14-59', 'All 10-45', 'All 14-44',
+                      'All 14-54', 'All 25-49', 'All 25-54', 'All 4-45', 'All 6-54', 'W 14-44', 'W 25-59'],
+                  forecast_periods = 14,
+                  column_name_with_date = 'Date',
+                  weights_filepath = 'config.json',
+                  plots_dir = 'groups/PLOTS_NEW/',
+                  save_dir = 'groups/RESULT_NEW/',
+                  plots = False,
+                  test = True)
