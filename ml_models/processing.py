@@ -4,8 +4,11 @@ import numpy as np
 import pandas as pd
 #import datetime
 #from datetime import datetime
-import locale
-locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
+
+
+from io_data.dates import Dates_Operations
+
+#locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -14,15 +17,25 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
+import logging
 import os
-from OMA_tools.ml_models.preprocessing import Preprocessing
-from OMA_tools.ml_models.postprocessing import Postprocessing
+# from OMA_tools.ml_models.preprocessing import Preprocessing
+# from OMA_tools.ml_models.postprocessing import Postprocessing
 #это я для себя:
-#from ml_models.preprocessing import Preprocessing
-#from ml_models.postprocessing import Postprocessing
-#from io_data.operations import File, Table, Dict_Operations
+from ml_models.preprocessing import Preprocessing
+from ml_models.postprocessing import Postprocessing
+from io_data.operations import File, Table, Dict_Operations
 #import warnings
 #warnings.filterwarnings('ignore')
+from ml_models.groups import *
+
+
+
+import logging
+logging.getLogger("prophet").setLevel(logging.ERROR)
+logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
+logging.getLogger("cmdstanpy").propagate = False
+logging.getLogger("cmdstanpy").disabled = True
 
 
 @contextmanager
@@ -666,12 +679,13 @@ class Forecast_Models:
                 Returns:
                     Новый ДатаФрейм с прогнозом
         """
+        # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
         df = self.df.copy()
         #forecast_periods = self.forecast_periods
 
         # Параметры для перебора
         param_grid = {
-            'seasonality_mode': ['additive', 'multiplicative'],
+            'seasonality_mode': ['multiplicative'],
             'n_changepoints': [12, 18, 24, 36],
             'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
         }
@@ -853,6 +867,7 @@ class Forecast_Models:
 
     def process_model(self,
                       model_name: str,
+                      error_dir: str = None,
                       plots_dir: str = None,
                       plots: bool = False,
                       test: bool = False):
@@ -914,14 +929,14 @@ class Forecast_Models:
         # Если задан параметр plots == True
         if plots and plots_dir is not None:
             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = f'{plots_dir}/{model_name}')
+                                                            save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
         # Если задан параметр test == True    
         if test:
-            error_df, mean_error = Postprocessing.calculate_forecast_error(
+            error_df = Postprocessing.calculate_forecast_error(
                                                                             forecast_df = forecast_df,
                                                                             test_data = test_data
                                                                         )
-
+            error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
         return forecast_df
     
 
@@ -930,6 +945,7 @@ class Forecast_Models:
                       forecasts,
                       coeff,
                       model_name: str,
+                      error_dir: str = None,
                       plots_dir: str = None,
                       plots: bool = False,
                       test: bool = False):
@@ -991,12 +1007,13 @@ class Forecast_Models:
         # Если задан параметр plots == True
         if plots and plots_dir is not None:
             Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-                                                            save_dir = f'{plots_dir}/{model_name}')
+                                                            save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
         # Если задан параметр test == True    
         if test:
-            error_df, mean_error = Postprocessing.calculate_forecast_error(
+            error_df = Postprocessing.calculate_forecast_error(
                                 forecast_df = forecast_df,
                                 test_data = test_data
                             )
+            error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
 
         forecasts.append(forecast_df * coeff)

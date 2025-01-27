@@ -3,9 +3,12 @@ import pandas as pd
 import json
 import pymannkendall as mk
 import threading
-from OMA_tools.ml_models.preprocessing import Preprocessing
-from OMA_tools.ml_models.processing import Forecast_Models
-from OMA_tools.ml_models.postprocessing import Postprocessing
+# from OMA_tools.ml_models.preprocessing import Preprocessing
+# from OMA_tools.ml_models.processing import Forecast_Models
+# from OMA_tools.ml_models.postprocessing import Postprocessing
+from ml_models.preprocessing import Preprocessing
+from ml_models.processing import Forecast_Models
+from ml_models.postprocessing import Postprocessing
 
 
 class GROUPS():
@@ -69,6 +72,7 @@ class GROUPS():
                     column_name_with_date,
                     type_of_group,
                     weights_filepath,
+                    error_dir: str = None,
                     plots_dir = None,
                     plots: bool = False,
                     test: bool = False):
@@ -100,14 +104,23 @@ class GROUPS():
 
         #Формирование папки для сохранения графиков с прогнозами
         path_to_save = None
+        path_to_save_errors = None
         if type_of_group == 'GROUP_1' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Сезонность и тренд'
+        if type_of_group == 'GROUP_1' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/Сезонность и тренд'
         if type_of_group == 'GROUP_2' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Тренд без сезонности'
+        if type_of_group == 'GROUP_2' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/Тренд без сезонности'
         if type_of_group == 'GROUP_3' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Сезонность без тренда'
+        if type_of_group == 'GROUP_3' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/Сезонность без тренда'
         if type_of_group == 'GROUP_4' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Без сезонности и без тренда'
+        if type_of_group == 'GROUP_4' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/Без сезонности и без тренда'
 
         #Обработка группы с моделями
         #forecasts = []
@@ -128,7 +141,7 @@ class GROUPS():
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
                 t = threading.Thread(target = Forecast_Models(self.df, forecast_periods, column_name_with_date).process_model, 
-                                    args = (forecasts, groups[group_key][model_name], model_name, path_to_save, plots, test))
+                                    args = (forecasts, groups[group_key][model_name], model_name, path_to_save_errors, path_to_save, plots, test))
                 t.start()
                 threads.append(t)
         for t in threads:
