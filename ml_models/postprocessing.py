@@ -1,4 +1,3 @@
-import matplotlib
 import numpy as np
 import os
 import img2pdf
@@ -7,6 +6,8 @@ from datetime import datetime
 from matplotlib import pyplot as plt
 import matplotlib as mpl
 mpl.rc('font',family = 'Arial')
+from threading import Lock
+lock = Lock()
 
 
 
@@ -53,26 +54,22 @@ class Postprocessing:
             test_data: Тестовые данные для сравнения.
 
         Returns:
-            error_df: DataFrame с абсолютными ошибками прогноза.
-            mean_error: Средняя процентная ошибка.
+            percentage_error: DataFrame с ошибками прогноза (в %).
+
         """
-        # Вычисляем ошибки прогноза
-        error_df = test_data - forecast_df
-        print("Абсолютные ошибки прогноза:\n", error_df.abs())
-
         # Вычисляем процентные ошибки
-        percentage_error = (1 - (forecast_df / test_data))
-        mean_error = percentage_error.mean() * 100
-        #mean_error = mean_error.astype(float)
-        mean_error = (np.round(mean_error), 2)
+        percentage_error = ((forecast_df / test_data) - 1) * 100
+        mean_values = percentage_error.mean()
+        # Добавляем новую строку с названием индекса "Mean"
+        percentage_error.loc['Mean'] = mean_values
 
-        print("Средняя ошибка прогноза MAPE, %:\n", mean_error)
-        return error_df, mean_error
+        return percentage_error
     
 
     def get_plot(self, 
              column_name_with_date: str,
-             save_dir, 
+             save_dir,
+             test_data = None,
              last_n_list = None, 
              nrows = 3, 
              ncols = 2,
@@ -97,7 +94,11 @@ class Postprocessing:
         if self.forecast_df.index.name != column_name_with_date:
             self.forecast_df = self.forecast_df.reset_index()
             self.forecast_df = self.forecast_df.rename(columns = {self.forecast_df.columns[0]: column_name_with_date})
-            self.forecast_df.set_index(column_name_with_date, inplace = True)   
+            self.forecast_df.set_index(column_name_with_date, inplace = True)
+
+        # Если test_data задан, проверяем его индекс
+        if test_data is not None and test_data.index.name != column_name_with_date:
+            test_data = test_data.set_index(column_name_with_date)
         
         # Создаем папку для сохранения графиков, если она не существует
         os.makedirs(save_dir, exist_ok = True)
@@ -161,6 +162,17 @@ class Postprocessing:
                                         label = f'{historical_data.index.year[0]}')
                             list_of_y_label_min.append(min(list(historical_data[column])))
                             list_of_y_label_max.append(max(list(historical_data[column])))
+
+                # Если test_data задан, добавляем его на график
+                if test_data is not None and column in test_data.columns:
+                    axs[r, c].plot(test_data.index.strftime('%b'),
+                                   test_data[column],
+                                   label='Test Data',
+                                   linestyle='solid',
+                                   linewidth=2.0,
+                                   color='blue')
+                    list_of_y_label_min.append(min(test_data[column]))
+                    list_of_y_label_max.append(max(test_data[column]))
                     # График для прогнозируемых значений
                     axs[r, c].plot(self.forecast_df.index.strftime('%b'), 
                                 self.forecast_df[column], 
@@ -188,8 +200,15 @@ class Postprocessing:
                     
             plt.tight_layout()
             file_path = os.path.join(save_dir, f'{col_idx}.png')
-            plt.savefig(file_path, dpi = 300)
-            plt.show()
+            with lock:
+                try:
+                    plt.savefig(file_path, dpi=300)
+                except Exception as e:
+                    print(f"Ошибка при сохранении графика: {e}")
+                finally:
+                    plt.close(fig)
+            # plt.savefig(file_path, dpi = 300)
+            # plt.close(fig)
 
 
     @staticmethod

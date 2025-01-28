@@ -1,11 +1,6 @@
 import sys
-#import json
 import numpy as np
 import pandas as pd
-#import datetime
-#from datetime import datetime
-import locale
-locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -17,12 +12,6 @@ from contextlib import contextmanager
 import os
 from OMA_tools.ml_models.preprocessing import Preprocessing
 from OMA_tools.ml_models.postprocessing import Postprocessing
-#это я для себя:
-#from ml_models.preprocessing import Preprocessing
-#from ml_models.postprocessing import Postprocessing
-#from io_data.operations import File, Table, Dict_Operations
-#import warnings
-#warnings.filterwarnings('ignore')
 
 
 @contextmanager
@@ -984,6 +973,7 @@ class Forecast_Models:
             self.df = train_data
         else:
             test = False
+
         forecast_df = method_map[model_name]()
         print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}",
             forecast_df.round(4), sep = '\n', end = '\n\n')
