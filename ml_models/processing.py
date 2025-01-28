@@ -1,14 +1,6 @@
 import sys
-#import json
 import numpy as np
 import pandas as pd
-#import datetime
-#from datetime import datetime
-
-
-from io_data.dates import Dates_Operations
-
-#locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -19,15 +11,8 @@ from scipy import linalg
 from contextlib import contextmanager
 import logging
 import os
-# from OMA_tools.ml_models.preprocessing import Preprocessing
-# from OMA_tools.ml_models.postprocessing import Postprocessing
-#это я для себя:
-from ml_models.preprocessing import Preprocessing
-from ml_models.postprocessing import Postprocessing
-from io_data.operations import File, Table, Dict_Operations
-#import warnings
-#warnings.filterwarnings('ignore')
-from ml_models.groups import *
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.postprocessing import Postprocessing
 
 
 
