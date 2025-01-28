@@ -3,9 +3,12 @@ import pandas as pd
 import json
 import pymannkendall as mk
 import threading
-from OMA_tools.ml_models.preprocessing import Preprocessing
-from OMA_tools.ml_models.processing import Forecast_Models
-from OMA_tools.ml_models.postprocessing import Postprocessing
+# from OMA_tools.ml_models.preprocessing import Preprocessing
+# from OMA_tools.ml_models.processing import Forecast_Models
+# from OMA_tools.ml_models.postprocessing import Postprocessing
+from ml_models.preprocessing import Preprocessing
+from ml_models.processing import Forecast_Models
+from ml_models.postprocessing import Postprocessing
 
 
 class GROUPS():
@@ -106,17 +109,14 @@ class GROUPS():
             path_to_save = f'{plots_dir}/Сезонность и тренд'
         if type_of_group == 'GROUP_1' and error_dir is not None:
             path_to_save_errors = f'{error_dir}/Сезонность и тренд'
-
         if type_of_group == 'GROUP_2' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Тренд без сезонности'
         if type_of_group == 'GROUP_2' and error_dir is not None:
             path_to_save_errors = f'{error_dir}/Тренд без сезонности'
-
         if type_of_group == 'GROUP_3' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Сезонность без тренда'
         if type_of_group == 'GROUP_3' and error_dir is not None:
             path_to_save_errors = f'{error_dir}/Сезонность без тренда'
-
         if type_of_group == 'GROUP_4' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Без сезонности и без тренда'
         if type_of_group == 'GROUP_4' and error_dir is not None:
