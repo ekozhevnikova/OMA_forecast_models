@@ -1,14 +1,12 @@
+import os
 import numpy as np
 import pandas as pd
 import json
 import pymannkendall as mk
 import threading
-# from OMA_tools.ml_models.preprocessing import Preprocessing
-# from OMA_tools.ml_models.processing import Forecast_Models
-# from OMA_tools.ml_models.postprocessing import Postprocessing
-from ml_models.preprocessing import Preprocessing
-from ml_models.processing import Forecast_Models
-from ml_models.postprocessing import Postprocessing
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.processing import Forecast_Models
+from OMA_tools.ml_models.postprocessing import Postprocessing
 
 
 class GROUPS():
@@ -105,6 +103,8 @@ class GROUPS():
         #Формирование папки для сохранения графиков с прогнозами
         path_to_save = None
         path_to_save_errors = None
+        #создание папки для сохранения выходных файлов с ошибками
+        #os.makedirs(path_to_save_errors, exist_ok = True)
         if type_of_group == 'GROUP_1' and plots_dir is not None:
             path_to_save = f'{plots_dir}/Сезонность и тренд'
         if type_of_group == 'GROUP_1' and error_dir is not None:
@@ -122,30 +122,59 @@ class GROUPS():
         if type_of_group == 'GROUP_4' and error_dir is not None:
             path_to_save_errors = f'{error_dir}/Без сезонности и без тренда'
 
-        #Обработка группы с моделями
+        
+        ##Обработка группы с моделями
         #forecasts = []
         #for model_name in list_of_model_names:
         #    if model_name not in groups[group_key]:
         #            raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
         #    else:
         #        forecast_df = Forecast_Models(self.df, forecast_periods, column_name_with_date).process_model(model_name = model_name,
-        #                                         plots_dir = path_to_save,
-        #                                         plots = plots,
-        #                                         test = test)
+        #                                                                                                      error_dir = path_to_save_errors,
+        #                                                                                                      plots_dir = path_to_save,
+        #                                                                                                      plots = plots,
+        #                                                                                                      test = test)
         #        forecasts.append(forecast_df * groups[group_key][model_name])
+
         #Обработка группы с моделями
         threads = []
         forecasts = []
+        tests = []
+        trains = []
         for model_name in list_of_model_names:
              if model_name not in groups[group_key]:
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
-                t = threading.Thread(target = Forecast_Models(self.df, forecast_periods, column_name_with_date).process_model, 
-                                    args = (forecasts, groups[group_key][model_name], model_name, path_to_save_errors, path_to_save, plots, test))
+                t = threading.Thread(target = Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model, 
+                                    args = (forecasts, tests, trains, groups[group_key][model_name], model_name, path_to_save_errors, path_to_save, plots, test))
                 t.start()
                 threads.append(t)
         for t in threads:
             t.join()
+        
+        for model_name_forecast_df in forecasts:
+            model_name = list(model_name_forecast_df.keys())[0]
+            forecast_df = list(model_name_forecast_df.values())[0]
 
-        avg_forecast = Postprocessing.calculate_average_forecast(forecasts)
+            #Если задан параметр test == True
+            test_data = None
+            if test:
+                train_data = list(list(filter(lambda x: model_name in list(x.keys()), trains))[0].values())[0]
+                test_data = list(list(filter(lambda x: model_name in list(x.keys()), tests))[0].values())[0]
+
+            # Если задан параметр plots == True
+            if plots and plots_dir is not None:
+                Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = column_name_with_date,
+                                                                save_dir = f'{path_to_save}/{model_name}', test_data = test_data)
+            # Если задан параметр test == True    
+            if test:
+                error_df = Postprocessing.calculate_forecast_error(
+                                    forecast_df = forecast_df,
+                                    test_data = test_data
+                                )
+                error_df.to_excel(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx')
+            
+
+        avg_forecast = Postprocessing.calculate_average_forecast(list(map(lambda x: list(x.values())[0], forecasts)))
+        #return forecasts, trains, tests, avg_forecast.round(4)
         return avg_forecast.round(4)

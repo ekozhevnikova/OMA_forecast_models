@@ -183,4 +183,5 @@ class Dates_Operations:
         """
         start_date = pd.to_datetime(start_date, format = '%d.%m.%Y')
         stop_date = pd.to_datetime(stop_date, format = '%d.%m.%Y')
-        return np.abs((start_date.year - stop_date.year) * 12 + (start_date.month - stop_date.month))
+        n = np.abs((start_date.year - stop_date.year) * 12 + (start_date.month - stop_date.month))
+        return int(n)
