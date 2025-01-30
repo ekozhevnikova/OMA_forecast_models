@@ -2,6 +2,8 @@ import sys
 #import json
 import numpy as np
 import pandas as pd
+from keras.src.layers import GRU
+
 #import datetime
 #from datetime import datetime
 
@@ -13,7 +15,7 @@ from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
 from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import ParameterGrid
+from sklearn.model_selection import ParameterGrid, train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
@@ -28,8 +30,18 @@ from io_data.operations import File, Table, Dict_Operations
 #import warnings
 #warnings.filterwarnings('ignore')
 from ml_models.groups import *
-
-
+from tensorflow.keras import Model
+# from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, BatchNormalization, Conv1D, MaxPooling1D, concatenate, Attention
+# from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow.keras.optimizers import Adam
+import numpy as np
+import pandas as pd
+import tensorflow as tf
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.preprocessing import MinMaxScaler
 
 import logging
 logging.getLogger("prophet").setLevel(logging.ERROR)
@@ -864,6 +876,70 @@ class Forecast_Models:
 
         return forecast_df
 
+    @staticmethod
+    def create_sequences(data, seq_length):
+        X, y = [], []
+        for i in range(len(data) - seq_length):
+            X.append(data[i:i + seq_length])
+            y.append(data[i + seq_length])
+        return np.array(X), np.array(y)
+
+    def neural_network_forecast(self, seq_length = 3): #'seq_length' - окно которое будем рассматривать для прогноза одного значения
+        #TODO описание функции
+        df = self.df.sort_values(self.column_name_with_date)  # Упорядочиваем данные по дате
+        result_forecast = pd.DataFrame()
+        result_forecast.index = pd.date_range(start=self.df.index[-1] + pd.DateOffset(months=1), periods=self.forecast_periods, freq='MS')
+
+        # Обрабатываем все числовые столбцы, кроме даты
+        for column in df.columns:
+            if column == self.column_name_with_date:
+                continue  # Пропускаем столбец с датой
+
+            # Нормализация значений
+            scaler = MinMaxScaler()
+            df[f'Scaled_{column}'] = scaler.fit_transform(df[[column]])
+
+            # Формируем последовательности
+            X, y = Forecast_Models.create_sequences(df[f'Scaled_{column}'].values, seq_length)
+
+            # Разделение данных (80% обучающая, 20% тестовая)
+            split = int(len(X) * 0.8)
+            X_train, y_train = X[:split], y[:split]
+            X_test, y_test = X[split:], y[split:]
+
+            # Изменяем форму для LSTM
+            X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+            X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+
+            # Создание и обучение модели (два слоя lstm по 50 нейронов и один выходной)
+            model = Sequential([
+                LSTM(50, activation='relu', return_sequences=True, input_shape=(seq_length, 1)),
+                LSTM(50, activation='relu'),
+                Dense(1)
+            ])
+            model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
+
+            model.fit(X_train, y_train, epochs=100, batch_size=2, validation_data=(X_test, y_test), verbose=1)
+
+            # Прогнозирование на `forecast_periods` шагов
+            def predict_next(model, data, steps):
+                inputs = data[-seq_length:].reshape((1, seq_length, 1))
+                predictions = []
+                for _ in range(steps):
+                    pred = model.predict(inputs, verbose=0)
+                    predictions.append(pred[0, 0])
+                    inputs = np.roll(inputs, -1, axis=1)
+                    inputs[0, -1, 0] = pred
+                return scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+
+            forecast = predict_next(model, df[f'Scaled_{column}'].values, self.forecast_periods)
+            result_forecast[column] = forecast.flatten()
+
+        # Создаем итоговый DataFrame с прогнозами для всех столбцов
+        forecast_df = pd.DataFrame(result_forecast)
+
+        return forecast_df
+
 
     def process_model(self,
                       model_name: str,
@@ -910,7 +986,9 @@ class Forecast_Models:
                 'Dec_without_trend_last_2_periods': lambda: self.decomposition_fixed_periods(method = 'without_trend', past_values = 2),
 
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
-                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
+                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2),
+
+                # 'NN': lambda: self.neural_network_forecast()
             }
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
@@ -988,7 +1066,9 @@ class Forecast_Models:
                 'Dec_without_trend_last_2_periods': lambda: self.decomposition_fixed_periods(method = 'without_trend', past_values = 2),
 
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
-                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
+                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2),
+
+                # 'NN': lambda: self.neural_network_forecast()
             }
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
