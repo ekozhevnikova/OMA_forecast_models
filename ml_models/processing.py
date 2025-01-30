@@ -1,14 +1,6 @@
 import sys
 import numpy as np
 import pandas as pd
-from keras.src.layers import GRU
-
-#import datetime
-#from datetime import datetime
-
-
-from io_data.dates import Dates_Operations
-
 #locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from pmdarima import auto_arima
 import pymannkendall as mk
@@ -18,30 +10,17 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
-import logging
-import os
-# from OMA_tools.ml_models.preprocessing import Preprocessing
-# from OMA_tools.ml_models.postprocessing import Postprocessing
-#это я для себя:
-from ml_models.preprocessing import Preprocessing
-from ml_models.postprocessing import Postprocessing
-from io_data.operations import File, Table, Dict_Operations
-#import warnings
-#warnings.filterwarnings('ignore')
 from ml_models.groups import *
-from tensorflow.keras import Model
-# from tensorflow.keras.layers import Input, LSTM, Dense, Dropout, BatchNormalization, Conv1D, MaxPooling1D, concatenate, Attention
-# from sklearn.preprocessing import MinMaxScaler
-import matplotlib.pyplot as plt
-from tensorflow.keras.layers import LSTM, Dense
-from tensorflow.keras.optimizers import Adam
-import numpy as np
-import pandas as pd
+
+#==== Это для нейронки=====#
 import tensorflow as tf
 from tensorflow.keras import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import Model
 
+#==== Это для скрытия бесконечных логов профета=====#
 import logging
 logging.getLogger("prophet").setLevel(logging.ERROR)
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
@@ -874,7 +853,7 @@ class Forecast_Models:
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         return forecast_df
-
+#================== ЭТО ВСЕ НЕЙРОНКА, НО МБ ОНА НЕ НУЖНА================================
     @staticmethod
     def create_sequences(data, seq_length):
         X, y = [], []
@@ -883,22 +862,19 @@ class Forecast_Models:
             y.append(data[i + seq_length])
         return np.array(X), np.array(y)
 
-    def neural_network_forecast(self, seq_length = 3): #'seq_length' - окно которое будем рассматривать для прогноза одного значения
-        #TODO описание функции
-        df = self.df.sort_values(self.column_name_with_date)  # Упорядочиваем данные по дате
+    def neural_network_forecast(self, seq_length = 3):
+        #TODO короче мб эта функция вообще не нужна, потом попробую докрутить, чтоб была точнее и быстрее, но хз
+        df = self.df.sort_values(self.column_name_with_date)
         result_forecast = pd.DataFrame()
         result_forecast.index = pd.date_range(start=self.df.index[-1] + pd.DateOffset(months=1), periods=self.forecast_periods, freq='MS')
 
-        # Обрабатываем все числовые столбцы, кроме даты
         for column in df.columns:
             if column == self.column_name_with_date:
-                continue  # Пропускаем столбец с датой
+                continue
 
-            # Нормализация значений
             scaler = MinMaxScaler()
             df[f'Scaled_{column}'] = scaler.fit_transform(df[[column]])
 
-            # Формируем последовательности
             X, y = Forecast_Models.create_sequences(df[f'Scaled_{column}'].values, seq_length)
 
             # Разделение данных (80% обучающая, 20% тестовая)
@@ -920,7 +896,7 @@ class Forecast_Models:
 
             model.fit(X_train, y_train, epochs=100, batch_size=2, validation_data=(X_test, y_test), verbose=1)
 
-            # Прогнозирование на `forecast_periods` шагов
+            # Прогнозирование на `self.forecast_periods` шагов
             def predict_next(model, data, steps):
                 inputs = data[-seq_length:].reshape((1, seq_length, 1))
                 predictions = []
@@ -938,7 +914,7 @@ class Forecast_Models:
         forecast_df = pd.DataFrame(result_forecast)
 
         return forecast_df
-
+#==================
 
     def process_model(self,
                       model_name: str,
@@ -987,7 +963,7 @@ class Forecast_Models:
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
                 'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2),
 
-                # 'NN': lambda: self.neural_network_forecast()
+                'NN': lambda: self.neural_network_forecast()
             }
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
@@ -1066,7 +1042,7 @@ class Forecast_Models:
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
                 'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2),
 
-                # 'NN': lambda: self.neural_network_forecast()
+                'NN': lambda: self.neural_network_forecast()
             }
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
