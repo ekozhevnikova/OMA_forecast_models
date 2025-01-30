@@ -58,7 +58,7 @@ class Postprocessing:
             percentage_error: DataFrame с ошибками прогноза (в %).
         """
         # Вычисляем процентные ошибки
-        percentage_error = ((forecast_df / test_data) - 1) * 100
+        percentage_error = (((forecast_df / test_data) - 1) * 100).abs()
         mean_values = percentage_error.mean()
         # Добавляем новую строку с названием индекса "Mean"
         percentage_error.loc['Mean'] = mean_values
@@ -127,7 +127,7 @@ class Postprocessing:
                     for i, last_n in enumerate(last_n_list):
                         axs[r, c].plot(last_n.index.strftime('%b'), 
                                     last_n[column], 
-                                    linewidth = 3.0,
+                                    linewidth = 4.0,
                                     label = f'{last_n.index.year[0]}')
                         list_of_y_label_min.append(min(list(last_n[column])))
                         list_of_y_label_max.append(max(list(last_n[column])))
@@ -136,7 +136,7 @@ class Postprocessing:
                                 self.forecast_df[column], 
                                 label = f'Forecast {self.forecast_df.index.year[0]}',
                                 linestyle = 'dashed',
-                                linewidth = 2.0,
+                                linewidth = 4.0,
                                 color = 'red')
                     list_of_y_label_min.append(min(list(self.forecast_df[column])))
                     list_of_y_label_max.append(max(list(self.forecast_df[column])))
@@ -170,7 +170,7 @@ class Postprocessing:
                                    test_data[column],
                                    label = 'Test Data',
                                    linestyle = 'dashdot',
-                                   linewidth = 2.0,
+                                   linewidth = 3.0,
                                    color = 'blue')
                     list_of_y_label_min.append(min(test_data[column]))
                     list_of_y_label_max.append(max(test_data[column]))
@@ -190,10 +190,10 @@ class Postprocessing:
 
                     
                 #Выводим на графике только прогнозируемый период
-                axs[nrows - 1, c].set_xlabel('Месяц', fontsize = 14, color = 'black')
-                axs[r, 0].set_ylabel('Share', fontsize = 14, color = 'black')
+                axs[nrows - 1, c].set_xlabel('Месяц', fontsize = 18, color = 'black')
+                axs[r, 0].set_ylabel('Share', fontsize = 18, color = 'black')
                 axs[r, c].set_xticklabels(labels = self.forecast_df.index.strftime('%b'), rotation = 30)
-                axs[r, c].legend(title = 'Год', loc = 'best', ncol = 2, fontsize = 9)
+                axs[r, c].legend(title = 'Год', loc = 'best', ncol = 3, fontsize = 9, frameon = False)
 
                 if col_idx % ncols == 0:
                     r = r + 1 if r + 1 < nrows else 0

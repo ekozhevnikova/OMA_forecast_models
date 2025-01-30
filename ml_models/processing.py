@@ -1,7 +1,6 @@
 import sys
 import numpy as np
 import pandas as pd
-#locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -995,7 +994,7 @@ class Forecast_Models:
                       forecasts,
                       tests,
                       trains,
-                      coeff,
+                      #coeff,
                       model_name: str,
                       error_dir: str = None,
                       plots_dir: str = None,
@@ -1065,12 +1064,12 @@ class Forecast_Models:
         # if plots and plots_dir is not None:
         #     Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
         #                                                     save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
-        # # Если задан параметр test == True
-        # if test:
-        #     error_df = Postprocessing.calculate_forecast_error(
-        #                         forecast_df = forecast_df,
-        #                         test_data = test_data
-        #                     )
-        #     error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
+        # # Если задан параметр test == True    
+        #if test:
+        #    error_df = Postprocessing.calculate_forecast_error(
+        #                        forecast_df = forecast_df,
+        #                        test_data = test_data
+        #                    )
+        #    error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
 
-        forecasts.append({ model_name: forecast_df * coeff })
+        forecasts.append({ model_name: forecast_df})

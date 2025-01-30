@@ -141,12 +141,13 @@ class GROUPS():
         forecasts = []
         tests = []
         trains = []
+        forecasts_with_weight = []
         for model_name in list_of_model_names:
              if model_name not in groups[group_key]:
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
                 t = threading.Thread(target = Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model, 
-                                    args = (forecasts, tests, trains, groups[group_key][model_name], model_name, path_to_save_errors, path_to_save, plots, test))
+                                    args = (forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test))
                 t.start()
                 threads.append(t)
         for t in threads:
@@ -155,6 +156,8 @@ class GROUPS():
         for model_name_forecast_df in forecasts:
             model_name = list(model_name_forecast_df.keys())[0]
             forecast_df = list(model_name_forecast_df.values())[0]
+            
+            forecasts_with_weight.append(forecast_df * groups[group_key][model_name])
 
             #Если задан параметр test == True
             test_data = None
@@ -173,8 +176,9 @@ class GROUPS():
                                     test_data = test_data
                                 )
                 error_df.to_excel(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx')
-            
+                
 
-        avg_forecast = Postprocessing.calculate_average_forecast(list(map(lambda x: list(x.values())[0], forecasts)))
+        avg_forecast = Postprocessing.calculate_average_forecast(forecasts_with_weight)
+        #avg_forecast = Postprocessing.calculate_average_forecast(list(map(lambda x: list(x.values())[0], forecasts)))
         #return forecasts, trains, tests, avg_forecast.round(4)
         return avg_forecast.round(4)
