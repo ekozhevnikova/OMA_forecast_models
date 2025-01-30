@@ -1,6 +1,7 @@
 import sys
 import numpy as np
 import pandas as pd
+#locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
