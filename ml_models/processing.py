@@ -927,7 +927,7 @@ class Forecast_Models:
                       forecasts,
                       tests,
                       trains,
-                      coeff,
+                      #coeff,
                       model_name: str,
                       error_dir: str = None,
                       plots_dir: str = None,
@@ -996,11 +996,11 @@ class Forecast_Models:
         #     Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
         #                                                     save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
         # # Если задан параметр test == True    
-        # if test:
-        #     error_df = Postprocessing.calculate_forecast_error(
-        #                         forecast_df = forecast_df,
-        #                         test_data = test_data
-        #                     )
-        #     error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
+        #if test:
+        #    error_df = Postprocessing.calculate_forecast_error(
+        #                        forecast_df = forecast_df,
+        #                        test_data = test_data
+        #                    )
+        #    error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
 
-        forecasts.append({ model_name: forecast_df * coeff })
+        forecasts.append({ model_name: forecast_df})
