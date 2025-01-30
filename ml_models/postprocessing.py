@@ -1,4 +1,3 @@
-import matplotlib
 import numpy as np
 import os
 import img2pdf
@@ -6,6 +5,7 @@ import pandas as pd
 from datetime import datetime
 from matplotlib import pyplot as plt
 import matplotlib as mpl
+import uuid
 mpl.rc('font',family = 'Arial')
 from threading import Lock
 lock = Lock()
@@ -56,7 +56,6 @@ class Postprocessing:
 
         Returns:
             percentage_error: DataFrame с ошибками прогноза (в %).
-
         """
         # Вычисляем процентные ошибки
         percentage_error = ((forecast_df / test_data) - 1) * 100
@@ -72,6 +71,7 @@ class Postprocessing:
              save_dir,
              test_data = None,
              last_n_list = None, 
+             #colors = ['mediumorchid', 'mediumseagreen', 'orange'],
              nrows = 3, 
              ncols = 2,
              figsize = (10, 9.5)):
@@ -134,7 +134,7 @@ class Postprocessing:
                     #построение графика для прогнозируемых значений
                     axs[r, c].plot(self.forecast_df.index.strftime('%b'), 
                                 self.forecast_df[column], 
-                                label = 'Forecast', 
+                                label = f'Forecast {self.forecast_df.index.year[0]}',
                                 linestyle = 'dashed',
                                 linewidth = 2.0,
                                 color = 'red')
@@ -168,16 +168,16 @@ class Postprocessing:
                 if test_data is not None and column in test_data.columns:
                     axs[r, c].plot(test_data.index.strftime('%b'),
                                    test_data[column],
-                                   label='Test Data',
-                                   linestyle='solid',
-                                   linewidth=2.0,
-                                   color='blue')
+                                   label = 'Test Data',
+                                   linestyle = 'dashdot',
+                                   linewidth = 2.0,
+                                   color = 'blue')
                     list_of_y_label_min.append(min(test_data[column]))
                     list_of_y_label_max.append(max(test_data[column]))
                     # График для прогнозируемых значений
                     axs[r, c].plot(self.forecast_df.index.strftime('%b'), 
                                 self.forecast_df[column], 
-                                label = 'Forecast', 
+                                label = f'Forecast {self.forecast_df.index.year[0]}', 
                                 linestyle = 'dashed',
                                 linewidth = 2.0,
                                 color = 'red')
@@ -190,10 +190,10 @@ class Postprocessing:
 
                     
                 #Выводим на графике только прогнозируемый период
-                axs[nrows - 1, c].set_xlabel('Месяц', fontsize = 12, color = 'black')
-                axs[r, 0].set_ylabel('Share', fontsize = 12, color = 'black')
+                axs[nrows - 1, c].set_xlabel('Месяц', fontsize = 14, color = 'black')
+                axs[r, 0].set_ylabel('Share', fontsize = 14, color = 'black')
                 axs[r, c].set_xticklabels(labels = self.forecast_df.index.strftime('%b'), rotation = 30)
-                axs[r, c].legend(title = 'Год', loc = 'best', ncol = 2, fontsize = 7)
+                axs[r, c].legend(title = 'Год', loc = 'best', ncol = 2, fontsize = 9)
 
                 if col_idx % ncols == 0:
                     r = r + 1 if r + 1 < nrows else 0
@@ -201,13 +201,15 @@ class Postprocessing:
                     
             plt.tight_layout()
             file_path = os.path.join(save_dir, f'{col_idx}.png')
-            with lock:
-                try:
-                    plt.savefig(file_path, dpi=300)
-                except Exception as e:
-                    print(f"Ошибка при сохранении графика: {e}")
-                finally:
-                    plt.close(fig)
+            #file_path = os.path.join(save_dir, f'{col_idx}_{uuid.uuid4()}.png')
+            plt.savefig(file_path, dpi = 300)
+            #with lock:
+            #    try:
+            #        plt.savefig(file_path, dpi=300)
+            #    except Exception as e:
+            #        print(f"Ошибка при сохранении графика: {e}")
+            #    finally:
+            #        plt.close(fig)
             # plt.savefig(file_path, dpi = 300)
             # plt.close(fig)
 
@@ -231,7 +233,7 @@ class Postprocessing:
         pdf_data = img2pdf.convert(image_files)
         
         # Запись контента в PDF - файл
-        with open(f'{directory_path}output_filename', 'wb') as file:
+        with open(f'{directory_path}{output_filename}', 'wb') as file:
             file.write(pdf_data)
 
     

@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pymorphy3 as pmrph
 import datetime as dt
@@ -171,21 +172,16 @@ class Dates_Operations:
     
     
     @staticmethod
-    def make_difference_in_months(start_date, stop_date):
+    def diff_month(start_date, stop_date):
         """
+            Function that makes difference between two dates
             Args:
-                start date in datetime format (for example: %d.%m.%Y)
-                end date in datetime format (for example: %d.%m.%Y)
+                start_date: start date in format '%d.%m.%Y'
+                stop_date: stop date in format '%d.%m.%Y'
             Returns:
-                returns the number of months between two dates
+                The number of months between two dates
         """
         start_date = pd.to_datetime(start_date, format = '%d.%m.%Y')
         stop_date = pd.to_datetime(stop_date, format = '%d.%m.%Y')
-
-        if start_date.year == stop_date.year:
-            months = stop_date.month - start_date.month
-        else:
-            months = (12 - start_date.month) + (stop_date.month)
-        if start_date.day > stop_date.day:
-            months = months - 1
-        return months
+        n = np.abs((start_date.year - stop_date.year) * 12 + (start_date.month - stop_date.month))
+        return int(n)
