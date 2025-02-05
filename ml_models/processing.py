@@ -11,6 +11,7 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
 from ml_models.groups import *
+from neuralprophet import NeuralProphet
 
 #==== Это для нейронки=====#
 import tensorflow as tf
@@ -22,10 +23,11 @@ from tensorflow.keras import Model
 
 #==== Это для скрытия бесконечных логов профета=====#
 import logging
+logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
+logging.getLogger("neuralprophet").setLevel(logging.ERROR)
 logging.getLogger("prophet").setLevel(logging.ERROR)
-logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
-logging.getLogger("cmdstanpy").propagate = False
-logging.getLogger("cmdstanpy").disabled = True
+logging.getLogger().setLevel(logging.ERROR)
+
 
 
 @contextmanager
@@ -650,115 +652,212 @@ class Forecast_Models:
 
         return result_df_forecast
 
-    def prophet_forecast(self):
-        """
-            Метод PROPHET.
-            Универсальный для всех ВР.
+    # def prophet_forecast(self):
+    #     """
+    #         Метод PROPHET.
+    #         Универсальный для всех ВР.
+    #
+    #             Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
+    #         параметры модели для каждого ряда при помощи Grid Search, минимизируя ошибку MAPE.
+    #
+    #             Параметры модели Prophet:
+    #                 seasonality_mode: управляет характером сезонности (аддитивный или мультипликативный).
+    #                 n_changepoints: задает количество точек, где модель может изменять направление тренда.
+    #                 changepoint_prior_scale: регулирует гибкость модели в этих точках, чтобы учесть изменения или сгладить тренд.
+    #
+    #             Args:
+    #                 plots: Построение графиков (по умолчанию False)
+    #
+    #             Returns:
+    #                 Новый ДатаФрейм с прогнозом
+    #     """
+    #     # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
+    #     df = self.df.copy()
+    #     #forecast_periods = self.forecast_periods
+    #
+    #     # Параметры для перебора
+    #     param_grid = {
+    #         'seasonality_mode': ['multiplicative'],
+    #         'n_changepoints': [12, 18, 24, 36],
+    #         'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
+    #     }
+    #
+    #     # Сортировка и подготовка данных
+    #     df.reset_index(inplace = True)
+    #     df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
+    #     df = df.sort_values(by = self.column_name_with_date)
+    #
+    #     # Разделение на обучающую и тестовую выборки
+    #     train = df.iloc[:-self.forecast_periods]
+    #     test = df.iloc[-self.forecast_periods:]
+    #
+    #     # Список временных рядов для прогнозирования
+    #     series_list = [col for col in train.columns if col != self.column_name_with_date]
+    #
+    #     results = []  # Результаты параметров для каждого временного ряда
+    #
+    #     for series in series_list:
+    #         # Подготовка данных для Prophet
+    #         series_df = train[[self.column_name_with_date, series]].rename(
+    #             columns = {self.column_name_with_date: 'ds', series: 'y'})
+    #
+    #         best_mape = float('inf')
+    #         best_params = None
+    #
+    #         for params in ParameterGrid(param_grid):
+    #             model = Prophet(
+    #                             seasonality_mode = params['seasonality_mode'],
+    #                             n_changepoints = params['n_changepoints'],
+    #                             changepoint_prior_scale = params['changepoint_prior_scale'])
+    #
+    #             model.fit(series_df)
+    #
+    #             # Прогнозирование
+    #             future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+    #             forecast = model.predict(future)
+    #
+    #             # Вычисление MAPE
+    #             test_series = test[[self.column_name_with_date, series]].rename(
+    #                 columns = {self.column_name_with_date: 'ds', series: 'y'})
+    #             forecast_test_period = forecast[-self.forecast_periods:]
+    #
+    #             # Сравнение только по датам тестового набора
+    #             aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
+    #             aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
+    #
+    #             mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
+    #
+    #             if mape < best_mape:
+    #                 best_mape = mape
+    #                 best_params = params
+    #
+    #         results.append((series, best_params, best_mape))
+    #         print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
+    #
+    #     # Прогнозирование для полного набора данных
+    #     forecast_df = pd.DataFrame()
+    #     for series, best_params, _ in results:
+    #         series_df = df[[self.column_name_with_date, series]].rename(
+    #             columns = {self.column_name_with_date: 'ds', series: 'y'})
+    #
+    #         model = Prophet(seasonality_mode = best_params['seasonality_mode'],
+    #                         n_changepoints = best_params['n_changepoints'],
+    #                         changepoint_prior_scale = best_params['changepoint_prior_scale'])
+    #
+    #         model.fit(series_df)
+    #         future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+    #         forecast = model.predict(future)
+    #
+    #         if forecast_df.empty:
+    #             forecast_df['ds'] = forecast['ds']
+    #         forecast_df[series] = forecast['yhat']
+    #
+    #     forecast_df.set_index('ds', inplace = True)
+    #     # Введение названия столбца с индексом для столбца с датами
+    #     forecast_df = forecast_df.reset_index()
+    #     forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+    #     forecast_df.set_index(self.column_name_with_date, inplace = True)
+    #
+    #     forecast_df = forecast_df.tail(self.forecast_periods)
+    #
+    #     return forecast_df
+################3
 
-                Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
-            параметры модели для каждого ряда при помощи Grid Search, минимизируя ошибку MAPE.
-
-                Параметры модели Prophet:
-                    seasonality_mode: управляет характером сезонности (аддитивный или мультипликативный).
-                    n_changepoints: задает количество точек, где модель может изменять направление тренда.
-                    changepoint_prior_scale: регулирует гибкость модели в этих точках, чтобы учесть изменения или сгладить тренд.
-
-                Args:
-                    plots: Построение графиков (по умолчанию False)
-
-                Returns:
-                    Новый ДатаФрейм с прогнозом
-        """
-        # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
+    def prophet_forecast(self, type_of_group):
         df = self.df.copy()
-        #forecast_periods = self.forecast_periods
 
-        # Параметры для перебора
-        param_grid = {
-            'seasonality_mode': ['multiplicative'],
-            'n_changepoints': [12, 18, 24, 36],
-            'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
-        }
-
-        # Сортировка и подготовка данных
-        df.reset_index(inplace = True)
+        df.reset_index(inplace=True)
         df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-        df = df.sort_values(by = self.column_name_with_date)
+        df = df.sort_values(by=self.column_name_with_date)
 
-        # Разделение на обучающую и тестовую выборки
-        train = df.iloc[:-self.forecast_periods]
-        test = df.iloc[-self.forecast_periods:]
-
-        # Список временных рядов для прогнозирования
-        series_list = [col for col in train.columns if col != self.column_name_with_date]
-
-        results = []  # Результаты параметров для каждого временного ряда
+        series_list = [col for col in df.columns if col != self.column_name_with_date]
+        forecast_df = pd.DataFrame()
 
         for series in series_list:
-            # Подготовка данных для Prophet
-            series_df = train[[self.column_name_with_date, series]].rename(
-                columns = {self.column_name_with_date: 'ds', series: 'y'})
-
-            best_mape = float('inf')
-            best_params = None
-
-            for params in ParameterGrid(param_grid):
-                model = Prophet(
-                                seasonality_mode = params['seasonality_mode'],
-                                n_changepoints = params['n_changepoints'],
-                                changepoint_prior_scale = params['changepoint_prior_scale'])
-
-                model.fit(series_df)
-
-                # Прогнозирование
-                future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-                forecast = model.predict(future)
-
-                # Вычисление MAPE
-                test_series = test[[self.column_name_with_date, series]].rename(
-                    columns = {self.column_name_with_date: 'ds', series: 'y'})
-                forecast_test_period = forecast[-self.forecast_periods:]
-
-                # Сравнение только по датам тестового набора
-                aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
-                aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
-
-                mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
-
-                if mape < best_mape:
-                    best_mape = mape
-                    best_params = params
-
-            results.append((series, best_params, best_mape))
-            print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
-
-        # Прогнозирование для полного набора данных
-        forecast_df = pd.DataFrame()
-        for series, best_params, _ in results:
             series_df = df[[self.column_name_with_date, series]].rename(
-                columns = {self.column_name_with_date: 'ds', series: 'y'})
+                columns={self.column_name_with_date: 'ds', series: 'y'})
 
-            model = Prophet(seasonality_mode = best_params['seasonality_mode'],
-                            n_changepoints = best_params['n_changepoints'],
-                            changepoint_prior_scale = best_params['changepoint_prior_scale'])
+            if type_of_group == 'GROUP_4':
+                model = NeuralProphet(
+                    growth = 'discontinuous',
+                    n_lags = 12,
+                    n_forecasts = self.forecast_periods,
+                    trend_reg = 0.0,
+                    trend_global_local = 'local',
+                    yearly_seasonality = False,
+                    seasonality_mode = 'additive',
+                    season_global_local = 'local',
+                    learning_rate = 0.1,
+                    newer_samples_start = 0.8,  # Учитываем последние 20% данных
+                    newer_samples_weight = 1.5,
+                    drop_missing = True,
+                    batch_size=4
+                )
+            if type_of_group == 'GROUP_2':
+                model = NeuralProphet(
+                    growth='discontinuous',
+                    n_lags=12,
+                    n_forecasts=self.forecast_periods,
+                    trend_reg=0.5,
+                    trend_global_local='local',
+                    yearly_seasonality=False,
+                    seasonality_mode='additive',
+                    season_global_local='local',
+                    learning_rate=0.01,
+                    newer_samples_start=0.9,  # Учитываем последние 10% данных
+                    newer_samples_weight=2,
+                    drop_missing=True,
+                    batch_size=4,
+                )
+            if type_of_group == 'GROUP_1':
+                model = NeuralProphet(
+                    growth='discontinuous',
+                    n_lags=12,
+                    n_forecasts=self.forecast_periods,
+                    trend_reg=0.2,
+                    trend_global_local='local',
+                    yearly_seasonality=12,
+                    seasonality_mode='multiplicative',
+                    season_global_local='local',
+                    learning_rate=0.01,
+                    newer_samples_start=0.8,  # Учитываем последние 20% данных
+                    newer_samples_weight=2,
+                    drop_missing=True,
+                    batch_size=8,
+                )
+            if type_of_group == 'GROUP_3':
+                model = NeuralProphet(
+                    growth='discontinuous',
+                    n_lags=6,
+                    n_forecasts=self.forecast_periods,
+                    trend_reg=0.0,
+                    trend_global_local='local',
+                    yearly_seasonality=12,
+                    seasonality_mode='multiplicative',
+                    season_global_local='local',
+                    learning_rate=0.05,
+                    drop_missing=True,
+                    batch_size=8,
+                )
 
-            model.fit(series_df)
-            future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+            model.fit(series_df, freq='MS')
+            future = model.make_future_dataframe(df=series_df, periods=self.forecast_periods,
+                                                 n_historic_predictions=False)
             forecast = model.predict(future)
 
             if forecast_df.empty:
                 forecast_df['ds'] = forecast['ds']
-            forecast_df[series] = forecast['yhat']
 
-        forecast_df.set_index('ds', inplace = True)
-        # Введение названия столбца с индексом для столбца с датами
-        forecast_df = forecast_df.reset_index()
-        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
-        forecast_df.set_index(self.column_name_with_date, inplace = True)
+            # Суммируем прогнозы на несколько шагов вперед
+            forecast_df[series] = forecast[[f'yhat{i + 1}' for i in range(self.forecast_periods)]].sum(axis=1)
 
+        forecast_df.set_index('ds', inplace=True)
+        forecast_df = forecast_df.reset_index().rename(columns={'ds': self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace=True)
         forecast_df = forecast_df.tail(self.forecast_periods)
 
         return forecast_df
+
 
     def auto_arima_forecast(self):
         """
@@ -921,7 +1020,9 @@ class Forecast_Models:
                       error_dir: str = None,
                       plots_dir: str = None,
                       plots: bool = False,
-                      test: bool = False):
+                      test: bool = False,
+                      type_of_group: str = None,
+                      ):
         """
             Функция для применения интересующей ML-модели.
             Args:
@@ -937,7 +1038,7 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': self.prophet_forecast,
+                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
@@ -1000,7 +1101,9 @@ class Forecast_Models:
                       error_dir: str = None,
                       plots_dir: str = None,
                       plots: bool = False,
-                      test: bool = False):
+                      test: bool = False,
+                      type_of_group: str = None,
+                      ):
         """
             Функция для применения интересующей ML-модели.
             Args:
@@ -1014,9 +1117,10 @@ class Forecast_Models:
             Returns:
                 forecast_df: Прогнозный DataFrame.
         """
+
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': self.prophet_forecast,
+                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
@@ -1060,17 +1164,5 @@ class Forecast_Models:
         forecast_df = method_map[model_name]()
         print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}",
             forecast_df.round(4), sep = '\n', end = '\n\n')
-        
-        # # Если задан параметр plots == True
-        # if plots and plots_dir is not None:
-        #     Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-        #                                                     save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
-        # # Если задан параметр test == True    
-        #if test:
-        #    error_df = Postprocessing.calculate_forecast_error(
-        #                        forecast_df = forecast_df,
-        #                        test_data = test_data
-        #                    )
-        #    error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
 
         forecasts.append({ model_name: forecast_df})
