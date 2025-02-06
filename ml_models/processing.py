@@ -7,6 +7,15 @@ from prophet import Prophet
 from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
+
+from catboost import CatBoostRegressor
+from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.model_selection import GridSearchCV
+
+import xgboost as xgb
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
+
 from scipy import linalg
 from contextlib import contextmanager
 import logging
@@ -849,6 +858,257 @@ class Forecast_Models:
 
         return forecast_df
 
+    ################ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ CATBOOST#####################
+    def preprocess_data(self, data, column):
+        #X = data.copy()
+        data[self.column_name_with_date] = pd.to_datetime(data[self.column_name_with_date])
+        y = data[column]
+        data['Year'] = data[self.column_name_with_date].dt.year
+        data['Quarter_start'] = data[self.column_name_with_date].dt.is_quarter_start
+        data['Quarter_end'] = data[self.column_name_with_date].dt.is_quarter_end
+        data['Start_Year'] = data[self.column_name_with_date].dt.is_year_start
+        data['End_Year'] = data[self.column_name_with_date].dt.is_year_end
+        data['Month'] = data[self.column_name_with_date].dt.month
+        data['Quarter'] = data[self.column_name_with_date].dt.quarter
+    
+        feature_names = ['Year', 
+                         'Start_Year',
+                         'End_Year',
+                         'Quarter_start', 
+                         'Quarter_end', 
+                         'Month', 
+                         'Quarter']
+        X = data[feature_names]
+        return X, y
+
+    
+    def CatBoostRegressor_model(self):
+        #column_name_with_date = 'Date'
+        #forecast_periods = 5
+        
+        #param_grid = {'depth': [4, 5, 6, 7, 8, 9, 10],
+        #              'learning_rate': [0.001, 0.05, 0.1],
+        #              'n_estimators': [15, 20, 25, 30, 35, 40],
+        #              'l2_leaf_reg': [5, 10],
+        #             'loss_function': ['MAPE', 'RMSE']}
+
+        param_grid = {'depth': [5, 10],
+              'learning_rate': [0.01, 0.05, 0.1],
+              'n_estimators': [10],
+              'l2_leaf_reg': [1, 5, 10],
+              'boosting_type': ['Plain'],
+              #'max_ctr_complexity': [2, 8],
+             'loss_function': ['MAPE', 'RMSE']}
+        
+        data = self.df.copy()
+        
+        #Определение дат для прогноза
+        date_range = pd.date_range(start = data.index[-1] + pd.DateOffset(months = 1), 
+                                   periods = self.forecast_periods,
+                                   freq = 'MS')
+        data.index = pd.to_datetime(data.index)
+        data = data.reset_index()
+        data = data.rename(columns = {data.columns[0]: self.column_name_with_date})
+        data = data.sort_values(by = self.column_name_with_date)
+        
+        # Разделение на обучающую и тестовую выборки
+        train = data.iloc[:-self.forecast_periods]
+        test = data.iloc[-self.forecast_periods:]
+        
+        # Прогнозирование для полного набора данных
+        forecast_df = pd.DataFrame()
+        future_data = pd.DataFrame(data = {self.column_name_with_date: date_range})
+        for column in data.columns[1:]:
+            best_mape = float('inf')
+            best_params = None
+            ts_train = train[[self.column_name_with_date, column]]
+            ts_test = test[[self.column_name_with_date, column]]
+            #Создание признаков
+            X_train, y_train = self.preprocess_data(ts_train, column)
+            X_test, y_test = self.preprocess_data(ts_test, column)
+            #Настройка CatBoostRegressor с GridSearchCV
+            model = CatBoostRegressor(silent = True)
+            grid_search = GridSearchCV(model, param_grid, cv = 3, scoring = 'neg_mean_squared_error')
+            #Обучение
+            grid_search.fit(X_train, y_train)
+            #Прогнозирование на тестовых данных
+            best_model = grid_search.best_estimator_ #поиск наилучшей модели
+            test_pred = best_model.predict(X_test)
+            #Вычисление ошибки MAPE на тестовых данных
+            mape = mean_absolute_percentage_error(y_test, test_pred) * 100
+            if mape < best_mape:
+                    best_mape = mape
+                    best_params = best_model
+            
+            print(f"Лучшие параметры для {column}: {best_params}, MAPE: {best_mape:.1f}")
+            #future_data = pd.DataFrame(data = {future_data: date_range})
+            future_data['Year'] = future_data[self.column_name_with_date].dt.year
+            future_data['Quarter_start'] = future_data[self.column_name_with_date].dt.is_quarter_start
+            future_data['Quarter_end'] = future_data[self.column_name_with_date].dt.is_quarter_end
+            future_data['Start_Year'] = future_data[self.column_name_with_date].dt.is_year_start
+            future_data['End_Year'] = future_data[self.column_name_with_date].dt.is_year_end
+            future_data['Month'] = future_data[self.column_name_with_date].dt.month
+            future_data['Quarter'] = future_data[self.column_name_with_date].dt.quarter
+            X_future = future_data[['Year', 'Quarter_start', 'Quarter_end', 'Start_Year', 'End_Year', 'Month', 'Quarter']]
+            forecast = best_model.predict(X_future)
+            forecast_df[column] = forecast
+        forecast_df.insert(0, self.column_name_with_date, date_range)
+        forecast_df.set_index(self.column_name_with_date, inplace = True)
+        return forecast_df
+
+########################################################### XGBOOST ######################################################################################
+    @staticmethod
+    def get_season(df):
+        """
+            Create season
+        """
+        month = df.index.month
+        season = []
+
+        for i in range(len(month)):
+            if month[i] in range(3, 5):
+                season.append(2) #spring
+            elif month[i] in range(6, 8):
+                season.append(3) #summer
+            elif month[i] in range(9, 11):
+                season.append(4) #autumn
+            else:
+                season.append(1) #winter
+        #df['season'] = season
+        return season
+
+    @staticmethod    
+    def create_features(df):
+        """
+            Create feature
+        """
+        df['year'] = df.index.year
+        df['year start'] = df.index.is_year_start
+        #df['year stop'] = df.index.is_year_end
+        df['month'] = df.index.month
+        #df['quarter'] = df.index.quarter
+        df['quarter start'] = df.index.is_quarter_start
+        #df['quarter end'] = df.index.is_quarter_end
+        df['season'] = get_season(df)
+        return df
+
+    @staticmethod
+    def add_lags(df):
+        target_map = df['Share'].to_dict()
+        df['lag1'] = (df.index - pd.DateOffset(months = 12)).map(target_map)
+        df['lag2'] = (df.index - pd.DateOffset(months = 24)).map(target_map)
+        df['lag3'] = (df.index - pd.DateOffset(months = 36)).map(target_map)
+        return df
+
+    def XGBRegressor_model(self, n_splits, FEATURES, TARGET_VALUE, test_size = 12, gap = 1):
+        if ( max(self.df.index.year) - min(self.df.index.year) ) < n_splits:
+            raise ValueError('Выберите меньшее целое число фолдов (разбиений)')
+
+        df_full = self.df.copy()
+        FEATURES = FEATURES
+        TARGET = TARGET_VALUE
+        #average_MSE = []
+        #average_MAPE = []
+        for column in df_full.columns:
+            tss = TimeSeriesSplit(n_splits = n_splits, test_size = test_size, gap = gap)
+            df = df_full[[column]]
+            df.rename(columns = {column: 'Share'}, inplace = True)
+            df = df.sort_index()
+
+            #Кросс-валидация
+            fold = 0
+            #preds = []
+            #scores = []
+            iterations = []
+            for train_idx, val_idx in tss.split(df):
+                train = df.iloc[train_idx]
+                test = df.iloc[val_idx]
+            
+                train = Forecast_Models.create_features(train)
+                test = Forecast_Models.create_features(test)
+                
+                train = Forecast_Models.add_lags(train)
+                test = Forecast_Models.add_lags(test)
+            
+                #FEATURES = ['year', 'year start', 'year stop', 'month', 'quarter', 'quarter start', 'quarter end', 'season']
+                #TARGET = 'Share'
+            
+                X_train = train[FEATURES]
+                y_train = train[TARGET]
+            
+                X_test = test[FEATURES]
+                y_test = test[TARGET]
+            
+                reg = xgb.XGBRegressor(base_score = 0.5,
+                        booster = 'gbtree', 
+                        n_estimators = 1000,
+                        early_stopping_rounds = 50,
+                        objective = 'reg:linear',
+                    learning_rate = 0.1,
+                        max_depth = 8, 
+                        min_child_weight = 7, 
+                        gamma = 0.4, 
+                        subsample = 0.7, 
+                        colsample_bytree = 0.6, 
+                        reg_alpha = 0.05,
+                        reg_lambda = 1.0)
+                reg.fit(X_train, y_train,
+                        eval_set = [(X_train, y_train), (X_test, y_test)],
+                        verbose = False)
+            
+                y_pred = reg.predict(X_test)
+                #preds.append(y_pred)
+                #score = np.sqrt(mean_absolute_percentage_error(y_test, y_pred))
+                #scores.append(score)
+                iterations.append(reg.best_iteration)
+                
+            #Считаем нужное количество деревьев для корректного прогноза
+            n_estimators_new = int(np.round((np.average(iterations)), 0))
+
+            #Разделяем опять всю выборку на тренировочную и тестовую в зависимости от того, на сколько месяцев предсказываем
+            train_df = df.iloc[:-self.forecast_periods]
+            test_df = df.iloc[-self.forecast_periods:]
+            #Добавление категориальных признаков
+            train_df = Forecast_Models.create_features(train_df)
+            test_df = Forecast_Models.create_features(test_df)
+            
+            train_df = Forecast_Models.add_lags(train_df)
+            test_df = Forecast_Models.add_lags(test_df)
+            
+            X_train_ = train_df[FEATURES]
+            y_train_ = train_df[TARGET]
+        
+            X_test_ = test_df[FEATURES]
+            y_test_ = test_df[TARGET]
+            
+            reg = xgb.XGBRegressor(base_score = 0.5,
+                        booster = 'gbtree', 
+                        n_estimators = n_estimators_new,
+                        early_stopping_rounds = 50,
+                        objective = 'reg:linear',
+                    learning_rate = 0.1,
+                        max_depth = 8, 
+                        min_child_weight = 7, 
+                        gamma = 0.4, 
+                        subsample = 0.7, 
+                        colsample_bytree = 0.6, 
+                        reg_alpha = 0.05,
+                        reg_lambda = 1.0)
+            reg.fit(X_train_, y_train_,
+                    eval_set = [(X_train_, y_train_)],
+                    verbose = False)
+            
+            test_pred = reg.predict(X_test_)
+            #print(f'MSE для {column}: ', np.round(mean_squared_error(y_test_, test_pred), 2),
+            #f'; MAPE для {column}: ', "{:.1%}".format(mean_absolute_percentage_error(y_test_, test_pred)))
+        #average_MSE.append(mean_squared_error(y_test_, test_pred))
+        #average_MAPE.append(mean_absolute_percentage_error(y_test_, test_pred))
+        return test_pred
+
+##########################################################################################################################################################
+
+
+
 
     def process_model(self,
                       model_name: str,
@@ -870,8 +1130,11 @@ class Forecast_Models:
                 forecast_df: Прогнозный DataFrame.
         """
         method_map = {
+                
                 'ARIMA': self.auto_arima_forecast,
                 'Prophet': self.prophet_forecast,
+                'CatBoostRegressor': self.CatBoostRegressor_model,
+                'XGBRegressor_model': self.XGBRegressor_model,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
@@ -923,7 +1186,7 @@ class Forecast_Models:
     
 
     #Перегрузка функций
-    def process_model(self,
+    def process_model_PARALLEL(self,
                       forecasts,
                       tests,
                       trains,

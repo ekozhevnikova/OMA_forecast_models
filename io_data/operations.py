@@ -260,7 +260,7 @@ class Table:
         return data_old
     
 
-    def make_style_of_table(self, writer, sheet_name: str, width_col_1: float, width_col_2: float, width_col_3: float):
+    def make_style_of_table(self, writer, sheet_name: str, width_col_1: float, width_col_2: float, width_col_3: float, num_format = '0.0000', column_start = 2):
         """
         Args:
             filename: file with dataframe
@@ -284,7 +284,7 @@ class Table:
                                             'align': 'vcenter', #выравнение текста в ячейке
                                             'center_across': True
                                         })
-        table_fmt = workbook.add_format({'num_format': '0.0000', 
+        table_fmt = workbook.add_format({'num_format': num_format, 
                                          'align': 'center', #выравнение текста в ячейке
                                          'align': 'vcenter', #выравнение текста в ячейке
                                          'center_across': True})
@@ -293,7 +293,8 @@ class Table:
             worksheet.write(0, col_num + 1, value, header_format)
 
         for col in range(len(self.df.columns)):
-            writer.sheets[sheet_name].set_column(2, col + 1, width_col_3, table_fmt)
+            writer.sheets[sheet_name].set_column(1,  col + 1, width_col_3, table_fmt)
+            #writer.sheets[sheet_name].set_column(column_start, col + 1, width_col_3, table_fmt)
         worksheet.set_column('A:A', width_col_1)
         worksheet.set_column('B:B', width_col_2)
         #writer.close()

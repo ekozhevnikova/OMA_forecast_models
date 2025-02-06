@@ -7,6 +7,8 @@ import threading
 from OMA_tools.ml_models.preprocessing import Preprocessing
 from OMA_tools.ml_models.processing import Forecast_Models
 from OMA_tools.ml_models.postprocessing import Postprocessing
+from OMA_tools.io_data.operations import Table
+
 
 
 class GROUPS():
@@ -176,7 +178,35 @@ class GROUPS():
                                     test_data = test_data
                                 )
                 error_df.to_excel(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx')
-                
+
+                writer = pd.ExcelWriter(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx', engine = 'xlsxwriter')
+                self.df.to_excel(writer, sheet_name = 'Sheet1', startrow = 1, header = False)
+
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                header_format = workbook.add_format({
+                                                    'bold': True,
+                                                    'text_wrap': True, #перенос текста
+                                                    'align': 'center', #выравнение текста в ячейке
+                                                    'align': 'vcenter', #выравнение текста в ячейке
+                                                    'center_across': True
+                                                })
+                table_fmt = workbook.add_format({'num_format': '0.0', 
+                                                'align': 'center', #выравнение текста в ячейке
+                                                'align': 'vcenter', #выравнение текста в ячейке
+                                                'center_across': True})
+
+                for col_num, value in enumerate(self.df.columns.values):
+                    worksheet.write(0, col_num + 1, value, header_format)
+
+                for col in range(len(self.df.columns)):
+                    writer.sheets['Sheet1'].set_column(1,  col + 1, 17.0, table_fmt)
+                    #writer.sheets[sheet_name].set_column(column_start, col + 1, width_col_3, table_fmt)
+                worksheet.set_column('A:A', 17.0)
+                #worksheet.set_column('B:B', width_col_2)
+                writer.close()
+
 
         avg_forecast = Postprocessing.calculate_average_forecast(forecasts_with_weight)
         #avg_forecast = Postprocessing.calculate_average_forecast(list(map(lambda x: list(x.values())[0], forecasts)))
