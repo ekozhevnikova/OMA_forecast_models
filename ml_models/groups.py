@@ -42,19 +42,19 @@ class GROUPS():
             trend_test_result = mk.original_test(time_series)
 
             #Есть сезонность и есть тренд
-            if (correlation >= 0.5) and trend_test_result.h == True:
+            if (correlation >= 0.65) and trend_test_result.h == True:
                 df_list_1.append(self.df[column])
 
             #Нет сезонности, но есть тренд
-            if (correlation < 0.5) and trend_test_result.h == True:
+            if (correlation < 0.65) and trend_test_result.h == True:
                 df_list_2.append(self.df[column])
 
             #Есть сезонность, но нет тренда
-            if (correlation >= 0.5) and trend_test_result.h == False:
+            if (correlation >= 0.65) and trend_test_result.h == False:
                 df_list_3.append(self.df[column])
 
             #Нет сезонности и нет тренда
-            if (correlation < 0.5) and trend_test_result.h == False:
+            if (correlation < 0.65) and trend_test_result.h == False:
                 df_list_4.append(self.df[column])
 
         group_1 = pd.DataFrame(df_list_1).T
