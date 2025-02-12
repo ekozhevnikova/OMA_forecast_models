@@ -148,7 +148,7 @@ class GROUPS():
              if model_name not in groups[group_key]:
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
-                t = threading.Thread(target = Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model, 
+                t = threading.Thread(target = Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model_PARALLEL, 
                                     args = (forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test))
                 t.start()
                 threads.append(t)
@@ -178,7 +178,8 @@ class GROUPS():
                                     test_data = test_data
                                 )
                 error_df.to_excel(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx')
-
+                
+                #Установка внешнего вида итоговых таблиц
                 writer = pd.ExcelWriter(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx', engine = 'xlsxwriter')
                 self.df.to_excel(writer, sheet_name = 'Sheet1', startrow = 1, header = False)
 
@@ -188,14 +189,11 @@ class GROUPS():
                 header_format = workbook.add_format({
                                                     'bold': True,
                                                     'text_wrap': True, #перенос текста
-                                                    'align': 'center', #выравнение текста в ячейке
-                                                    'align': 'vcenter', #выравнение текста в ячейке
-                                                    'center_across': True
+                                                    'align': 'center' #выравнение текста в ячейке
                                                 })
                 table_fmt = workbook.add_format({'num_format': '0.0', 
-                                                'align': 'center', #выравнение текста в ячейке
-                                                'align': 'vcenter', #выравнение текста в ячейке
-                                                'center_across': True})
+                                                'align': 'center' #выравнение текста в ячейке
+                                                })
 
                 for col_num, value in enumerate(self.df.columns.values):
                     worksheet.write(0, col_num + 1, value, header_format)
