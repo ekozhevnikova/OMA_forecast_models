@@ -12,7 +12,7 @@ from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
 #from ml_models.groups import *
-from OMA_tools.ml_models.groups import GROUPS
+#from OMA_tools.ml_models.groups import GROUPS
 from neuralprophet import NeuralProphet
 
 #==== Это для нейронки=====#

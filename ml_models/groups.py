@@ -135,7 +135,7 @@ class GROUPS():
              if model_name not in groups[group_key]:
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
-                 t = threading.Thread(target=Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model,
+                 t = threading.Thread(target=Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model_PARALLEL,
                                       args=(forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test),
                                       kwargs={'type_of_group': type_of_group})
 
