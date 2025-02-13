@@ -1,4 +1,5 @@
 import sys
+import os
 import numpy as np
 import pandas as pd
 #locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
@@ -10,7 +11,8 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
-from ml_models.groups import *
+#from ml_models.groups import *
+from OMA_tools.ml_models.groups import GROUPS
 from neuralprophet import NeuralProphet
 
 #==== Это для нейронки=====#
