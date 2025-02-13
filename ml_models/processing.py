@@ -998,7 +998,7 @@ class Forecast_Models:
             ])
             model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
 
-            model.fit(X_train, y_train, epochs=100, batch_size=2, validation_data=(X_test, y_test), verbose=1)
+            model.fit(X_train, y_train, epochs=100, batch_size=2, validation_data=(X_test, y_test), verbose=False)
 
             # Прогнозирование на `self.forecast_periods` шагов
             def predict_next(model, data, steps):
