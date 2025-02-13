@@ -652,118 +652,118 @@ class Forecast_Models:
 
         return result_df_forecast
 
-    # def prophet_forecast(self):
-    #     """
-    #         Метод PROPHET.
-    #         Универсальный для всех ВР.
-    #
-    #             Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
-    #         параметры модели для каждого ряда при помощи Grid Search, минимизируя ошибку MAPE.
-    #
-    #             Параметры модели Prophet:
-    #                 seasonality_mode: управляет характером сезонности (аддитивный или мультипликативный).
-    #                 n_changepoints: задает количество точек, где модель может изменять направление тренда.
-    #                 changepoint_prior_scale: регулирует гибкость модели в этих точках, чтобы учесть изменения или сгладить тренд.
-    #
-    #             Args:
-    #                 plots: Построение графиков (по умолчанию False)
-    #
-    #             Returns:
-    #                 Новый ДатаФрейм с прогнозом
-    #     """
-    #     # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
-    #     df = self.df.copy()
-    #     #forecast_periods = self.forecast_periods
-    #
-    #     # Параметры для перебора
-    #     param_grid = {
-    #         'seasonality_mode': ['multiplicative'],
-    #         'n_changepoints': [12, 18, 24, 36],
-    #         'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
-    #     }
-    #
-    #     # Сортировка и подготовка данных
-    #     df.reset_index(inplace = True)
-    #     df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-    #     df = df.sort_values(by = self.column_name_with_date)
-    #
-    #     # Разделение на обучающую и тестовую выборки
-    #     train = df.iloc[:-self.forecast_periods]
-    #     test = df.iloc[-self.forecast_periods:]
-    #
-    #     # Список временных рядов для прогнозирования
-    #     series_list = [col for col in train.columns if col != self.column_name_with_date]
-    #
-    #     results = []  # Результаты параметров для каждого временного ряда
-    #
-    #     for series in series_list:
-    #         # Подготовка данных для Prophet
-    #         series_df = train[[self.column_name_with_date, series]].rename(
-    #             columns = {self.column_name_with_date: 'ds', series: 'y'})
-    #
-    #         best_mape = float('inf')
-    #         best_params = None
-    #
-    #         for params in ParameterGrid(param_grid):
-    #             model = Prophet(
-    #                             seasonality_mode = params['seasonality_mode'],
-    #                             n_changepoints = params['n_changepoints'],
-    #                             changepoint_prior_scale = params['changepoint_prior_scale'])
-    #
-    #             model.fit(series_df)
-    #
-    #             # Прогнозирование
-    #             future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-    #             forecast = model.predict(future)
-    #
-    #             # Вычисление MAPE
-    #             test_series = test[[self.column_name_with_date, series]].rename(
-    #                 columns = {self.column_name_with_date: 'ds', series: 'y'})
-    #             forecast_test_period = forecast[-self.forecast_periods:]
-    #
-    #             # Сравнение только по датам тестового набора
-    #             aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
-    #             aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
-    #
-    #             mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
-    #
-    #             if mape < best_mape:
-    #                 best_mape = mape
-    #                 best_params = params
-    #
-    #         results.append((series, best_params, best_mape))
-    #         print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
-    #
-    #     # Прогнозирование для полного набора данных
-    #     forecast_df = pd.DataFrame()
-    #     for series, best_params, _ in results:
-    #         series_df = df[[self.column_name_with_date, series]].rename(
-    #             columns = {self.column_name_with_date: 'ds', series: 'y'})
-    #
-    #         model = Prophet(seasonality_mode = best_params['seasonality_mode'],
-    #                         n_changepoints = best_params['n_changepoints'],
-    #                         changepoint_prior_scale = best_params['changepoint_prior_scale'])
-    #
-    #         model.fit(series_df)
-    #         future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-    #         forecast = model.predict(future)
-    #
-    #         if forecast_df.empty:
-    #             forecast_df['ds'] = forecast['ds']
-    #         forecast_df[series] = forecast['yhat']
-    #
-    #     forecast_df.set_index('ds', inplace = True)
-    #     # Введение названия столбца с индексом для столбца с датами
-    #     forecast_df = forecast_df.reset_index()
-    #     forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
-    #     forecast_df.set_index(self.column_name_with_date, inplace = True)
-    #
-    #     forecast_df = forecast_df.tail(self.forecast_periods)
-    #
-    #     return forecast_df
-################3
+    def prophet_forecast(self):
+        """
+           Метод PROPHET.
+           Универсальный для всех ВР.
 
-    def prophet_forecast(self, type_of_group):
+               Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
+           параметры модели для каждого ряда при помощи Grid Search, минимизируя ошибку MAPE.
+
+                Параметры модели Prophet:
+                    seasonality_mode: управляет характером сезонности (аддитивный или мультипликативный).
+                    n_changepoints: задает количество точек, где модель может изменять направление тренда.
+                    changepoint_prior_scale: регулирует гибкость модели в этих точках, чтобы учесть изменения или сгладить тренд.
+
+                Args:
+                    plots: Построение графиков (по умолчанию False)
+
+                Returns:
+                    Новый ДатаФрейм с прогнозом
+        """
+        # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
+        df = self.df.copy()
+        #forecast_periods = self.forecast_periods
+
+        # Параметры для перебора
+        param_grid = {
+            'seasonality_mode': ['multiplicative'],
+            'n_changepoints': [12, 18, 24, 36],
+            'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
+        }
+
+        # Сортировка и подготовка данных
+        df.reset_index(inplace = True)
+        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
+        df = df.sort_values(by = self.column_name_with_date)
+
+        # Разделение на обучающую и тестовую выборки
+        train = df.iloc[:-self.forecast_periods]
+        test = df.iloc[-self.forecast_periods:]
+
+        # Список временных рядов для прогнозирования
+        series_list = [col for col in train.columns if col != self.column_name_with_date]
+
+        results = []  # Результаты параметров для каждого временного ряда
+
+        for series in series_list:
+            # Подготовка данных для Prophet
+            series_df = train[[self.column_name_with_date, series]].rename(
+                columns = {self.column_name_with_date: 'ds', series: 'y'})
+
+            best_mape = float('inf')
+            best_params = None
+
+            for params in ParameterGrid(param_grid):
+                model = Prophet(
+                                seasonality_mode = params['seasonality_mode'],
+                                n_changepoints = params['n_changepoints'],
+                                changepoint_prior_scale = params['changepoint_prior_scale'])
+
+                model.fit(series_df)
+
+                # Прогнозирование
+                future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+                forecast = model.predict(future)
+
+                # Вычисление MAPE
+                test_series = test[[self.column_name_with_date, series]].rename(
+                    columns = {self.column_name_with_date: 'ds', series: 'y'})
+                forecast_test_period = forecast[-self.forecast_periods:]
+
+                # Сравнение только по датам тестового набора
+                aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
+                aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
+
+                mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
+
+                if mape < best_mape:
+                    best_mape = mape
+                    best_params = params
+
+            results.append((series, best_params, best_mape))
+            print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
+
+        # Прогнозирование для полного набора данных
+        forecast_df = pd.DataFrame()
+        for series, best_params, _ in results:
+            series_df = df[[self.column_name_with_date, series]].rename(
+                columns = {self.column_name_with_date: 'ds', series: 'y'})
+
+            model = Prophet(seasonality_mode = best_params['seasonality_mode'],
+                            n_changepoints = best_params['n_changepoints'],
+                            changepoint_prior_scale = best_params['changepoint_prior_scale'])
+
+            model.fit(series_df)
+            future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+            forecast = model.predict(future)
+
+            if forecast_df.empty:
+                forecast_df['ds'] = forecast['ds']
+            forecast_df[series] = forecast['yhat']
+
+        forecast_df.set_index('ds', inplace = True)
+        # Введение названия столбца с индексом для столбца с датами
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)
+
+        forecast_df = forecast_df.tail(self.forecast_periods)
+
+        return forecast_df
+
+
+#    def prophet_forecast(self, type_of_group):
         df = self.df.copy()
 
         df.reset_index(inplace=True)
@@ -952,6 +952,7 @@ class Forecast_Models:
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         return forecast_df
+    
 #================== ЭТО ВСЕ НЕЙРОНКА, НО МБ ОНА НЕ НУЖНА================================
     @staticmethod
     def create_sequences(data, seq_length):
