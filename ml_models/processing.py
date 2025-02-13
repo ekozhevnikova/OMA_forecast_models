@@ -1092,7 +1092,7 @@ class Forecast_Models:
     
 
     #Перегрузка функций
-    def process_model(self,
+    def process_model_PARALLEL(self,
                       forecasts,
                       tests,
                       trains,
