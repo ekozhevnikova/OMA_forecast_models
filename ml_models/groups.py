@@ -6,9 +6,9 @@ import threading
 #from ml_models.preprocessing import Preprocessing
 #from ml_models.processing import Forecast_Models
 #from ml_models.postprocessing import Postprocessing
-from OMA_tools.ml_models.preprocessing import Preprocessing
-from OMA_tools.ml_models.processing import Forecast_Models
-from OMA_tools.ml_models.postprocessing import Postprocessing
+from OMA_forecast_models.ml_models.preprocessing import Preprocessing
+from OMA_forecast_models.ml_models.processing import Forecast_Models
+from OMA_forecast_models.ml_models.postprocessing import Postprocessing
 
 
 class GROUPS():

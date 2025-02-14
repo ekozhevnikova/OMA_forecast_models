@@ -13,8 +13,8 @@ from scipy import linalg
 from contextlib import contextmanager
 #from ml_models.groups import *
 #from OMA_tools.ml_models.groups import GROUPS
-from OMA_tools.ml_models.preprocessing import Preprocessing
-from OMA_tools.ml_models.postprocessing import Postprocessing
+from OMA_forecast_models.ml_models.preprocessing import Preprocessing
+from OMA_forecast_models.ml_models.postprocessing import Postprocessing
 from neuralprophet import NeuralProphet
 import threading
 
