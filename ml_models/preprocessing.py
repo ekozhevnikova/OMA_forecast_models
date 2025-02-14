@@ -4,7 +4,7 @@ import pandas as pd
 import pymorphy3
 from datetime import datetime
 import locale
-locale.setlocale(locale.LC_ALL, 'ru_RU')
+locale.setlocale(locale.LC_ALL, 'ru_RU.utf8')
 from statsmodels.tsa.stattools import adfuller
 from OMA_forecast_models.io_data.operations import File, Table, Dict_Operations
 #from io_data.operations import File, Table, Dict_Operations
