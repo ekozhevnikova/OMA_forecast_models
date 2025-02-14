@@ -15,16 +15,16 @@ from contextlib import contextmanager
 #from OMA_tools.ml_models.groups import GROUPS
 from OMA_forecast_models.ml_models.preprocessing import Preprocessing
 from OMA_forecast_models.ml_models.postprocessing import Postprocessing
-from neuralprophet import NeuralProphet
+#from neuralprophet import NeuralProphet
 import threading
 
 #==== Это для нейронки=====#
-#import tensorflow as tf
-#from tensorflow.keras import Sequential
-#from tensorflow.keras.layers import LSTM, Dense, Dropout
-#from sklearn.preprocessing import MinMaxScaler
-#from tensorflow.keras.optimizers import Adam
-#from tensorflow.keras import Model
+import tensorflow as tf
+from tensorflow.keras import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from sklearn.preprocessing import MinMaxScaler
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import Model
 
 #==== Это для скрытия бесконечных логов профета=====#
 import logging
@@ -657,7 +657,7 @@ class Forecast_Models:
 
         return result_df_forecast
 
-    #def prophet_forecast(self):
+    def prophet_forecast(self):
         """
            Метод PROPHET.
            Универсальный для всех ВР.
@@ -767,7 +767,7 @@ class Forecast_Models:
 
         return forecast_df
 
-    def prophet_forecast_per_thread(self, type_of_group, df, series, forecast_df):
+ #   def prophet_forecast_per_thread(self, type_of_group, df, series, forecast_df):
         series_df = df[[self.column_name_with_date, series]].rename(
                 columns={self.column_name_with_date: 'ds', series: 'y'})
 
@@ -845,7 +845,8 @@ class Forecast_Models:
         # Суммируем прогнозы на несколько шагов вперед
         forecast_df[series] = forecast[[f'yhat{i + 1}' for i in range(self.forecast_periods)]].sum(axis=1)
 
-    def prophet_forecast(self, type_of_group):
+
+  #  def prophet_forecast(self, type_of_group):
         df = self.df.copy()
 
         df.reset_index(inplace=True)
