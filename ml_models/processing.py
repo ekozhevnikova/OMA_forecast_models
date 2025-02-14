@@ -15,16 +15,16 @@ from contextlib import contextmanager
 #from OMA_tools.ml_models.groups import GROUPS
 from OMA_forecast_models.ml_models.preprocessing import Preprocessing
 from OMA_forecast_models.ml_models.postprocessing import Postprocessing
-#from neuralprophet import NeuralProphet
+from neuralprophet import NeuralProphet
 import threading
 
 #==== Это для нейронки=====#
-import tensorflow as tf
-from tensorflow.keras import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras import Model
+#import tensorflow as tf
+#from tensorflow.keras import Sequential
+#from tensorflow.keras.layers import LSTM, Dense, Dropout
+#from sklearn.preprocessing import MinMaxScaler
+#from tensorflow.keras.optimizers import Adam
+#from tensorflow.keras import Model
 
 #==== Это для скрытия бесконечных логов профета=====#
 import logging
@@ -657,7 +657,7 @@ class Forecast_Models:
 
         return result_df_forecast
 
-    def prophet_forecast(self):
+   # def prophet_forecast(self):
         """
            Метод PROPHET.
            Универсальный для всех ВР.
@@ -763,6 +763,98 @@ class Forecast_Models:
         forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
+        forecast_df = forecast_df.tail(self.forecast_periods)
+
+        return forecast_df
+    
+
+    def prophet_forecast(self, type_of_group):
+        df = self.df.copy()
+        df.reset_index(inplace=True)
+        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
+        df = df.sort_values(by=self.column_name_with_date)
+        series_list = [col for col in df.columns if col != self.column_name_with_date]
+        forecast_df = pd.DataFrame()
+        for series in series_list:
+            series_df = df[[self.column_name_with_date, series]].rename(
+                columns={self.column_name_with_date: 'ds', series: 'y'})
+            if type_of_group == 'GROUP_4':
+                model = NeuralProphet(
+                    growth = 'discontinuous',
+                    n_lags = 12,
+                    n_forecasts = self.forecast_periods,
+                    trend_reg = 0.0,
+                    trend_global_local = 'local',
+                    yearly_seasonality = False,
+                    seasonality_mode = 'additive',
+                    season_global_local = 'local',
+                    learning_rate = 0.1,
+                    newer_samples_start = 0.8,  # Учитываем последние 20% данных
+                    newer_samples_weight = 1.5,
+                    drop_missing = True,
+                    batch_size=4
+                )
+            if type_of_group == 'GROUP_2':
+                model = NeuralProphet(
+                    growth='discontinuous',
+                    n_lags=12,
+                    n_forecasts=self.forecast_periods,
+                    trend_reg=0.5,
+                    trend_global_local='local',
+                    yearly_seasonality=False,
+                    seasonality_mode='additive',
+                    season_global_local='local',
+                    learning_rate=0.01,
+                    newer_samples_start=0.9,  # Учитываем последние 10% данных
+                    newer_samples_weight=2,
+                    drop_missing=True,
+                    batch_size=4,
+                )
+            if type_of_group == 'GROUP_1':
+                model = NeuralProphet(
+                    growth='discontinuous',
+                    n_lags=12,
+                    n_forecasts=self.forecast_periods,
+                    trend_reg=0.2,
+                    trend_global_local='local',
+                    yearly_seasonality=12,
+                    seasonality_mode='multiplicative',
+                    season_global_local='local',
+                    learning_rate=0.01,
+                    newer_samples_start=0.8,  # Учитываем последние 20% данных
+                    newer_samples_weight=2,
+                    drop_missing=True,
+                    batch_size=8,
+                )
+            if type_of_group == 'GROUP_3':
+                model = NeuralProphet(
+                    growth='discontinuous',
+                    n_lags=6,
+                    n_forecasts=self.forecast_periods,
+                    trend_reg=0.0,
+                    trend_global_local='local',
+                    yearly_seasonality=12,
+                    seasonality_mode='multiplicative',
+                    season_global_local='local',
+                    learning_rate=0.05,
+                    drop_missing=True,
+                    batch_size=8,
+                )
+            
+            model.fit(series_df, freq='MS')
+            future = model.make_future_dataframe(df=series_df, periods=self.forecast_periods,
+                                                 n_historic_predictions=False)
+            
+            forecast = model.predict(future)
+
+            if forecast_df.empty:
+                forecast_df['ds'] = forecast['ds']
+
+            # Суммируем прогнозы на несколько шагов вперед
+            forecast_df[series] = forecast[[f'yhat{i + 1}' for i in range(self.forecast_periods)]].sum(axis=1)
+        forecast_df.set_index('ds', inplace=True)
+        forecast_df = forecast_df.reset_index().rename(columns={'ds': self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace=True)
         forecast_df = forecast_df.tail(self.forecast_periods)
 
         return forecast_df
@@ -1055,8 +1147,8 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': self.prophet_forecast,
-                #'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
+                #'Prophet': self.prophet_forecast,
+                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
@@ -1138,8 +1230,8 @@ class Forecast_Models:
 
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                #'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
-                'Prophet': self.prophet_forecast,
+                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
+                #'Prophet': self.prophet_forecast,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
