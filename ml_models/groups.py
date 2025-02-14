@@ -1,12 +1,14 @@
-import os
 import numpy as np
 import pandas as pd
 import json
 import pymannkendall as mk
 import threading
-from ml_models.preprocessing import Preprocessing
-from ml_models.processing import Forecast_Models
-from ml_models.postprocessing import Postprocessing
+#from ml_models.preprocessing import Preprocessing
+#from ml_models.processing import Forecast_Models
+#from ml_models.postprocessing import Postprocessing
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.processing import Forecast_Models
+from OMA_tools.ml_models.postprocessing import Postprocessing
 
 
 class GROUPS():
@@ -133,7 +135,7 @@ class GROUPS():
              if model_name not in groups[group_key]:
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
-                 t = threading.Thread(target=Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model,
+                 t = threading.Thread(target=Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model_PARALLEL,
                                       args=(forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test),
                                       kwargs={'type_of_group': type_of_group})
 

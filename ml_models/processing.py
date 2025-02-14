@@ -1,4 +1,3 @@
-import os
 import sys
 import numpy as np
 import pandas as pd
@@ -17,6 +16,8 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
 from catboost import CatBoostRegressor
+import threading
+
 #==== Это для нейронки=====#
 import tensorflow as tf
 from tensorflow.keras import Sequential
@@ -989,6 +990,112 @@ class Forecast_Models:
 
         return forecast_df
 
+    def prophet_forecast_per_thread(self, type_of_group, df, series, forecast_df):
+        series_df = df[[self.column_name_with_date, series]].rename(
+                columns={self.column_name_with_date: 'ds', series: 'y'})
+
+        if type_of_group == 'GROUP_4':
+            model = NeuralProphet(
+                growth = 'discontinuous',
+                n_lags = 12,
+                n_forecasts = self.forecast_periods,
+                trend_reg = 0.0,
+                trend_global_local = 'local',
+                yearly_seasonality = False,
+                seasonality_mode = 'additive',
+                season_global_local = 'local',
+                learning_rate = 0.1,
+                newer_samples_start = 0.8,  # Учитываем последние 20% данных
+                newer_samples_weight = 1.5,
+                drop_missing = True,
+                batch_size=4
+            )
+        if type_of_group == 'GROUP_2':
+            model = NeuralProphet(
+                growth='discontinuous',
+                n_lags=12,
+                n_forecasts=self.forecast_periods,
+                trend_reg=0.5,
+                trend_global_local='local',
+                yearly_seasonality=False,
+                seasonality_mode='additive',
+                season_global_local='local',
+                learning_rate=0.01,
+                newer_samples_start=0.9,  # Учитываем последние 10% данных
+                newer_samples_weight=2,
+                drop_missing=True,
+                batch_size=4,
+            )
+        if type_of_group == 'GROUP_1':
+            model = NeuralProphet(
+                growth='discontinuous',
+                n_lags=12,
+                n_forecasts=self.forecast_periods,
+                trend_reg=0.2,
+                trend_global_local='local',
+                yearly_seasonality=12,
+                seasonality_mode='multiplicative',
+                season_global_local='local',
+                learning_rate=0.01,
+                newer_samples_start=0.8,  # Учитываем последние 20% данных
+                newer_samples_weight=2,
+                drop_missing=True,
+                batch_size=8,
+            )
+        if type_of_group == 'GROUP_3':
+            model = NeuralProphet(
+                growth='discontinuous',
+                n_lags=6,
+                n_forecasts=self.forecast_periods,
+                trend_reg=0.0,
+                trend_global_local='local',
+                yearly_seasonality=12,
+                seasonality_mode='multiplicative',
+                season_global_local='local',
+                learning_rate=0.05,
+                drop_missing=True,
+                batch_size=8,
+            )
+
+        model.fit(series_df, freq='MS')
+        future = model.make_future_dataframe(df=series_df, periods=self.forecast_periods,
+                                                n_historic_predictions=False)
+        forecast = model.predict(future)
+
+        if forecast_df.empty:
+            forecast_df['ds'] = forecast['ds']
+
+        # Суммируем прогнозы на несколько шагов вперед
+        forecast_df[series] = forecast[[f'yhat{i + 1}' for i in range(self.forecast_periods)]].sum(axis=1)
+
+    def prophet_forecast(self, type_of_group):
+        df = self.df.copy()
+
+        df.reset_index(inplace=True)
+        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
+        df = df.sort_values(by=self.column_name_with_date)
+
+        series_list = [col for col in df.columns if col != self.column_name_with_date]
+        forecast_df = pd.DataFrame()
+        threads = []
+
+        for series in series_list:
+            t = threading.Thread(target=self.prophet_forecast_per_thread,
+                                      args=(type_of_group, df, series, forecast_df))
+
+            t.start()
+            threads.append(t)
+
+        for t in threads:
+            t.join()
+
+        forecast_df.set_index('ds', inplace=True)
+        forecast_df = forecast_df.reset_index().rename(columns={'ds': self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace=True)
+        forecast_df = forecast_df.tail(self.forecast_periods)
+
+        return forecast_df
+
     def auto_arima_forecast(self):
         """
             Метод auto_arima.
@@ -1082,6 +1189,7 @@ class Forecast_Models:
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         return forecast_df
+
 #================== ЭТО ВСЕ НЕЙРОНКА, НО МБ ОНА НЕ НУЖНА================================
     @staticmethod
     def create_sequences(data, seq_length):
@@ -1224,7 +1332,7 @@ class Forecast_Models:
     
 
     #Перегрузка функций
-    def process_model(self,
+    def process_model_PARALLEL(self,
                       forecasts,
                       tests,
                       trains,

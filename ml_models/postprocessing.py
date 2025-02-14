@@ -5,6 +5,8 @@ import pandas as pd
 from datetime import datetime
 from matplotlib import pyplot as plt
 import matplotlib as mpl
+import xlsxwriter
+from xlsxwriter.utility import xl_col_to_name, xl_rowcol_to_cell
 import uuid
 mpl.rc('font',family = 'Arial')
 from threading import Lock
@@ -235,5 +237,225 @@ class Postprocessing:
         # Запись контента в PDF - файл
         with open(f'{directory_path}{output_filename}', 'wb') as file:
             file.write(pdf_data)
+    
+    @staticmethod
+    def generate_report(filename, report_filename, name_for_histogram, N = 364):
+        """
+            Генерация отчета с гистограммами и средними ошибками по второму прогнозируемому месяцу.
+                Args:
+                    filename: Имя входного файла с сырыми данными по ошибкам.
+                    report_filename: Имя выходного файла с отчётом в формате xlsx.
+                    name_for_histogram: Имя для гистограммы. Например, "Прогноз на 12 месяцев"
+                    N = 364: общее число каналов-городов, участвующих в прогнозе.
+                Returns:
+                    Сформированный отчет, а также среднюю ошибку по второму прогнозируемому месяцу.
+        """
+    
+        report = pd.read_excel(filename)
+        #поиск максимально возможной строки в исходном DataFrame
+        max_idx = max(report.index) + 2
+        report.set_index('Date', inplace = True)
+        report.rename(index = {'Mean': 'Среднее по каналу, %'}, inplace = True)
+        
+        #Поиск среднего значения по месяцу N+2
+        average_value = np.round(np.mean(list(report.iloc[1])), 1)
+        #Поиск дисперсии по месяцу N+2
+        disp_value = np.round(np.sqrt(np.var(list(report.iloc[1]))), 1)
+
+        #Подсчет количества значений по кажджому диапазону процентовок
+        next_month = list(report.iloc[1])
+        list_between_0_10 = []
+        list_between_10_20 = []
+        list_between_20_30 = []
+        list_between_30_75 = []
+        list_more_75 = []
+        for i in next_month:
+            if i >= 0 and i < 10:
+                list_between_0_10.append(i)
+            elif i >= 10 and i < 20:
+                list_between_10_20.append(i)
+            elif i >= 20 and i < 30:
+                list_between_20_30.append(i)
+            elif i >= 30 and i < 75:
+                list_between_30_75.append(i)
+            else:
+                list_more_75.append(i)
+        count_0_10 = len(list_between_0_10)
+        count_10_20 = len(list_between_10_20)
+        count_20_30 = len(list_between_20_30)
+        count_30_75 = len(list_between_30_75)
+        count_75 =  len(list_more_75)
+        number_of_values = [count_0_10, count_10_20, count_20_30, count_30_75, count_75]
+        
+        percentage_of_all_channels = []
+        for i in range(len(number_of_values)):
+            percentage_of_all_channels.append(number_of_values[i] / N)
+
+        #Формирование отчета
+        writer = pd.ExcelWriter(report_filename, engine = 'xlsxwriter')
+        report.to_excel(writer, sheet_name = 'Sheet1', startrow = 1, header = False)
+        workbook = writer.book
+        worksheet = writer.sheets['Sheet1']
+        chart = workbook.add_chart({'type': 'column'})
+        
+        number_cols = len(report.columns)
+        
+        #Стиль шапки таблицы
+        header_format = workbook.add_format({'bold': True,
+                                            'text_wrap': True, #перенос текста
+                                            'align': 'center', #выравнение текста в ячейке
+                                            'align': 'vcenter', #выравнение текста в ячейке
+                                            'center_across': True
+                                            })
+        #Стиль тела таблицы
+        table_fmt = workbook.add_format({'num_format': '0.0', 
+                                        'align': 'center'}) #выравнение текста в ячейке
+        #Условное форматирование
+        #[0; 10]
+        format1 = workbook.add_format({'bg_color': '#daf2cf',
+                                    'font_color': '#333300'})
+        #[10; 20]
+        format2 = workbook.add_format({'bg_color': '#05ff82',
+                                    'font_color': '#333300'})
+        #[20, 30]
+        format3 = workbook.add_format({'bg_color': '#ffeb9c',
+                                    'font_color': '#9c5700'})
+        
+        #>30
+        format4 = workbook.add_format({'bg_color': '#FFC7CE',
+                                    'font_color': '#9C0006'})
+        #>75
+        format5 = workbook.add_format({'bg_color': 'black',
+                                    'font_color': 'white'})
+        
+        #[0; 10]
+        worksheet.conditional_format(f'B3:{xl_col_to_name(number_cols)}3', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  0,
+                                                                            'maximum':  10,
+                                                                            'format':   format1})
+        
+        worksheet.conditional_format(f'B{max_idx}:{xl_col_to_name(number_cols)}{max_idx}', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  0,
+                                                                            'maximum':  10,
+                                                                            'format':   format1})
+        #[10; 20]
+        worksheet.conditional_format(f'B3:{xl_col_to_name(number_cols)}3', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  10,
+                                                                            'maximum':  20,
+                                                                            'format':   format2})
+        
+        worksheet.conditional_format(f'B{max_idx}:{xl_col_to_name(number_cols)}{max_idx}', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  10,
+                                                                            'maximum':  20,
+                                                                            'format':   format2})
+        #[20, 30]
+        worksheet.conditional_format(f'B3:{xl_col_to_name(number_cols)}3', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  20,
+                                                                            'maximum':  30,
+                                                                            'format':   format3})
+        
+        worksheet.conditional_format(f'B{max_idx}:{xl_col_to_name(number_cols)}{max_idx}', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  20,
+                                                                            'maximum':  30,
+                                                                            'format':   format3})
+        
+        
+        #>30
+        worksheet.conditional_format(f'B3:{xl_col_to_name(number_cols)}3', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  30,
+                                                                            'maximum':  75,
+                                                                            'format':   format4})
+        worksheet.conditional_format(f'B{max_idx}:{xl_col_to_name(number_cols)}{max_idx}', {'type': 'cell',
+                                                                            'criteria': 'between',
+                                                                            'minimum':  30,
+                                                                            'maximum':  75,
+                                                                            'format':   format4})
+        #>75
+        worksheet.conditional_format(f'B3:{xl_col_to_name(number_cols)}3', {'type': 'cell',
+                                                                            'criteria': '>=',
+                                                                            'value':  75,
+                                                                            'format':   format5})
+        
+        worksheet.conditional_format(f'B{max_idx}:{xl_col_to_name(number_cols)}{max_idx}', {'type': 'cell',
+                                                                            'criteria': '>=',
+                                                                            'value':  75,
+                                                                            'format':   format5})
+        text_format = workbook.add_format({'font_size': 16, 
+                                        'font_color': '#8000FF', 
+                                        'italic': True, 
+                                        'align':'left'})
+        text_format_for_disp_avg = workbook.add_format({'num_format': '0.0',
+                                                        'font_size': 20, 
+                                                        'bg_color': 'yellow',
+                                                        'font_color': 'black', 
+                                                        'italic': True, 
+                                                        'align':'center'})
+        worksheet.merge_range(f'A{max_idx + 2}:B{max_idx + 2}', 'Средняя ошибка по месяцу', text_format)
+        worksheet.merge_range(f'E{max_idx + 2}:F{max_idx + 2}', 'Дисперсия по месяцу', text_format)
+        #worksheet.write(f'A{max_idx + 2}', 'Средняя ошибка по месяцу', text_format)
+        worksheet.write_formula(f'C{max_idx + 2}', f'=AVERAGE(B3:{xl_col_to_name(number_cols)}3)', text_format_for_disp_avg)
+        
+        #worksheet.write(f'E{max_idx + 2}', 'Дисперсия по месяцу', text_format)
+        worksheet.write(f'G{max_idx + 2}', disp_value, text_format_for_disp_avg)
+        
+        #Добавление таблицы для построения гистрограммы
+        data = (
+            #['Диапазон', 'Кол-во значений', '% от общего числа'],
+            ['[0, 10)', count_0_10, count_0_10 / N],
+            ['[10, 20)', count_10_20, count_30_75 / N],
+            ['[20, 30)', count_20_30, count_20_30 / N],
+            ['[30, 75)', count_30_75, count_30_75 / N],
+            ['>=75', count_75, count_75 / N]  
+        )
+        
+        row_number = max_idx + 4
+        col_number = 1
+        
+        percent_fmt = workbook.add_format({'num_format': '0%', 'align':'center'})
+        quant_of_values_fmt = workbook.add_format({'num_format': '0', 'align':'center'})
+        worksheet.write(f'B{max_idx + 4}', 'Диапазон', header_format)
+        worksheet.write(f'C{max_idx + 4}', 'Кол-во значений', header_format)
+        worksheet.write(f'D{max_idx + 4}', '% от общего числа', header_format)
+        for diap, quant_of_values, percent_from_all in data:
+            worksheet.write(row_number, col_number, diap)
+            worksheet.write(row_number, col_number + 1, quant_of_values, quant_of_values_fmt)
+            worksheet.write(row_number, col_number + 2, percent_from_all, percent_fmt)
+            row_number += 1
+        
+        chart.add_series({
+            'categories': f'=Sheet1!$B${max_idx + 5}:$B${max_idx + 9}',
+            'values': f'=Sheet1!$C${max_idx + 5}:$C${max_idx + 9}',
+            'line':       {'color': 'blue'},
+            'fill':   {'color': 'blue'},
+            'data_labels': {'value': True, 'font':  {'name': 'Arial', 'size': 16}}
+        })
+        worksheet.insert_chart(f'I{max_idx + 2}', chart, {'x_scale': 1.6, 'y_scale': 1.5})
+        chart.set_title({
+        'name': name_for_histogram,
+        'name_font': {
+            'name': 'Arial',
+            'color': 'black',
+            'size': 24
+        }})
+        chart.set_x_axis({'num_font':  {'name': 'Arial', 'size': 14}})
+        chart.set_y_axis({'major_gridlines': {'visible': False}, 'num_font':  {'name': 'Arial', 'size': 14}})
+        chart.set_legend({'position': 'none'})
+        
+        #Форматирование шапки таблицы
+        for col_num, value in enumerate(report.columns):
+            worksheet.write(0, col_num + 1, value, header_format)
+            
+        
+        worksheet.set_column('A:A', 17.5)
+        worksheet.set_column(f'B2:{xl_col_to_name(number_cols)}{max_idx}', 14, table_fmt)
+        workbook.close()
+        return average_value
 
     
