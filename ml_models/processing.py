@@ -1055,8 +1055,8 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                #'Prophet': self.prophet_forecast,
-                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
+                'Prophet': self.prophet_forecast,
+                #'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
@@ -1138,8 +1138,8 @@ class Forecast_Models:
 
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
-                #'Prophet': self.prophet_forecast,
+                #'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
+                'Prophet': self.prophet_forecast,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
