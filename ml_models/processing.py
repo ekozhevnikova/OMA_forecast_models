@@ -29,7 +29,7 @@ from tensorflow.keras import Model
 #==== Это для скрытия бесконечных логов профета=====#
 import logging
 logging.getLogger("pytorch_lightning").setLevel(logging.ERROR)
-logging.getLogger("neuralprophet").setLevel(logging.ERROR)
+#logging.getLogger("neuralprophet").setLevel(logging.ERROR)
 logging.getLogger("prophet").setLevel(logging.ERROR)
 logging.getLogger().setLevel(logging.ERROR)
 
