@@ -370,7 +370,7 @@ class Dict_Operations:
         """
         for bca, data in self.dictionary.items():
             data.columns = [str(col) + ' ' + bca for col in data.columns]
-            data.columns = data.columns.str.replace(column_name + ' ' + bca, column_name)
+            data.columns = data.columns.str.replace(column_name + ' ' + bca, column_name, regex = False)
 
         data_list = [data for key, data in self.dictionary.items()]
         #Объединение всех датафреймов в один и удаление дубликатов столбцов с датами
