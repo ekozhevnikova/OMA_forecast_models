@@ -810,6 +810,11 @@ class Forecast_Models:
         forecasts = {}
 
         for channel in self.df.columns:
+            #Поиск минимального значения в колонке
+            values = list(self.df[channel])
+            min_value = min(values)
+
+            #Логарифмирование данных
             log_transformer = FunctionTransformer(np.log)
             self.df[channel] = log_transformer.transform(self.df[channel])
             ts = self.df[channel].dropna()
@@ -848,6 +853,12 @@ class Forecast_Models:
                     forecast = Preprocessing(pd.Series(forecast)).inverse_difference(last_observation)
 
                 forecast = np.exp(forecast)
+
+                #Замена отрицательных значений на минимально возможное в колонке
+                for i in range(len(forecast)):
+                    if forecast[i] < 0:
+                        forecast[i] = min_value
+                        
                 forecasts[channel] = forecast
 
             except Exception as e:
