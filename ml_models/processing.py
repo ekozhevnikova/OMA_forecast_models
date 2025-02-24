@@ -1113,10 +1113,10 @@ class Forecast_Models:
                                        subsample = 0.7,            # доля объектов обучающей выборки.
                                        colsample_bytree = 0.6,     # семейство параметров для подвыборки столбцов.
                                        reg_alpha = 0.05,           # L1 регуляризация
-                                       reg_lambda = 1.0)           # L2 регуляризация
+                                       reg_lambda = 1.0,
+                                       n_jobs = 16)           # L2 регуляризация
                 reg.fit(X_train, y_train,
                         eval_set = [(X_train, y_train), (X_test, y_test)],
-                        n_jobs = 16,
                         verbose = False)
             
                 y_pred = reg.predict(X_test)
@@ -1144,7 +1144,8 @@ class Forecast_Models:
                         subsample = 0.7, 
                         colsample_bytree = 0.6, 
                         reg_alpha = 0.05,
-                        reg_lambda = 1.0)
+                        reg_lambda = 1.0,
+                        n_jobs = 16)
             reg.fit(X_all, y_all,
                     eval_set = [(X_all, y_all)],
                     verbose = False)

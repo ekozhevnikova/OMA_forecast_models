@@ -117,17 +117,17 @@ class Preprocessing:
         return self.ts
 
 
-    def add_lags(df):
+    def add_lags(self):
         """
             Функция для добавления запаздывающей компоненты в ВР.
             Returns:
                 Обновленный DataFrame с новыми столбцами в виде запаздывающих компонент.
         """
-        target_map = df['Share'].to_dict()
-        df['lag1'] = (df.index - pd.DateOffset(months = 12)).map(target_map)
-        df['lag2'] = (df.index - pd.DateOffset(months = 24)).map(target_map)
-        df['lag3'] = (df.index - pd.DateOffset(months = 36)).map(target_map)
-        return df
+        target_map = self.ts['Share'].to_dict()
+        self.ts['lag1'] = (self.ts.index - pd.DateOffset(months = 12)).map(target_map)
+        self.ts['lag2'] = (self.ts.index - pd.DateOffset(months = 24)).map(target_map)
+        self.ts['lag3'] = (self.ts.index - pd.DateOffset(months = 36)).map(target_map)
+        return self.ts
 
 
     def search_last_fact_data(self):
