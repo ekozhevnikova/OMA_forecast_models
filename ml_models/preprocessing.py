@@ -81,6 +81,53 @@ class Preprocessing:
                 last_observation: последние фактические данные в DataFrame.
         """
         return self.ts.cumsum() + last_observation
+    
+
+    def get_season(self):
+        """
+            Функция для определения типа сезона по номеру месяца.
+        """
+        month = self.ts.index.month
+        season = []
+
+        for i in range(len(month)):
+            if month[i] in range(3, 5):
+                season.append(2) #spring
+            elif month[i] in range(6, 8):
+                season.append(3) #summer
+            elif month[i] in range(9, 11):
+                season.append(4) #autumn
+            else:
+                season.append(1) #winter
+        return season
+
+ 
+    def create_features(self):
+        """
+            Функция для создания столбцов в DataFrame с категориальными признаками.
+            Преимущественно используется в модели XGBoost.
+            Returns:
+                DataFrame с новыми столбцами - категориальными признаками.
+        """
+        self.ts['year'] = self.ts.index.year
+        self.ts['year start'] = self.ts.index.is_year_start
+        self.ts['month'] = self.ts.index.month
+        self.ts['quarter start'] = self.ts.index.is_quarter_start
+        self.ts['season'] = self.get_season()
+        return self.ts
+
+
+    def add_lags(df):
+        """
+            Функция для добавления запаздывающей компоненты в ВР.
+            Returns:
+                Обновленный DataFrame с новыми столбцами в виде запаздывающих компонент.
+        """
+        target_map = df['Share'].to_dict()
+        df['lag1'] = (df.index - pd.DateOffset(months = 12)).map(target_map)
+        df['lag2'] = (df.index - pd.DateOffset(months = 24)).map(target_map)
+        df['lag3'] = (df.index - pd.DateOffset(months = 36)).map(target_map)
+        return df
 
 
     def search_last_fact_data(self):
@@ -91,4 +138,3 @@ class Preprocessing:
         end_year = last_date.year
         last_month = last_date.month
         return end_year, last_month, last_date
-    

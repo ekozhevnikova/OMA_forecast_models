@@ -1,6 +1,8 @@
 import sys
 import numpy as np
 import pandas as pd
+import threading
+from threadpoolctl import ThreadpoolController
 from pmdarima import auto_arima
 import pymannkendall as mk
 from prophet import Prophet
@@ -73,7 +75,7 @@ class Forecast_Models:
         # Проверка на корректность метода
         if method not in ['linear_trend', 'logistic_trend']:
             raise ValueError("Метод должен быть 'linear_trend' или 'logistic_trend'.")
-        
+
         data_copy = self.df.copy()
         # Сброс индекса и добавление названий месяцев
         data_copy.reset_index(inplace = True)
@@ -162,6 +164,13 @@ class Forecast_Models:
             future_predictions[f'{column}'] = y_future_pred
         future_predictions.set_index(self.column_name_with_date, inplace = True)
 
+        #Замена отрицательных значений на минимально возможное в колонке
+        for column in future_predictions.columns:
+            for i in range(len(list(future_predictions[column]))):
+                if list(future_predictions[column])[i] < 0:
+                    values = list(self.df[column])
+                    min_value = min(values)
+                    list(future_predictions[column])[i] = min_value
         return future_predictions
 
 
@@ -314,6 +323,14 @@ class Forecast_Models:
         forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
+        #Замена отрицательных значений в столбце на минимально возможное
+        for column in forecast_df.columns:
+            for i in range(len(list(forecast_df[column]))):
+                if list(forecast_df[column])[i] < 0:
+                    values = list(self.df[column])
+                    min_value = min(values)
+                    list(forecast_df[column])[i] = min_value
+
         if method == 'calendar_years':
             # Корректируем прогнозы для случаев, когда last_month < 12
             next_year_dates_fact = pd.date_range(start = next_year_start, periods = self.forecast_periods, freq = 'MS')
@@ -326,7 +343,13 @@ class Forecast_Models:
                 forecast_df = forecast_df.reset_index()
                 forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
-
+                #Замена отрицательных значений в столбце на минимально возможное
+                for column in forecast_df.columns:
+                    for i in range(len(list(forecast_df[column]))):
+                        if list(forecast_df[column])[i] < 0:
+                            values = list(self.df[column])
+                            min_value = min(values)
+                            list(forecast_df[column])[i] = min_value
         return forecast_df
 
 
@@ -517,6 +540,14 @@ class Forecast_Models:
             result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
             result_df.set_index(self.column_name_with_date, inplace = True)
 
+            #Замена отрицательных значений в столбце на минимально возможное
+            for column in result_df.columns:
+                for i in range(len(list(result_df[column]))):
+                    if list(result_df[column])[i] < 0:
+                        values = list(self.df[column])
+                        min_value = min(values)
+                        list(result_df[column])[i] = min_value
+
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
             # Введение названия столбца с индексом для столбца с датами
@@ -532,6 +563,14 @@ class Forecast_Models:
         result_df = result_df.reset_index()
         result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
         result_df.set_index(self.column_name_with_date, inplace = True)
+
+        #Замена отрицательных значений в столбце на минимально возможное
+        for column in result_df.columns:
+            for i in range(len(list(result_df[column]))):
+                if list(result_df[column])[i] < 0:
+                    values = list(self.df[column])
+                    min_value = min(values)
+                    list(result_df[column])[i] = min_value
 
         return result_df
 
@@ -642,6 +681,14 @@ class Forecast_Models:
             result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
+            #Замена отрицательных значений в столбце на минимально возможное
+            for column in result_df_forecast.columns:
+                for i in range(len(list(result_df_forecast[column]))):
+                    if list(result_df_forecast[column])[i] < 0:
+                        values = list(self.df[column])
+                        min_value = min(values)
+                        list(result_df_forecast[column])[i] = min_value
+
         else:
             # Прогноз на `months_to_forecast` месяцев, начиная с января
             result_df_forecast = result_df.iloc[:months_to_forecast]
@@ -656,12 +703,20 @@ class Forecast_Models:
             result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
+            #Замена отрицательных значений в столбце на минимально возможное
+            for column in result_df_forecast.columns:
+                for i in range(len(list(result_df_forecast[column]))):
+                    if list(result_df_forecast[column])[i] < 0:
+                        values = list(self.df[column])
+                        min_value = min(values)
+                        list(result_df_forecast[column])[i] = min_value
+
         return result_df_forecast
 
 
-    def prophet_forecast(self):
+    def prophet_forecast_sequential(self):
         """
-            Метод PROPHET.
+            ПОСЛЕДОВАТЕЛЬНАЯ ВЕРСИЯ Метод PROPHET.
             Универсальный для всех ВР.
 
                 Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
@@ -746,6 +801,8 @@ class Forecast_Models:
         for series, best_params, _ in results:
             series_df = df[[self.column_name_with_date, series]].rename(
                 columns = {self.column_name_with_date: 'ds', series: 'y'})
+            values = list(series_df['y'])
+            min_value = min(values)
 
             model = Prophet(seasonality_mode = best_params['seasonality_mode'],
                             n_changepoints = best_params['n_changepoints'],
@@ -754,6 +811,10 @@ class Forecast_Models:
             model.fit(series_df)
             future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
             forecast = model.predict(future)
+
+            for i in range(len(forecast)):
+                if forecast[i] < 0:
+                    forecast[i] = min_value
 
             if forecast_df.empty:
                 forecast_df['ds'] = forecast['ds']
@@ -768,6 +829,116 @@ class Forecast_Models:
         forecast_df = forecast_df.tail(self.forecast_periods)
 
         return forecast_df
+    
+    def prophet_forecast_per_thread(self, df, train, test, series, forecast_df):
+        """
+            ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ ПАРАЛЛЕЛЬНОЙ ВЕРСИИ МЕТОДА PROPHET.
+            Args:
+                df: исходный ВР для анализа
+                train: тренировочная выборка
+                test: тестовая выборка
+                series: ВР для прогнозирования
+                forecast_df: Датафрейм с прогнозом
+        """
+        param_grid = {
+                'seasonality_mode': ['multiplicative'],
+                'n_changepoints': [12, 18, 24, 36],
+                'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5]
+            }
+        data = df[[self.column_name_with_date, series]].rename(
+            columns = {self.column_name_with_date: 'ds', series: 'y'})
+        
+        values = list(data['y'])
+        min_value = min(values)
+
+        series_df = train[[self.column_name_with_date, series]].rename(
+            columns = {self.column_name_with_date: 'ds', series: 'y'})
+        #print(data)
+
+        best_mape = float('inf')
+        best_params = None
+        for params in ParameterGrid(param_grid):
+            model = Prophet(
+                            seasonality_mode = params['seasonality_mode'],
+                            n_changepoints = params['n_changepoints'],
+                            changepoint_prior_scale = params['changepoint_prior_scale'])
+
+            model.fit(series_df)
+
+            # Прогнозирование
+            future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+            forecast = model.predict(future)
+
+            # Вычисление MAPE
+            test_series = test[[self.column_name_with_date, series]].rename(
+                columns = {self.column_name_with_date: 'ds', series: 'y'})
+            forecast_test_period = forecast[-self.forecast_periods:]
+
+            # Сравнение только по датам тестового набора
+            aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
+            aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
+
+            mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
+
+            if mape < best_mape:
+                best_mape = mape
+                best_params = params
+
+        print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
+        model = Prophet(seasonality_mode = best_params['seasonality_mode'],
+                        n_changepoints = best_params['n_changepoints'],
+                        changepoint_prior_scale = best_params['changepoint_prior_scale'])
+
+        model.fit(data)
+        future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+        forecast = model.predict(future)
+
+        if forecast_df.empty:
+            forecast_df['ds'] = forecast['ds']
+        forecast_df[series] = forecast['yhat']
+
+        for i in range(len(list(forecast_df[series]))):
+            if list(forecast_df[series])[i] < 0:
+                list(forecast_df[series])[i] = min_value
+
+
+    def prophet_forecast_PARALLEL(self):
+        """
+            ПАРАЛЛЕЛЬНАЯ ВЕРСИЯ МЕТОДА PROPHET
+            Для корректной рабооты данной функции используется вспомогательная функция prophet_forecast_per_thread.
+            Здесь ниже представлено непосредственно распараллеливание последовательной версии prophet_forecast_sequential
+            !!!ВНИМАНИЕ!!! Если при использовании данной функции у Вас не хватает оперативной памяти компьютера, то воспользуйтесь
+            последовательной версии данного метода prophet_forecast_sequential.
+        """
+        df = self.df.copy()
+        # Сортировка и подготовка данных
+        df.reset_index(inplace = True)
+        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
+        df.sort_values(by = self.column_name_with_date, inplace=True)
+
+        # Разделение на обучающую и тестовую выборки
+        train = df.iloc[:-self.forecast_periods]
+        test = df.iloc[-self.forecast_periods:]
+
+        # Список временных рядов для прогнозирования
+        series_list = [col for col in train.columns if col != self.column_name_with_date]
+
+        threads = []
+        forecast_df = pd.DataFrame()
+        for series in series_list:
+            t = threading.Thread(target = self.prophet_forecast_per_thread,
+                                    args = (df, train, test, series, forecast_df))
+
+            t.start()
+            threads.append(t)
+        for t in threads:
+            t.join()
+        
+        # Введение названия столбца с индексом для столбца с датами
+        forecast_df.rename(columns = {'ds': self.column_name_with_date}, inplace = True)
+        forecast_df.set_index(self.column_name_with_date, inplace = True)
+
+        return forecast_df.tail(self.forecast_periods)
 
 
     def auto_arima_forecast(self):
@@ -879,57 +1050,28 @@ class Forecast_Models:
         return forecast_df
 
 
-########################################################### XGBOOST ######################################################################################
-    @staticmethod
-    def get_season(df):
+    def XGBRegressor_model(self, n_splits, features, target_value, test_size = 12, gap = 1):
         """
-            Create season
+            Модель Градиентного Бустинга на основе библиотеки XGBoost.
+            Настоящий метод основан на кросс-валидации. Вся выборка разделяется на определенное число фолдов (n_splits) и путем метода кросс-валидации
+            ищется наиболее оптимальное число решающих деревьев, которое потом используется для основного прогноза. На каждом шаге кросс-валидации 
+            выборка разделяется на тренирововчную и тестовую. Для каждой тренировочной и тестовой выборок создаются столбцы с категориальными признаками и
+            запаздывающими компонентами рассматриваемого ВР.
+            Для прогноза в будущее также создаются столбцы с категориальными признаками.
+            Args:
+                n_splits: число фолдов (разбиений)
+                features: Список из столбцов DataFrame с категориальными признаками.
+                target_value: Целевая переменная (Переменная, которую предсказываем)
+                test_size: размер тестовой выборки
+                gap: 
+            Returns:
         """
-        month = df.index.month
-        season = []
-
-        for i in range(len(month)):
-            if month[i] in range(3, 5):
-                season.append(2) #spring
-            elif month[i] in range(6, 8):
-                season.append(3) #summer
-            elif month[i] in range(9, 11):
-                season.append(4) #autumn
-            else:
-                season.append(1) #winter
-        #df['season'] = season
-        return season
-
-    @staticmethod    
-    def create_features(df):
-        """
-            Create feature
-        """
-        df['year'] = df.index.year
-        df['year start'] = df.index.is_year_start
-        #df['year stop'] = df.index.is_year_end
-        df['month'] = df.index.month
-        #df['quarter'] = df.index.quarter
-        df['quarter start'] = df.index.is_quarter_start
-        #df['quarter end'] = df.index.is_quarter_end
-        df['season'] = Forecast_Models.get_season(df)
-        return df
-
-    @staticmethod
-    def add_lags(df):
-        target_map = df['Share'].to_dict()
-        df['lag1'] = (df.index - pd.DateOffset(months = 12)).map(target_map)
-        df['lag2'] = (df.index - pd.DateOffset(months = 24)).map(target_map)
-        df['lag3'] = (df.index - pd.DateOffset(months = 36)).map(target_map)
-        return df
-
-    def XGBRegressor_model(self, n_splits, FEATURES, TARGET_VALUE, test_size = 12, gap = 1):
         if ( max(self.df.index.year) - min(self.df.index.year) ) < n_splits:
             raise ValueError('Выберите меньшее целое число фолдов (разбиений)')
 
         df_full = self.df.copy()
-        FEATURES = FEATURES
-        TARGET = TARGET_VALUE
+        FEATURES = features
+        TARGET = target_value
     
         date_range = pd.date_range(start = self.df.index[-1] + pd.DateOffset(months = 1), periods = self.forecast_periods,
                                 freq = 'MS')
@@ -942,21 +1084,16 @@ class Forecast_Models:
 
             #Кросс-валидация
             fold = 0
-            #preds = []
-            #scores = []
             iterations = []
             for train_idx, val_idx in tss.split(df):
                 train = df.iloc[train_idx]
                 test = df.iloc[val_idx]
             
-                train = Forecast_Models.create_features(train)
-                test = Forecast_Models.create_features(test)
+                train = Preprocessing(train).create_features()
+                test = Preprocessing(test).create_features()
                 
-                train = Forecast_Models.add_lags(train)
-                test = Forecast_Models.add_lags(test)
-            
-                #FEATURES = ['year', 'year start', 'year stop', 'month', 'quarter', 'quarter start', 'quarter end', 'season']
-                #TARGET = 'Share'
+                train = Preprocessing(train).add_lags()
+                test = Preprocessing(test).add_lags()
             
                 X_train = train[FEATURES]
                 y_train = train[TARGET]
@@ -964,35 +1101,33 @@ class Forecast_Models:
                 X_test = test[FEATURES]
                 y_test = test[TARGET]
             
-                reg = xgb.XGBRegressor(base_score = 0.5,
-                        booster = 'gbtree', 
-                        n_estimators = 1000,
-                        early_stopping_rounds = 50,
-                        objective = 'reg:linear',
-                    learning_rate = 0.1,
-                        max_depth = 8, 
-                        min_child_weight = 7, 
-                        gamma = 0.4, 
-                        subsample = 0.7, 
-                        colsample_bytree = 0.6, 
-                        reg_alpha = 0.05,
-                        reg_lambda = 1.0)
+                reg = xgb.XGBRegressor(base_score = 0.5,           # первоначальная оценка прогноза (глобальная погрешность).
+                                       booster = 'gbtree',         # тип бустера.
+                                       n_estimators = 1000,        # число деревьев.
+                                       early_stopping_rounds = 50, # параметр для предотвращения переобучения.
+                                       objective = 'reg:linear',   # задача машинного обучения.
+                                       learning_rate = 0.1,        # контроль величины шага, с которой модель обучается.
+                                       max_depth = 8,              # максимальная глубина дерева.
+                                       min_child_weight = 7,       # минимальная сумма весов наблюдений, требующаяся для дочернего объекта.
+                                       gamma = 0.4,                # параметр регуляризации, принимает значения от 0 до inf.
+                                       subsample = 0.7,            # доля объектов обучающей выборки.
+                                       colsample_bytree = 0.6,     # семейство параметров для подвыборки столбцов.
+                                       reg_alpha = 0.05,           # L1 регуляризация
+                                       reg_lambda = 1.0)           # L2 регуляризация
                 reg.fit(X_train, y_train,
                         eval_set = [(X_train, y_train), (X_test, y_test)],
+                        n_jobs = 16,
                         verbose = False)
             
                 y_pred = reg.predict(X_test)
-                #preds.append(y_pred)
-                #score = np.sqrt(mean_absolute_percentage_error(y_test, y_pred))
-                #scores.append(score)
                 iterations.append(reg.best_iteration)
                 
             #Считаем нужное количество деревьев для корректного прогноза
             n_estimators_new = int(np.round((np.average(iterations)), 0))
             
             #Прогноз в будущее
-            df = Forecast_Models.create_features(df)
-            df = Forecast_Models.add_lags(df)
+            df = Preprocessing(df).create_features()
+            df = Preprocessing(df).add_lags()
 
             X_all = df[FEATURES]
             y_all = df[TARGET]
@@ -1019,8 +1154,8 @@ class Forecast_Models:
             df['isFuture'] = False
             df_and_future = pd.concat([df, future_df])
 
-            df_and_future = Forecast_Models.create_features(df_and_future)
-            df_and_future = Forecast_Models.add_lags(df_and_future)
+            df_and_future = Preprocessing(df_and_future).create_features()
+            df_and_future = Preprocessing(df_and_future).add_lags()
             future_w_features = df_and_future.query('isFuture').copy()
         
             forecast = reg.predict(future_w_features[FEATURES])
@@ -1036,9 +1171,9 @@ class Forecast_Models:
         forecast_df = forecast_df.reset_index()
         forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace = True)
-
         return forecast_df
-##########################################################################################################################################################
+
+
     def process_model(self,
                       model_name: str,
                       error_dir: str = None,
@@ -1061,10 +1196,10 @@ class Forecast_Models:
         method_map = {
                 
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': self.prophet_forecast,
-                'XGBRegressor_model': lambda: self.XGBRegressor_model(n_splits = 2, 
-                                                              FEATURES = ['year', 'year start', 'month', 'quarter start', 'season'], 
-                                                              TARGET_VALUE = 'Share'),
+                'Prophet': self.prophet_forecast_PARALLEL,
+                'XGBRegressor': lambda: self.XGBRegressor_model(n_splits = 2, 
+                                                              features = ['year', 'year start', 'month', 'quarter start', 'season'], 
+                                                              target_value = 'Share'),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
