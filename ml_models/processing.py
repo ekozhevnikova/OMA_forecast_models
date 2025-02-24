@@ -1,3 +1,4 @@
+import os
 import sys
 import numpy as np
 import pandas as pd
@@ -768,102 +769,6 @@ class Forecast_Models:
         forecast_df = forecast_df.tail(self.forecast_periods)
 
         return forecast_df
-################3
-
-    # def prophet_forecast(self, type_of_group):
-    #     df = self.df.copy()
-    #
-    #     df.reset_index(inplace=True)
-    #     df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-    #     df = df.sort_values(by=self.column_name_with_date)
-    #
-    #     series_list = [col for col in df.columns if col != self.column_name_with_date]
-    #     forecast_df = pd.DataFrame()
-    #
-    #     for series in series_list:
-    #         series_df = df[[self.column_name_with_date, series]].rename(
-    #             columns={self.column_name_with_date: 'ds', series: 'y'})
-    #
-    #         if type_of_group == 'GROUP_4':
-    #             model = NeuralProphet(
-    #                 growth = 'discontinuous',
-    #                 n_lags = 12,
-    #                 n_forecasts = self.forecast_periods,
-    #                 trend_reg = 0.0,
-    #                 trend_global_local = 'local',
-    #                 yearly_seasonality = False,
-    #                 seasonality_mode = 'additive',
-    #                 season_global_local = 'local',
-    #                 learning_rate = 0.1,
-    #                 newer_samples_start = 0.8,  # Учитываем последние 20% данных
-    #                 newer_samples_weight = 1.5,
-    #                 drop_missing = True,
-    #                 batch_size=4
-    #             )
-    #         if type_of_group == 'GROUP_2':
-    #             model = NeuralProphet(
-    #                 growth='discontinuous',
-    #                 n_lags=12,
-    #                 n_forecasts=self.forecast_periods,
-    #                 trend_reg=0.5,
-    #                 trend_global_local='local',
-    #                 yearly_seasonality=False,
-    #                 seasonality_mode='additive',
-    #                 season_global_local='local',
-    #                 learning_rate=0.01,
-    #                 newer_samples_start=0.9,  # Учитываем последние 10% данных
-    #                 newer_samples_weight=2,
-    #                 drop_missing=True,
-    #                 batch_size=4,
-    #             )
-    #         if type_of_group == 'GROUP_1':
-    #             model = NeuralProphet(
-    #                 growth='discontinuous',
-    #                 n_lags=12,
-    #                 n_forecasts=self.forecast_periods,
-    #                 trend_reg=0.2,
-    #                 trend_global_local='local',
-    #                 yearly_seasonality=12,
-    #                 seasonality_mode='multiplicative',
-    #                 season_global_local='local',
-    #                 learning_rate=0.01,
-    #                 newer_samples_start=0.8,  # Учитываем последние 20% данных
-    #                 newer_samples_weight=2,
-    #                 drop_missing=True,
-    #                 batch_size=8,
-    #             )
-    #         if type_of_group == 'GROUP_3':
-    #             model = NeuralProphet(
-    #                 growth='discontinuous',
-    #                 n_lags=6,
-    #                 n_forecasts=self.forecast_periods,
-    #                 trend_reg=0.0,
-    #                 trend_global_local='local',
-    #                 yearly_seasonality=12,
-    #                 seasonality_mode='multiplicative',
-    #                 season_global_local='local',
-    #                 learning_rate=0.05,
-    #                 drop_missing=True,
-    #                 batch_size=8,
-    #             )
-    #
-    #         model.fit(series_df, freq='MS')
-    #         future = model.make_future_dataframe(df=series_df, periods=self.forecast_periods,
-    #                                              n_historic_predictions=False)
-    #         forecast = model.predict(future)
-    #
-    #         if forecast_df.empty:
-    #             forecast_df['ds'] = forecast['ds']
-    #
-    #         # Суммируем прогнозы на несколько шагов вперед
-    #         forecast_df[series] = forecast[[f'yhat{i + 1}' for i in range(self.forecast_periods)]].sum(axis=1)
-    #
-    #     forecast_df.set_index('ds', inplace=True)
-    #     forecast_df = forecast_df.reset_index().rename(columns={'ds': self.column_name_with_date})
-    #     forecast_df.set_index(self.column_name_with_date, inplace=True)
-    #     forecast_df = forecast_df.tail(self.forecast_periods)
-    #
-    #     return forecast_df
 
     def random_forest_forecast(self):
         df = self.df.copy()
@@ -923,176 +828,6 @@ class Forecast_Models:
         forecast_df.set_index("ds", inplace=True)
         forecast_df = forecast_df.reset_index().rename(columns={"ds": self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace=True)
-
-        return forecast_df
-
-    def catboost_forecast(self):
-        df = self.df.copy()
-
-        df.reset_index(inplace=True)
-        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-        df = df.sort_values(by=self.column_name_with_date)
-
-        series_list = [col for col in df.columns if col != self.column_name_with_date]
-        forecast_df = pd.DataFrame()
-
-        for series in series_list:
-            series_df = df[[self.column_name_with_date, series]].rename(
-                columns={self.column_name_with_date: 'ds', series: 'y'})
-
-            for lag in range(1, 13):
-                series_df[f"lag_{lag}"] = series_df["y"].shift(lag)
-
-            series_df.dropna(inplace=True)
-
-            X = series_df.drop(columns=["ds", "y"])
-            y = series_df["y"]
-
-            # Разделяем train и test
-            X_train, X_test = X.iloc[:-self.forecast_periods], X.iloc[-self.forecast_periods:]
-            y_train, y_test = y.iloc[:-self.forecast_periods], y.iloc[-self.forecast_periods:]
-
-            model = CatBoostRegressor(
-                iterations=600,
-                learning_rate=0.05,
-                depth=10,
-                l2_leaf_reg=2,
-                loss_function="MAE",
-                random_strength=3,
-                bagging_temperature=3,
-                subsample=0.9,
-                verbose=1,
-                random_seed=42
-            )
-            model.fit(X_train, y_train)
-
-            future_X = pd.DataFrame([X_test.iloc[-1]])
-
-            preds = []
-            for _ in range(self.forecast_periods):
-                pred = model.predict(future_X)[0]
-                preds.append(pred)
-
-                future_X = future_X.shift(-1, axis=1)
-                future_X.iloc[0, -1] = pred
-
-            # Добавляем в итоговый DataFrame
-            if forecast_df.empty:
-                forecast_df["ds"] = pd.date_range(
-                    start=df[self.column_name_with_date].max(), periods=self.forecast_periods + 1, freq="MS"
-                )[1:]
-
-            forecast_df[series] = preds
-
-        forecast_df.set_index("ds", inplace=True)
-        forecast_df = forecast_df.reset_index().rename(columns={"ds": self.column_name_with_date})
-        forecast_df.set_index(self.column_name_with_date, inplace=True)
-
-        return forecast_df
-
-    def prophet_forecast_per_thread(self, type_of_group, df, series, forecast_df):
-        series_df = df[[self.column_name_with_date, series]].rename(
-                columns={self.column_name_with_date: 'ds', series: 'y'})
-
-        if type_of_group == 'GROUP_4':
-            model = NeuralProphet(
-                growth = 'discontinuous',
-                n_lags = 12,
-                n_forecasts = self.forecast_periods,
-                trend_reg = 0.0,
-                trend_global_local = 'local',
-                yearly_seasonality = False,
-                seasonality_mode = 'additive',
-                season_global_local = 'local',
-                learning_rate = 0.1,
-                newer_samples_start = 0.8,  # Учитываем последние 20% данных
-                newer_samples_weight = 1.5,
-                drop_missing = True,
-                batch_size=4
-            )
-        if type_of_group == 'GROUP_2':
-            model = NeuralProphet(
-                growth='discontinuous',
-                n_lags=12,
-                n_forecasts=self.forecast_periods,
-                trend_reg=0.5,
-                trend_global_local='local',
-                yearly_seasonality=False,
-                seasonality_mode='additive',
-                season_global_local='local',
-                learning_rate=0.01,
-                newer_samples_start=0.9,  # Учитываем последние 10% данных
-                newer_samples_weight=2,
-                drop_missing=True,
-                batch_size=4,
-            )
-        if type_of_group == 'GROUP_1':
-            model = NeuralProphet(
-                growth='discontinuous',
-                n_lags=12,
-                n_forecasts=self.forecast_periods,
-                trend_reg=0.2,
-                trend_global_local='local',
-                yearly_seasonality=12,
-                seasonality_mode='multiplicative',
-                season_global_local='local',
-                learning_rate=0.01,
-                newer_samples_start=0.8,  # Учитываем последние 20% данных
-                newer_samples_weight=2,
-                drop_missing=True,
-                batch_size=8,
-            )
-        if type_of_group == 'GROUP_3':
-            model = NeuralProphet(
-                growth='discontinuous',
-                n_lags=6,
-                n_forecasts=self.forecast_periods,
-                trend_reg=0.0,
-                trend_global_local='local',
-                yearly_seasonality=12,
-                seasonality_mode='multiplicative',
-                season_global_local='local',
-                learning_rate=0.05,
-                drop_missing=True,
-                batch_size=8,
-            )
-
-        model.fit(series_df, freq='MS')
-        future = model.make_future_dataframe(df=series_df, periods=self.forecast_periods,
-                                                n_historic_predictions=False)
-        forecast = model.predict(future)
-
-        if forecast_df.empty:
-            forecast_df['ds'] = forecast['ds']
-
-        # Суммируем прогнозы на несколько шагов вперед
-        forecast_df[series] = forecast[[f'yhat{i + 1}' for i in range(self.forecast_periods)]].sum(axis=1)
-
-    def prophet_forecast(self, type_of_group):
-        df = self.df.copy()
-
-        df.reset_index(inplace=True)
-        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-        df = df.sort_values(by=self.column_name_with_date)
-
-        series_list = [col for col in df.columns if col != self.column_name_with_date]
-        forecast_df = pd.DataFrame()
-        threads = []
-
-        for series in series_list:
-            t = threading.Thread(target=self.prophet_forecast_per_thread,
-                                      args=(type_of_group, df, series, forecast_df))
-
-            t.start()
-            threads.append(t)
-
-        for t in threads:
-            t.join()
-
-        forecast_df.set_index('ds', inplace=True)
-        forecast_df = forecast_df.reset_index().rename(columns={'ds': self.column_name_with_date})
-        forecast_df.set_index(self.column_name_with_date, inplace=True)
-        forecast_df = forecast_df.tail(self.forecast_periods)
 
         return forecast_df
 
@@ -1191,64 +926,64 @@ class Forecast_Models:
         return forecast_df
 
 #================== ЭТО ВСЕ НЕЙРОНКА, НО МБ ОНА НЕ НУЖНА================================
-    @staticmethod
-    def create_sequences(data, seq_length):
-        X, y = [], []
-        for i in range(len(data) - seq_length):
-            X.append(data[i:i + seq_length])
-            y.append(data[i + seq_length])
-        return np.array(X), np.array(y)
-
-    def neural_network_forecast(self, seq_length = 3):
-        #TODO короче мб эта функция вообще не нужна, потом попробую докрутить, чтоб была точнее и быстрее, но хз
-        df = self.df.sort_values(self.column_name_with_date)
-        result_forecast = pd.DataFrame()
-        result_forecast.index = pd.date_range(start=self.df.index[-1] + pd.DateOffset(months=1), periods=self.forecast_periods, freq='MS')
-
-        for column in df.columns:
-            if column == self.column_name_with_date:
-                continue
-
-            scaler = MinMaxScaler()
-            df[f'Scaled_{column}'] = scaler.fit_transform(df[[column]])
-
-            X, y = Forecast_Models.create_sequences(df[f'Scaled_{column}'].values, seq_length)
-
-            # Разделение данных (80% обучающая, 20% тестовая)
-            split = int(len(X) * 0.8)
-            X_train, y_train = X[:split], y[:split]
-            X_test, y_test = X[split:], y[split:]
-
-            # Изменяем форму для LSTM
-            X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
-            X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
-
-            # Создание и обучение модели (два слоя lstm по 50 нейронов и один выходной)
-            model = Sequential([
-                LSTM(50, activation='relu', return_sequences=True, input_shape=(seq_length, 1)),
-                LSTM(50, activation='relu'),
-                Dense(1)
-            ])
-            model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
-
-            model.fit(X_train, y_train, epochs=100, batch_size=2, validation_data=(X_test, y_test), verbose=1)
-
-            # Прогнозирование на `self.forecast_periods` шагов
-            def predict_next(model, data, steps):
-                inputs = data[-seq_length:].reshape((1, seq_length, 1))
-                predictions = []
-                for _ in range(steps):
-                    pred = model.predict(inputs, verbose=0)
-                    predictions.append(pred[0, 0])
-                    inputs = np.roll(inputs, -1, axis=1)
-                    inputs[0, -1, 0] = pred
-                return scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
-
-            forecast = predict_next(model, df[f'Scaled_{column}'].values, self.forecast_periods)
-            result_forecast[column] = forecast.flatten()
-
-        # Создаем итоговый DataFrame с прогнозами для всех столбцов
-        forecast_df = pd.DataFrame(result_forecast)
+    # @staticmethod
+    # def create_sequences(data, seq_length):
+    #     X, y = [], []
+    #     for i in range(len(data) - seq_length):
+    #         X.append(data[i:i + seq_length])
+    #         y.append(data[i + seq_length])
+    #     return np.array(X), np.array(y)
+    #
+    # def neural_network_forecast(self, seq_length = 3):
+    #     #TODO короче мб эта функция вообще не нужна, потом попробую докрутить, чтоб была точнее и быстрее, но хз
+    #     df = self.df.sort_values(self.column_name_with_date)
+    #     result_forecast = pd.DataFrame()
+    #     result_forecast.index = pd.date_range(start=self.df.index[-1] + pd.DateOffset(months=1), periods=self.forecast_periods, freq='MS')
+    #
+    #     for column in df.columns:
+    #         if column == self.column_name_with_date:
+    #             continue
+    #
+    #         scaler = MinMaxScaler()
+    #         df[f'Scaled_{column}'] = scaler.fit_transform(df[[column]])
+    #
+    #         X, y = Forecast_Models.create_sequences(df[f'Scaled_{column}'].values, seq_length)
+    #
+    #         # Разделение данных (80% обучающая, 20% тестовая)
+    #         split = int(len(X) * 0.8)
+    #         X_train, y_train = X[:split], y[:split]
+    #         X_test, y_test = X[split:], y[split:]
+    #
+    #         # Изменяем форму для LSTM
+    #         X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 1))
+    #         X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 1))
+    #
+    #         # Создание и обучение модели (два слоя lstm по 50 нейронов и один выходной)
+    #         model = Sequential([
+    #             LSTM(50, activation='relu', return_sequences=True, input_shape=(seq_length, 1)),
+    #             LSTM(50, activation='relu'),
+    #             Dense(1)
+    #         ])
+    #         model.compile(optimizer=Adam(learning_rate=0.001), loss='mse')
+    #
+    #         model.fit(X_train, y_train, epochs=100, batch_size=2, validation_data=(X_test, y_test), verbose=1)
+    #
+    #         # Прогнозирование на `self.forecast_periods` шагов
+    #         def predict_next(model, data, steps):
+    #             inputs = data[-seq_length:].reshape((1, seq_length, 1))
+    #             predictions = []
+    #             for _ in range(steps):
+    #                 pred = model.predict(inputs, verbose=0)
+    #                 predictions.append(pred[0, 0])
+    #                 inputs = np.roll(inputs, -1, axis=1)
+    #                 inputs[0, -1, 0] = pred
+    #             return scaler.inverse_transform(np.array(predictions).reshape(-1, 1))
+    #
+    #         forecast = predict_next(model, df[f'Scaled_{column}'].values, self.forecast_periods)
+    #         result_forecast[column] = forecast.flatten()
+    #
+    #     # Создаем итоговый DataFrame с прогнозами для всех столбцов
+    #     forecast_df = pd.DataFrame(result_forecast)
 
         return forecast_df
 #==================
@@ -1276,9 +1011,9 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': lambda: self.prophet_forecast(type_of_group = type_of_group),
+                'Prophet': lambda: self.prophet_forecast(),
                 'Forest': lambda: self.random_forest_forecast(),
-                'Cat': lambda: self.catboost_forecast(),
+
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
@@ -1362,7 +1097,6 @@ class Forecast_Models:
                 'ARIMA': self.auto_arima_forecast,
                 'Prophet': lambda: self.prophet_forecast(),
                 'Forest': lambda: self.random_forest_forecast(),
-                'Cat': lambda: self.catboost_forecast(),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
