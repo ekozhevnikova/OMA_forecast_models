@@ -1,5 +1,5 @@
-import os
 import sys
+import os
 import numpy as np
 import pandas as pd
 #locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
@@ -11,7 +11,10 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
 from scipy import linalg
 from contextlib import contextmanager
-from ml_models.groups import *
+#from ml_models.groups import *
+#from OMA_tools.ml_models.groups import GROUPS
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.postprocessing import Postprocessing
 from neuralprophet import NeuralProphet
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
@@ -20,14 +23,12 @@ from catboost import CatBoostRegressor
 import threading
 
 #==== Это для нейронки=====#
-import tensorflow as tf
-from tensorflow.keras import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.optimizers import Adam
-from tensorflow.keras import Model
-from ml_models.postprocessing import Postprocessing
-from ml_models.preprocessing import Preprocessing
+#import tensorflow as tf
+#from tensorflow.keras import Sequential
+#from tensorflow.keras.layers import LSTM, Dense, Dropout
+#from sklearn.preprocessing import MinMaxScaler
+#from tensorflow.keras.optimizers import Adam
+#from tensorflow.keras import Model
 
 #==== Это для скрытия бесконечных логов профета=====#
 import logging
@@ -662,11 +663,11 @@ class Forecast_Models:
 
     def prophet_forecast(self):
         """
-            Метод PROPHET.
-            Универсальный для всех ВР.
+           Метод PROPHET.
+           Универсальный для всех ВР.
 
-                Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
-            параметры модели для каждого ряда при помощи Grid Search, минимизируя ошибку MAPE.
+               Функция выполняет прогнозирование ВР с использованием модели Prophet. Она автоматически оптимизирует
+           параметры модели для каждого ряда при помощи Grid Search, минимизируя ошибку MAPE.
 
                 Параметры модели Prophet:
                     seasonality_mode: управляет характером сезонности (аддитивный или мультипликативный).
@@ -924,7 +925,7 @@ class Forecast_Models:
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         return forecast_df
-
+    
 #================== ЭТО ВСЕ НЕЙРОНКА, НО МБ ОНА НЕ НУЖНА================================
     # @staticmethod
     # def create_sequences(data, seq_length):
@@ -985,7 +986,7 @@ class Forecast_Models:
     #     # Создаем итоговый DataFrame с прогнозами для всех столбцов
     #     forecast_df = pd.DataFrame(result_forecast)
 
-        return forecast_df
+        #return forecast_df
 #==================
 
     def process_model(self,
