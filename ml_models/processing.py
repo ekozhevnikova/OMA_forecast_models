@@ -238,8 +238,8 @@ class Forecast_Models:
         # Объединение всех столбцов в один DataFrame
         result_df = pd.concat(forecast_results.values(), axis = 1)
         # Введение названия столбца с индексом для столбца с датами
-        result_df = result_df.reset_index()
-        result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+        result_df.reset_index(inplace=True)
+        result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
         result_df.set_index(self.column_name_with_date, inplace = True)
 
         return result_df
@@ -320,8 +320,8 @@ class Forecast_Models:
         forecast_df = next_year_trend_df + season_forecast_df
 
         # Введение названия столбца с индексом для столбца с датами
-        forecast_df = forecast_df.reset_index()
-        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.reset_index(inplace=True)
+        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         #Замена отрицательных значений в столбце на минимально возможное
@@ -341,8 +341,8 @@ class Forecast_Models:
                 # Финальный прогноз
                 forecast_df = next_year_trend_df + season_forecast_df
                 # Введение названия столбца с индексом для столбца с датами
-                forecast_df = forecast_df.reset_index()
-                forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+                forecast_df.reset_index(inplace=True)
+                forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
                 #Замена отрицательных значений в столбце на минимально возможное
                 for column in forecast_df.columns:
@@ -436,8 +436,8 @@ class Forecast_Models:
         final_forecast = next_year_rolling_mean_df + seasonal_forecast
         forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
         # Введение названия столбца с индексом для столбца с датами
-        forecast_df = forecast_df.reset_index()
-        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.reset_index(inplace=True)
+        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         if method == 'calendar_years':
@@ -445,10 +445,10 @@ class Forecast_Models:
                                                  periods=self.forecast_periods,
                                                  freq='MS')
             if last_month < 12:
-                forecast_df = forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
+                forecast_df.iloc[last_month:].set_index(next_year_dates_fact, inplace=True)
                 # Введение названия столбца с индексом для столбца с датами
-                forecast_df = forecast_df.reset_index()
-                forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+                forecast_df.reset_index(inplace=True)
+                forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         return forecast_df
@@ -537,8 +537,8 @@ class Forecast_Models:
             # Итоговый прогноз: тренд * нормированная сезонность
             result_df = average_normalized * forecast_average
             # МОЙ КУСОК
-            result_df = result_df.reset_index()
-            result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+            result_df.reset_index(inplace=True)
+            result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
             result_df.set_index(self.column_name_with_date, inplace = True)
 
             #Замена отрицательных значений в столбце на минимально возможное
@@ -552,8 +552,8 @@ class Forecast_Models:
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
             # Введение названия столбца с индексом для столбца с датами
-            result_df = result_df.reset_index()
-            result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+            result_df.reset_index(inplace=True)
+            result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
             result_df.set_index(self.column_name_with_date, inplace = True)
 
         # Формируем временной индекс для прогноза
@@ -561,8 +561,8 @@ class Forecast_Models:
                                   periods = self.forecast_periods,
                                   freq = 'MS')
         result_df.index = new_index
-        result_df = result_df.reset_index()
-        result_df = result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date})
+        result_df.reset_index(inplace=True)
+        result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
         result_df.set_index(self.column_name_with_date, inplace = True)
 
         #Замена отрицательных значений в столбце на минимально возможное
@@ -678,8 +678,8 @@ class Forecast_Models:
             )
             result_df_forecast.index = new_index_current_year
             # Введение названия столбца с индексом для столбца с датами
-            result_df_forecast = result_df_forecast.reset_index()
-            result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
+            result_df_forecast.reset_index(inplace=True)
+            result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date}, inplace=True)
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
             #Замена отрицательных значений в столбце на минимально возможное
@@ -700,8 +700,8 @@ class Forecast_Models:
             )
             result_df_forecast.index = new_index
             # Введение названия столбца с индексом для столбца с датами
-            result_df_forecast = result_df_forecast.reset_index()
-            result_df_forecast = result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date})
+            result_df_forecast.reset_index(inplace=True)
+            result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date}, inplace=True)
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
             #Замена отрицательных значений в столбце на минимально возможное
@@ -748,7 +748,7 @@ class Forecast_Models:
         # Сортировка и подготовка данных
         df.reset_index(inplace = True)
         df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-        df = df.sort_values(by = self.column_name_with_date)
+        df.sort_values(by = self.column_name_with_date, inplace=True)
 
         # Разделение на обучающую и тестовую выборки
         train = df.iloc[:-self.forecast_periods]
@@ -821,16 +821,14 @@ class Forecast_Models:
                 forecast_df['ds'] = forecast['ds']
             forecast_df[series] = forecast['yhat']
 
-        forecast_df.set_index('ds', inplace = True)
         # Введение названия столбца с индексом для столбца с датами
-        forecast_df = forecast_df.reset_index()
-        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
-        forecast_df = forecast_df.tail(self.forecast_periods)
+        return forecast_df.tail(self.forecast_periods)
 
-        return forecast_df
     
+
     def prophet_forecast_per_thread(self, df, train, test, series, forecast_df):
         """
             ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ ПАРАЛЛЕЛЬНОЙ ВЕРСИИ МЕТОДА PROPHET.
@@ -867,8 +865,9 @@ class Forecast_Models:
             model.fit(series_df)
 
             # Прогнозирование
-            future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-            forecast = model.predict(future)
+            forecast = model.predict(
+                model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
+                )
 
             # Вычисление MAPE
             test_series = test[[self.column_name_with_date, series]].rename(
@@ -885,14 +884,13 @@ class Forecast_Models:
                 best_mape = mape
                 best_params = params
 
-        print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
+        #print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
         model = Prophet(seasonality_mode = best_params['seasonality_mode'],
                         n_changepoints = best_params['n_changepoints'],
                         changepoint_prior_scale = best_params['changepoint_prior_scale'])
 
         model.fit(data)
-        future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-        forecast = model.predict(future)
+        forecast = model.predict(model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS'))
 
         if forecast_df.empty:
             forecast_df['ds'] = forecast['ds']
@@ -1120,7 +1118,7 @@ class Forecast_Models:
                         eval_set = [(X_train, y_train), (X_test, y_test)],
                         verbose = False)
             
-                y_pred = reg.predict(X_test)
+                reg.predict(X_test)
                 iterations.append(reg.best_iteration)
                 
             #Считаем нужное количество деревьев для корректного прогноза
@@ -1170,8 +1168,8 @@ class Forecast_Models:
                                 freq = 'MS')
         )
         # Введение названия столбца с индексом для столбца с датами
-        forecast_df = forecast_df.reset_index()
-        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.reset_index(inplace=True)
+        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
         return forecast_df
     
@@ -1234,7 +1232,7 @@ class Forecast_Models:
             forecast_df[series] = preds
 
         forecast_df.set_index("ds", inplace = True)
-        forecast_df = forecast_df.reset_index().rename(columns = {"ds": self.column_name_with_date})
+        forecast_df.reset_index(inplace=True).rename(columns = {"ds": self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
         return forecast_df
 
@@ -1341,7 +1339,11 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': self.prophet_forecast,
+                'Prophet': self.prophet_forecast_PARALLEL,
+                'XGB_Regressor': lambda: self.XGBRegressor_model(n_splits = 2, 
+                                                              features = ['year', 'year start', 'month', 'quarter start', 'season'], 
+                                                              target_value = 'Share'),
+                'Random_Forest': self.random_forest_forecast,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
