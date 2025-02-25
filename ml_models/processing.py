@@ -11,12 +11,13 @@ from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import FunctionTransformer
 
-from catboost import CatBoostRegressor
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_percentage_error
 from sklearn.model_selection import GridSearchCV
 
 import xgboost as xgb
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
 
 from scipy import linalg
@@ -1173,6 +1174,69 @@ class Forecast_Models:
         forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace = True)
         return forecast_df
+    
+
+    def random_forest_forecast(self):
+        """
+            Модель Случайного леса.
+            #TODO
+        """
+        df = self.df.copy()
+
+        df.reset_index(inplace = True)
+        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
+        df = df.sort_values(by=self.column_name_with_date)
+
+        series_list = [col for col in df.columns if col != self.column_name_with_date]
+        forecast_df = pd.DataFrame()
+
+        for series in series_list:
+            series_df = df[[self.column_name_with_date, series]].rename(
+                columns = {self.column_name_with_date: 'ds', series: 'y'})
+
+            for lag in range(1, 13):
+                series_df[f"lag_{lag}"] = series_df["y"].shift(lag)
+
+            series_df.dropna(inplace=True)
+
+            X = series_df.drop(columns=["ds", "y"])
+            y = series_df["y"]
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=self.forecast_periods, shuffle = False
+            )
+
+            params = {
+                "n_estimators": 400,    # число деревьев.
+                "random_state": 42,    
+                "min_samples_split": 2, # минимальное количество образцов, необходимых для разделения узла.
+                "min_samples_leaf": 2,  # минимальное количество образцов в листовом узле.
+                "max_depth": 10         # максимальная глубина дерева
+            }
+
+            model = RandomForestRegressor(**params)
+            model.fit(X_train, y_train)
+
+            future_X = pd.DataFrame([X_test.iloc[-1]])  # Последнее наблюдение для прогнозирования
+
+            preds = []
+            for _ in range(self.forecast_periods):
+                pred = model.predict(future_X)[0]
+                preds.append(pred)
+
+                future_X = future_X.shift(-1, axis = 1)
+                future_X.iloc[0, -1] = pred
+
+            if forecast_df.empty:
+                forecast_df["ds"] = pd.date_range(
+                    start=df[self.column_name_with_date].max(), periods = self.forecast_periods + 1, freq = "MS")[1:]
+
+            forecast_df[series] = preds
+
+        forecast_df.set_index("ds", inplace = True)
+        forecast_df = forecast_df.reset_index().rename(columns = {"ds": self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)
+        return forecast_df
 
 
     def process_model(self,
@@ -1195,12 +1259,12 @@ class Forecast_Models:
                 forecast_df: Прогнозный DataFrame.
         """
         method_map = {
-                
                 'ARIMA': self.auto_arima_forecast,
                 'Prophet': self.prophet_forecast_PARALLEL,
-                'XGBRegressor': lambda: self.XGBRegressor_model(n_splits = 2, 
+                'XGB_Regressor': lambda: self.XGBRegressor_model(n_splits = 2, 
                                                               features = ['year', 'year start', 'month', 'quarter start', 'season'], 
                                                               target_value = 'Share'),
+                'Random_Forest': self.random_forest_forecast,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
