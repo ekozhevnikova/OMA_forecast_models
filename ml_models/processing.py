@@ -885,20 +885,23 @@ class Forecast_Models:
                 best_params = params
 
         #print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
-        model = Prophet(seasonality_mode = best_params['seasonality_mode'],
-                        n_changepoints = best_params['n_changepoints'],
-                        changepoint_prior_scale = best_params['changepoint_prior_scale'])
+        try:
+            model = Prophet(seasonality_mode = best_params['seasonality_mode'],
+                            n_changepoints = best_params['n_changepoints'],
+                            changepoint_prior_scale = best_params['changepoint_prior_scale'])
 
-        model.fit(data)
-        forecast = model.predict(model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS'))
+            model.fit(data)
+            forecast = model.predict(model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS'))
 
-        if forecast_df.empty:
-            forecast_df['ds'] = forecast['ds']
-        forecast_df[series] = forecast['yhat']
+            if forecast_df.empty:
+                forecast_df['ds'] = forecast['ds']
+            forecast_df[series] = forecast['yhat']
 
-        for i in range(len(list(forecast_df[series]))):
-            if list(forecast_df[series])[i] < 0:
-                list(forecast_df[series])[i] = min_value
+            for i in range(len(list(forecast_df[series]))):
+                if list(forecast_df[series])[i] < 0:
+                    list(forecast_df[series])[i] = min_value
+        except Exception as e:
+            print(forecast_df[series])
 
 
     def prophet_forecast_PARALLEL(self):
@@ -1339,7 +1342,6 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
-                'Prophet': self.prophet_forecast_PARALLEL,
                 'XGB_Regressor': lambda: self.XGBRegressor_model(n_splits = 2, 
                                                               features = ['year', 'year start', 'month', 'quarter start', 'season'], 
                                                               target_value = 'Share'),
@@ -1367,7 +1369,9 @@ class Forecast_Models:
                 'Dec_without_trend_last_2_periods': lambda: self.decomposition_fixed_periods(method = 'without_trend', past_values = 2),
 
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
-                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
+                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2),
+
+                'Prophet': self.prophet_forecast_PARALLEL
             }
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
