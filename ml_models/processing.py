@@ -1237,7 +1237,7 @@ class Forecast_Models:
             forecast_df[series] = preds
 
         forecast_df.set_index("ds", inplace = True)
-        forecast_df = forecast_df.reset_index(inplace=True).rename(columns = {"ds": self.column_name_with_date})
+        forecast_df = forecast_df.reset_index().rename(columns = {"ds": self.column_name_with_date})
         return forecast_df.set_index(self.column_name_with_date, inplace = True)
 
 
