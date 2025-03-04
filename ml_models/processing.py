@@ -167,12 +167,7 @@ class Forecast_Models:
         future_predictions.set_index(self.column_name_with_date, inplace = True)
 
         #Замена отрицательных значений на минимально возможное в колонке
-        for column in future_predictions.columns:
-            for i in range(len(list(future_predictions[column]))):
-                if list(future_predictions[column])[i] < 0:
-                    values = list(self.df[column])
-                    min_value = min(values)
-                    list(future_predictions[column])[i] = min_value
+        #future_predictions = Postprocessing(self.df, future_predictions).replace_value_with_non_negative()
         return future_predictions
 
 
@@ -325,13 +320,8 @@ class Forecast_Models:
         forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
-        #Замена отрицательных значений в столбце на минимально возможное
-        for column in forecast_df.columns:
-            for i in range(len(list(forecast_df[column]))):
-                if list(forecast_df[column])[i] < 0:
-                    values = list(self.df[column])
-                    min_value = min(values)
-                    list(forecast_df[column])[i] = min_value
+        #Замена отрицательных значений на минимально возможное в колонке
+        #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
 
         if method == 'calendar_years':
             # Корректируем прогнозы для случаев, когда last_month < 12
@@ -339,19 +329,16 @@ class Forecast_Models:
             if last_month < 12:
                 next_year_trend_df = next_year_trend_df.iloc[last_month:].set_index(next_year_dates_fact)
                 season_forecast_df = season_forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
+
                 # Финальный прогноз
                 forecast_df = next_year_trend_df + season_forecast_df
                 # Введение названия столбца с индексом для столбца с датами
                 forecast_df.reset_index(inplace=True)
                 forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
-                #Замена отрицательных значений в столбце на минимально возможное
-                for column in forecast_df.columns:
-                    for i in range(len(list(forecast_df[column]))):
-                        if list(forecast_df[column])[i] < 0:
-                            values = list(self.df[column])
-                            min_value = min(values)
-                            list(forecast_df[column])[i] = min_value
+
+                #Замена отрицательных значений на минимально возможное в колонке
+                #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
 
         assert forecast_df is not None, f'DataFrame is null for method={method}'
         
@@ -410,7 +397,7 @@ class Forecast_Models:
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
 
         # Удаляем тренд с помощью дифференцирования
-        rolling_mean = past_years.rolling(window=12).mean()
+        rolling_mean = past_years.rolling(window = 12).mean()
         detrended = (past_years - rolling_mean).dropna()
         #detrended[self.column_name_with_date] = detrended.index.month
 
@@ -438,24 +425,24 @@ class Forecast_Models:
         seasonal_forecast = np.tile(seasonatily.values, (1, 1))
         # Финальный прогноз: сложение тренда и сезонности
         final_forecast = next_year_rolling_mean_df + seasonal_forecast
-        forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
+        forecast_df = pd.DataFrame(final_forecast, index = next_year_dates, columns = self.df.columns)
         # Введение названия столбца с индексом для столбца с датами
-        forecast_df.reset_index(inplace=True)
-        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
+        forecast_df.reset_index(inplace = True)
+        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace = True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         if method == 'calendar_years':
-            next_year_dates_fact = pd.date_range(start=last_date + pd.DateOffset(months=1),
-                                                 periods=self.forecast_periods,
-                                                 freq='MS')
+            next_year_dates_fact = pd.date_range(start = last_date + pd.DateOffset(months = 1),
+                                                 periods = self.forecast_periods,
+                                                 freq = 'MS')
             if last_month < 12:
-                forecast_df.iloc[last_month:].set_index(next_year_dates_fact, inplace=True)
+                forecast_df.iloc[last_month:].set_index(next_year_dates_fact, inplace = True)
                 # Введение названия столбца с индексом для столбца с датами
-                forecast_df.reset_index(inplace=True)
-                forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
+                forecast_df.reset_index(inplace = True)
+                forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace = True)
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
 
-        assert forecast_df is not None, f'DataFrame is null for method={method}'
+        assert forecast_df is not None, f'DataFrame is null for method = {method}'
 
         return forecast_df
 
@@ -547,13 +534,8 @@ class Forecast_Models:
             result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
             result_df.set_index(self.column_name_with_date, inplace = True)
 
-            #Замена отрицательных значений в столбце на минимально возможное
-            for column in result_df.columns:
-                for i in range(len(list(result_df[column]))):
-                    if list(result_df[column])[i] < 0:
-                        values = list(self.df[column])
-                        min_value = min(values)
-                        list(result_df[column])[i] = min_value
+            #Замена отрицательных значений на минимально возможное в колонке
+            #result_df = Postprocessing(self.df, result_df).replace_value_with_non_negative()
 
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
@@ -571,13 +553,8 @@ class Forecast_Models:
         result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
         result_df.set_index(self.column_name_with_date, inplace = True)
 
-        #Замена отрицательных значений в столбце на минимально возможное
-        for column in result_df.columns:
-            for i in range(len(list(result_df[column]))):
-                if list(result_df[column])[i] < 0:
-                    values = list(self.df[column])
-                    min_value = min(values)
-                    list(result_df[column])[i] = min_value
+        #Замена отрицательных значений на минимально возможное в колонке
+        #result_df = Postprocessing(self.df, result_df).replace_value_with_non_negative()
 
         return result_df
 
@@ -688,13 +665,9 @@ class Forecast_Models:
             result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date}, inplace=True)
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
-            #Замена отрицательных значений в столбце на минимально возможное
-            for column in result_df_forecast.columns:
-                for i in range(len(list(result_df_forecast[column]))):
-                    if list(result_df_forecast[column])[i] < 0:
-                        values = list(self.df[column])
-                        min_value = min(values)
-                        list(result_df_forecast[column])[i] = min_value
+            #Замена отрицательных значений на минимально возможное в колонке
+            #result_df_forecast = Postprocessing(self.df, result_df_forecast).replace_value_with_non_negative()
+
 
         else:
             # Прогноз на `months_to_forecast` месяцев, начиная с января
@@ -710,13 +683,9 @@ class Forecast_Models:
             result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date}, inplace=True)
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
-            #Замена отрицательных значений в столбце на минимально возможное
-            for column in result_df_forecast.columns:
-                for i in range(len(list(result_df_forecast[column]))):
-                    if list(result_df_forecast[column])[i] < 0:
-                        values = list(self.df[column])
-                        min_value = min(values)
-                        list(result_df_forecast[column])[i] = min_value
+            #Замена отрицательных значений на минимально возможное в колонке
+            #result_df_forecast = Postprocessing(self.df, result_df_forecast).replace_value_with_non_negative()
+
 
         return result_df_forecast
 
@@ -772,13 +741,8 @@ class Forecast_Models:
         # Введение названия столбца с индексом для столбца с датами
         forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace = True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
-        #Замена отрицательных значений в столбце на минимально возможное
-        for column in forecast_df.columns:
-            for i in range(len(list(forecast_df[column]))):
-                if list(forecast_df[column])[i] < 0:
-                    values = list(self.df[column])
-                    min_value = min(values)
-                    list(forecast_df[column])[i] = min_value
+        #Замена отрицательных значений на минимально возможное в колонке
+        #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
         return forecast_df.tail(forecast_periods)
       # # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
       # df = self.df.copy()
@@ -1035,12 +999,12 @@ class Forecast_Models:
 
         for channel in self.df.columns:
             #Поиск минимального значения в колонке
-            values = list(self.df[channel])
-            min_value = min(values)
+            #values = list(self.df[channel])
+            #min_value = min(values)
 
             #Логарифмирование данных
-            log_transformer = FunctionTransformer(np.log)
-            self.df[channel] = log_transformer.transform(self.df[channel])
+            #log_transformer = FunctionTransformer(np.log)
+            #self.df[channel] = log_transformer.transform(self.df[channel])
             ts = self.df[channel].dropna()
             original_series = ts.copy()
             was_non_stationary = False
@@ -1076,12 +1040,12 @@ class Forecast_Models:
                     last_observation = original_series.iloc[-1]
                     forecast = Preprocessing(pd.Series(forecast)).inverse_difference(last_observation)
 
-                forecast = np.exp(forecast)
+                #forecast = np.exp(forecast)
 
                 #Замена отрицательных значений на минимально возможное в колонке
-                for i in range(len(forecast)):
-                    if forecast[i] < 0:
-                        forecast[i] = min_value
+                #for i in range(len(forecast)):
+                #    if forecast[i] < 0:
+                #        forecast[i] = min_value
                         
                 forecasts[channel] = forecast
 
@@ -1390,7 +1354,7 @@ class Forecast_Models:
                 'XGB_Regressor': lambda: self.XGBRegressor_model(n_splits = 2, 
                                                               features = ['year', 'year start', 'month', 'quarter start', 'season'], 
                                                               target_value = 'Share'),
-                'CatBoostRegressor': self.CatBoostRegressor_model,
+                'CatBoost_Regressor': self.CatBoostRegressor_model,
                 'Random_Forest': self.random_forest_forecast,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
@@ -1429,7 +1393,7 @@ class Forecast_Models:
             test = False
 
         forecast_df = method_map[model_name]()
-        print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}", forecast_df.round(4), sep = '\n', end = '\n\n')
+        #print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}", forecast_df.round(4), sep = '\n', end = '\n\n')
         
         # Если задан параметр plots == True
         if plots and plots_dir is not None:

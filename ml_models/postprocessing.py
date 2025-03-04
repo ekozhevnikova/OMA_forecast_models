@@ -21,6 +21,19 @@ class Postprocessing:
         self.forecast_df = forecast_df
 
 
+    def replace_value_with_non_negative(self):
+        """
+            Замена отрицательных значений на минимально возможное в столбце.
+        """
+        for column in self.forecast_df.columns:
+            for i in range(len(list(self.forecast_df[column]))):
+                if list(self.forecast_df[column])[i] < 0:
+                    values = list(self.df[column])
+                    min_value = min(values)
+                    list(self.forecast_df[column])[i] = min_value
+        return self.forecast_df
+
+
     @staticmethod
     def calculate_average_forecast(list_of_forecasts: list):
         """
