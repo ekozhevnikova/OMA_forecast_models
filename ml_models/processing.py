@@ -345,7 +345,7 @@ class Forecast_Models:
         return forecast_df
 
 
-    def rolling_mean(self, method: str, past_values: int = 3):
+    def rolling_mean(self, method: str, past_values: int = 3, window = 3):
         """
             Декомпозиция временного ряда с применением скользящего среднего.
             Используется для прогноза ВР с неявно выраженным трендом и сезонностью.
@@ -397,7 +397,7 @@ class Forecast_Models:
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
 
         # Удаляем тренд с помощью дифференцирования
-        rolling_mean = past_years.rolling(window=12).mean()
+        rolling_mean = past_years.rolling(window = window).mean()
         detrended = (past_years - rolling_mean).dropna()
         #detrended[self.column_name_with_date] = detrended.index.month
 
