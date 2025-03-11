@@ -397,7 +397,7 @@ class Forecast_Models:
             last_month if (last_month != 12) & (method == 'calendar_years') else 0)
 
         # Удаляем тренд с помощью дифференцирования
-        rolling_mean = past_years.rolling(window = 12).mean()
+        rolling_mean = past_years.rolling(window=12).mean()
         detrended = (past_years - rolling_mean).dropna()
         #detrended[self.column_name_with_date] = detrended.index.month
 
@@ -425,24 +425,22 @@ class Forecast_Models:
         seasonal_forecast = np.tile(seasonatily.values, (1, 1))
         # Финальный прогноз: сложение тренда и сезонности
         final_forecast = next_year_rolling_mean_df + seasonal_forecast
-        forecast_df = pd.DataFrame(final_forecast, index = next_year_dates, columns = self.df.columns)
+        forecast_df = pd.DataFrame(final_forecast, index=next_year_dates, columns=self.df.columns)
         # Введение названия столбца с индексом для столбца с датами
-        forecast_df.reset_index(inplace = True)
-        forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace = True)
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
         if method == 'calendar_years':
-            next_year_dates_fact = pd.date_range(start = last_date + pd.DateOffset(months = 1),
-                                                 periods = self.forecast_periods,
-                                                 freq = 'MS')
+            next_year_dates_fact = pd.date_range(start=last_date + pd.DateOffset(months=1),
+                                                 periods=self.forecast_periods,
+                                                 freq='MS')
             if last_month < 12:
-                forecast_df.iloc[last_month:].set_index(next_year_dates_fact, inplace = True)
+                forecast_df = forecast_df.iloc[last_month:].set_index(next_year_dates_fact)
                 # Введение названия столбца с индексом для столбца с датами
-                forecast_df.reset_index(inplace = True)
-                forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace = True)
+                forecast_df = forecast_df.reset_index()
+                forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
-
-        assert forecast_df is not None, f'DataFrame is null for method = {method}'
 
         return forecast_df
 

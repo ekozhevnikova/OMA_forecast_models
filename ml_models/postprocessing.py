@@ -216,6 +216,7 @@ class Postprocessing:
             file_path = os.path.join(save_dir, f'{col_idx}.png')
             #file_path = os.path.join(save_dir, f'{col_idx}_{uuid.uuid4()}.png')
             plt.savefig(file_path, dpi = 300)
+            plt.close()
             #with lock:
             #    try:
             #        plt.savefig(file_path, dpi=300)
