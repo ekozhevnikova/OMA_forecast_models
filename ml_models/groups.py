@@ -44,19 +44,19 @@ class GROUPS():
             trend_test_result = mk.original_test(time_series)
 
             #Есть сезонность и есть тренд
-            if (correlation >= 0.7) and trend_test_result.h == True:
+            if (correlation >= 0.65) and trend_test_result.h == True:
                 df_list_1.append(self.df[column])
 
             #Нет сезонности, но есть тренд
-            if (correlation < 0.7) and trend_test_result.h == True:
+            if (correlation < 0.65) and trend_test_result.h == True:
                 df_list_2.append(self.df[column])
 
             #Есть сезонность, но нет тренда
-            if (correlation >= 0.7) and trend_test_result.h == False:
+            if (correlation >= 0.5) and trend_test_result.h == False:
                 df_list_3.append(self.df[column])
 
             #Нет сезонности и нет тренда
-            if (correlation < 0.7) and trend_test_result.h == False:
+            if (correlation < 0.65) and trend_test_result.h == False:
                 df_list_4.append(self.df[column])
 
         group_1 = pd.DataFrame(df_list_1).T
@@ -81,6 +81,10 @@ class GROUPS():
             Args:
                 type_of_group: Тип группы (GROUP_1, GROUP_2, GROUP_3, GROUP_4);
                 weights_filepath: Полный путь к config-файлу с весами для каждой из ML-моделей;
+                name_of_group_1: Имя группы 1
+                name_of_group_2: Имя группы 2
+                name_of_group_3: Имя группы 3
+                name_of_group_4: Имя группы 4
                 plots_dir: Путь к директории, куда будут сохраняться графики;
                 plots: Переменная типа bool. Если True, графики строятся, в противном случае нет;
                 test: Переменная типа bool. Если True, тестинг моделей проводится, в противном случае нет.
@@ -108,35 +112,24 @@ class GROUPS():
         #создание папки для сохранения выходных файлов с ошибками
         #os.makedirs(path_to_save_errors, exist_ok = True)
         if type_of_group == 'GROUP_1' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/Сезонность и тренд'
+            path_to_save = f'{plots_dir}/GROUP_1'
         if type_of_group == 'GROUP_1' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/Сезонность и тренд'
-        if type_of_group == 'GROUP_2' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/Тренд без сезонности'
-        if type_of_group == 'GROUP_2' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/Тренд без сезонности'
-        if type_of_group == 'GROUP_3' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/Сезонность без тренда'
-        if type_of_group == 'GROUP_3' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/Сезонность без тренда'
-        if type_of_group == 'GROUP_4' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/Без сезонности и без тренда'
-        if type_of_group == 'GROUP_4' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/Без сезонности и без тренда'
+            path_to_save_errors = f'{error_dir}/GROUP_1'
 
-        
-        ##Обработка группы с моделями
-        #forecasts = []
-        #for model_name in list_of_model_names:
-        #    if model_name not in groups[group_key]:
-        #            raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
-        #    else:
-        #        forecast_df = Forecast_Models(self.df, forecast_periods, column_name_with_date).process_model(model_name = model_name,
-        #                                                                                                      error_dir = path_to_save_errors,
-        #                                                                                                      plots_dir = path_to_save,
-        #                                                                                                      plots = plots,
-        #                                                                                                      test = test)
-        #        forecasts.append(forecast_df * groups[group_key][model_name])
+        if type_of_group == 'GROUP_2' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/GROUP_2'
+        if type_of_group == 'GROUP_2' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/GROUP_2'
+
+        if type_of_group == 'GROUP_3' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/GROUP_3'
+        if type_of_group == 'GROUP_3' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/GROUP_3'
+
+        if type_of_group == 'GROUP_4' and plots_dir is not None:
+            path_to_save = f'{plots_dir}/GROUP_4'
+        if type_of_group == 'GROUP_4' and error_dir is not None:
+            path_to_save_errors = f'{error_dir}/GROUP_4'
 
         #Обработка группы с моделями
         threads = []

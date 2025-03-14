@@ -10,6 +10,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.model_selection import ParameterGrid
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import FunctionTransformer
+from sklearn.preprocessing import RobustScaler
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_absolute_percentage_error
@@ -23,17 +24,18 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolu
 
 from scipy import linalg
 from contextlib import contextmanager
-import logging
 import os
 from OMA_tools.ml_models.preprocessing import Preprocessing
 from OMA_tools.ml_models.postprocessing import Postprocessing
 
-
-
+import warnings
+warnings.filterwarnings('ignore')
 import logging
 logging.getLogger("prophet").setLevel(logging.ERROR)
 logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
+logging.getLogger('log').setLevel(logging.INFO)
 logging.getLogger("cmdstanpy").propagate = False
+logging.getLogger("log").propagate = False
 logging.getLogger("cmdstanpy").disabled = True
 
 
@@ -166,8 +168,6 @@ class Forecast_Models:
             future_predictions[f'{column}'] = y_future_pred
         future_predictions.set_index(self.column_name_with_date, inplace = True)
 
-        #Замена отрицательных значений на минимально возможное в колонке
-        #future_predictions = Postprocessing(self.df, future_predictions).replace_value_with_non_negative()
         return future_predictions
 
 
@@ -320,8 +320,6 @@ class Forecast_Models:
         forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
 
-        #Замена отрицательных значений на минимально возможное в колонке
-        #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
 
         if method == 'calendar_years':
             # Корректируем прогнозы для случаев, когда last_month < 12
@@ -336,9 +334,6 @@ class Forecast_Models:
                 forecast_df.reset_index(inplace=True)
                 forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
                 forecast_df.set_index(self.column_name_with_date, inplace = True)
-
-                #Замена отрицательных значений на минимально возможное в колонке
-                #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
 
         assert forecast_df is not None, f'DataFrame is null for method={method}'
         
@@ -532,9 +527,6 @@ class Forecast_Models:
             result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
             result_df.set_index(self.column_name_with_date, inplace = True)
 
-            #Замена отрицательных значений на минимально возможное в колонке
-            #result_df = Postprocessing(self.df, result_df).replace_value_with_non_negative()
-
         elif method == 'without_trend':
             result_df = average_normalized * overall_mean
             # Введение названия столбца с индексом для столбца с датами
@@ -550,9 +542,6 @@ class Forecast_Models:
         result_df.reset_index(inplace=True)
         result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
         result_df.set_index(self.column_name_with_date, inplace = True)
-
-        #Замена отрицательных значений на минимально возможное в колонке
-        #result_df = Postprocessing(self.df, result_df).replace_value_with_non_negative()
 
         return result_df
 
@@ -663,10 +652,6 @@ class Forecast_Models:
             result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date}, inplace=True)
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
 
-            #Замена отрицательных значений на минимально возможное в колонке
-            #result_df_forecast = Postprocessing(self.df, result_df_forecast).replace_value_with_non_negative()
-
-
         else:
             # Прогноз на `months_to_forecast` месяцев, начиная с января
             result_df_forecast = result_df.iloc[:months_to_forecast]
@@ -680,10 +665,6 @@ class Forecast_Models:
             result_df_forecast.reset_index(inplace=True)
             result_df_forecast.rename(columns = {result_df_forecast.columns[0]: self.column_name_with_date}, inplace=True)
             result_df_forecast.set_index(self.column_name_with_date, inplace = True)
-
-            #Замена отрицательных значений на минимально возможное в колонке
-            #result_df_forecast = Postprocessing(self.df, result_df_forecast).replace_value_with_non_negative()
-
 
         return result_df_forecast
 
@@ -739,221 +720,9 @@ class Forecast_Models:
         # Введение названия столбца с индексом для столбца с датами
         forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace = True)
         forecast_df.set_index(self.column_name_with_date, inplace = True)
-        #Замена отрицательных значений на минимально возможное в колонке
-        #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
+        
         return forecast_df.tail(forecast_periods)
-      # # Отключение логов INFO, возможно отключаются еще какие-то логи дополнительно
-      # df = self.df.copy()
-      # #forecast_periods = self.forecast_periods
 
-      # # Параметры для перебора
-      # param_grid = {
-      #     'seasonality_mode': ['multiplicative'],
-      #     'n_changepoints': [12, 18, 24, 36],
-      #     'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5],
-      # }
-
-      # # Сортировка и подготовка данных
-      # df.reset_index(inplace = True)
-      # df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-      # df.sort_values(by = self.column_name_with_date, inplace=True)
-
-      # # Разделение на обучающую и тестовую выборки
-      # train = df.iloc[:-self.forecast_periods]
-      # test = df.iloc[-self.forecast_periods:]
-
-      # # Список временных рядов для прогнозирования
-      # series_list = [col for col in train.columns if col != self.column_name_with_date]
-
-      # results = []  # Результаты параметров для каждого временного ряда
-      # forecast_df = pd.DataFrame()
-      # for series in series_list:
-      #     # Подготовка данных для Prophet
-      #     series_df = train[[self.column_name_with_date, series]].rename(
-      #         columns = {self.column_name_with_date: 'ds', series: 'y'})
-
-      #     best_mape = float('inf')
-      #     best_params = None
-
-      #     for params in ParameterGrid(param_grid):
-      #         model = Prophet(
-      #                         seasonality_mode = params['seasonality_mode'],
-      #                         n_changepoints = params['n_changepoints'],
-      #                         changepoint_prior_scale = params['changepoint_prior_scale'])
-
-      #         model.fit(series_df)
-
-      #         # Прогнозирование
-      #         future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-      #         forecast = model.predict(future)
-
-      #         # Вычисление MAPE
-      #         test_series = test[[self.column_name_with_date, series]].rename(
-      #             columns = {self.column_name_with_date: 'ds', series: 'y'})
-      #         forecast_test_period = forecast[-self.forecast_periods:]
-
-      #         # Сравнение только по датам тестового набора
-      #         aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
-      #         aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
-
-      #         mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
-
-      #         if mape < best_mape:
-      #             best_mape = mape
-      #             best_params = params
-      #     results.append((series, best_params, best_mape))
-      #     #print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
-
-      # # Прогнозирование для полного набора данных
-      # forecast_df = pd.DataFrame()
-      # for series, best_params, _ in results:
-      #     series_df = df[[self.column_name_with_date, series]].rename(
-      #         columns = {self.column_name_with_date: 'ds', series: 'y'})
-      #     
-
-      #     model = Prophet(seasonality_mode = best_params['seasonality_mode'],
-      #                     n_changepoints = best_params['n_changepoints'],
-      #                     changepoint_prior_scale = best_params['changepoint_prior_scale'])
-
-      #     model.fit(series_df)
-      #     future = model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-      #     forecast = model.predict(future)
-
-      #     if forecast_df.empty:
-      #         forecast_df['ds'] = forecast['ds']
-      #     forecast_df[series] = forecast['yhat']
-
-      # # Введение названия столбца с индексом для столбца с датами
-      # forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date}, inplace=True)
-      # forecast_df.set_index(self.column_name_with_date, inplace = True)
-      # #Замена отрицательных значений в столбце на минимально возможное
-      # for column in forecast_df.columns:
-      #     for i in range(len(list(forecast_df[column]))):
-      #         if list(forecast_df[column])[i] < 0:
-      #             values = list(self.df[column])
-      #             min_value = min(values)
-      #             list(forecast_df[column])[i] = min_value
-
-      # assert forecast_df is not None, f'DataFrame is null for method=prophet'
-
-      # return forecast_df.tail(self.forecast_periods)
-
-    
-
-    def prophet_forecast_per_thread(self, df, train, test, series, forecast_df):
-        """
-            ВСПОМОГАТЕЛЬНЫЙ МЕТОД ДЛЯ ПАРАЛЛЕЛЬНОЙ ВЕРСИИ МЕТОДА PROPHET.
-            Args:
-                df: исходный ВР для анализа
-                train: тренировочная выборка
-                test: тестовая выборка
-                series: ВР для прогнозирования
-                forecast_df: Датафрейм с прогнозом
-        """
-        param_grid = {
-                'seasonality_mode': ['multiplicative'],
-                'n_changepoints': [12, 18, 24, 36],
-                'changepoint_prior_scale': [0.01, 0.05, 0.1, 0.2, 0.5]
-            }
-        data = df[[self.column_name_with_date, series]].rename(
-            columns = {self.column_name_with_date: 'ds', series: 'y'})
-        
-        values = list(data['y'])
-        min_value = min(values)
-
-        series_df = train[[self.column_name_with_date, series]].rename(
-            columns = {self.column_name_with_date: 'ds', series: 'y'})
-        #print(data)
-
-        best_mape = float('inf')
-        best_params = None
-        for params in ParameterGrid(param_grid):
-            model = Prophet(
-                            seasonality_mode = params['seasonality_mode'],
-                            n_changepoints = params['n_changepoints'],
-                            changepoint_prior_scale = params['changepoint_prior_scale'])
-
-            model.fit(series_df)
-
-            # Прогнозирование
-            forecast = model.predict(
-                model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS')
-                )
-
-            # Вычисление MAPE
-            test_series = test[[self.column_name_with_date, series]].rename(
-                columns = {self.column_name_with_date: 'ds', series: 'y'})
-            forecast_test_period = forecast[-self.forecast_periods:]
-
-            # Сравнение только по датам тестового набора
-            aligned_forecast = forecast_test_period.set_index('ds').reindex(test_series['ds']).dropna()
-            aligned_test = test_series.set_index('ds').reindex(aligned_forecast.index).dropna()
-
-            mape = np.mean(np.abs((aligned_forecast['yhat'] - aligned_test['y']) / aligned_test['y'])) * 100
-
-            if mape < best_mape:
-                best_mape = mape
-                best_params = params
-
-        #print(f"Лучшие параметры для {series}: {best_params}, MAPE: {best_mape:.2f}")
-        try:
-            model = Prophet(seasonality_mode = best_params['seasonality_mode'],
-                            n_changepoints = best_params['n_changepoints'],
-                            changepoint_prior_scale = best_params['changepoint_prior_scale'])
-
-            model.fit(data)
-            forecast = model.predict(model.make_future_dataframe(periods = self.forecast_periods, freq = 'MS'))
-
-            if forecast_df.empty:
-                forecast_df['ds'] = forecast['ds']
-            forecast_df[series] = forecast['yhat']
-
-            for i in range(len(list(forecast_df[series]))):
-                if list(forecast_df[series])[i] < 0:
-                    list(forecast_df[series])[i] = min_value
-        except Exception as e:
-            print(forecast_df[series])
-
-
-    def prophet_forecast_PARALLEL(self):
-        """
-            ПАРАЛЛЕЛЬНАЯ ВЕРСИЯ МЕТОДА PROPHET
-            Для корректной рабооты данной функции используется вспомогательная функция prophet_forecast_per_thread.
-            Здесь ниже представлено непосредственно распараллеливание последовательной версии prophet_forecast_sequential
-            !!!ВНИМАНИЕ!!! Если при использовании данной функции у Вас не хватает оперативной памяти компьютера, то воспользуйтесь
-            последовательной версии данного метода prophet_forecast_sequential.
-        """
-        df = self.df.copy()
-        # Сортировка и подготовка данных
-        df.reset_index(inplace = True)
-        df[self.column_name_with_date] = pd.to_datetime(df[self.column_name_with_date])
-        df.sort_values(by = self.column_name_with_date, inplace=True)
-
-        # Разделение на обучающую и тестовую выборки
-        train = df.iloc[:-self.forecast_periods]
-        test = df.iloc[-self.forecast_periods:]
-
-        # Список временных рядов для прогнозирования
-        series_list = [col for col in train.columns if col != self.column_name_with_date]
-
-        threads = []
-        forecast_df = pd.DataFrame()
-        for series in series_list:
-            t = threading.Thread(target = self.prophet_forecast_per_thread,
-                                    args = (df, train, test, series, forecast_df))
-
-            t.start()
-            threads.append(t)
-        for t in threads:
-            t.join()
-        
-        # Введение названия столбца с индексом для столбца с датами
-        forecast_df.rename(columns = {'ds': self.column_name_with_date}, inplace = True)
-        forecast_df.set_index(self.column_name_with_date, inplace = True)
-
-        assert forecast_df is not None, f'DataFrame is null for method=prophet'
-
-        return forecast_df.tail(self.forecast_periods)
 
 
     def auto_arima_forecast(self):
@@ -1382,6 +1151,21 @@ class Forecast_Models:
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
 
+        #НИЖЕ ВСЁ СКЕЙЛИНГ
+        #scaler = RobustScaler()
+        ##Замена выбросов на значения медианы
+        #df_new = pd.DataFrame(index = self.df.index, columns = self.df.columns)
+        #for column in self.df.columns:
+        #    scaled_values = scaler.fit_transform(self.df[column].values.reshape(-1, 1))
+        #    scaled_values_list = [i[0] for i in scaled_values]
+        #    med = np.median(scaled_values_list)
+        #    avg = np.abs(np.mean(scaled_values_list))
+#
+        #    for i in range(len(scaled_values_list)):
+        #        if np.abs(scaled_values_list[i] - avg) > 1.0:
+        #            scaled_values_list[i] = med
+        #    df_new[column] = self.df[column].replace(list(self.df[column]), scaled_values_list)
+
         # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
         if test and self.forecast_periods <= 12:
             train_data = self.df.iloc[:-self.forecast_periods]
@@ -1391,6 +1175,15 @@ class Forecast_Models:
             test = False
 
         forecast_df = method_map[model_name]()
+
+        #Приведение данных к нормальному масштабу
+        #return_back_forecast = scaler.inverse_transform(forecast_df)
+        #forecast_back_to = pd.DataFrame(return_back_forecast, 
+        #                           index = forecast_df.index,
+        #                           columns = forecast_df.columns)
+        
+        #Замена отрицательных значений в прогнозном Датафрейма
+        #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
         #print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}", forecast_df.round(4), sep = '\n', end = '\n\n')
         
         # Если задан параметр plots == True
@@ -1412,7 +1205,6 @@ class Forecast_Models:
                       forecasts,
                       tests,
                       trains,
-                      #coeff,
                       model_name: str,
                       error_dir: str = None,
                       plots_dir: str = None,
@@ -1433,9 +1225,11 @@ class Forecast_Models:
         """
         method_map = {
                 'ARIMA': self.auto_arima_forecast,
+                'Prophet': self.prophet_forecast_sequential,
                 'XGB_Regressor': lambda: self.XGBRegressor_model(n_splits = 2, 
                                                               features = ['year', 'year start', 'month', 'quarter start', 'season'], 
                                                               target_value = 'Share'),
+                'CatBoost_Regressor': self.CatBoostRegressor_model,
                 'Random_Forest': self.random_forest_forecast,
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
@@ -1460,12 +1254,26 @@ class Forecast_Models:
                 'Dec_without_trend_last_2_periods': lambda: self.decomposition_fixed_periods(method = 'without_trend', past_values = 2),
 
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
-                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2),
-
-                'Prophet': self.prophet_forecast_PARALLEL
+                'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
             }
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
+        
+        #НИЖЕ ВСЁ СКЕЙЛИНГ
+        #scaler = RobustScaler()
+        ##Замена выбросов на значения медианы
+        #df_new = pd.DataFrame(index = self.df.index, columns = self.df.columns)
+        #for column in self.df.columns:
+        #    scaled_values = scaler.fit_transform(self.df[column].values.reshape(-1, 1))
+        #    scaled_values_list = [i[0] for i in scaled_values]
+        #    med = np.median(scaled_values_list)
+        #    avg = np.abs(np.mean(scaled_values_list))
+#
+        #    for i in range(len(scaled_values_list)):
+        #        if np.abs(scaled_values_list[i] - avg) > 1.0:
+        #            scaled_values_list[i] = med
+        #    df_new[column] = self.df[column].replace(list(self.df[column]), scaled_values_list)
+
 
         # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
         if test and self.forecast_periods <= 12:
@@ -1478,22 +1286,18 @@ class Forecast_Models:
             test = False
 
         forecast_df = method_map[model_name]()
+        #Приведение данных к нормальному масштабу
+        #return_back_forecast = scaler.inverse_transform(forecast_df)
+        #forecast_back_to = pd.DataFrame(return_back_forecast, 
+        #                           index = forecast_df.index,
+        #                           columns = forecast_df.columns)
+        #
+        ##Замена отрицательных значений в прогнозном Датафрейма
+        #forecast_back_to = Postprocessing(self.df, forecast_back_to).replace_value_with_non_negative()
 
-        assert forecast_df is not None, f'DataFrame is null for method={model_name}'
+        assert forecast_df is not None, f'DataFrame is null for method = {model_name}'
 
         print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}",
             forecast_df.round(4), sep = '\n', end = '\n\n')
-        
-        # # Если задан параметр plots == True
-        # if plots and plots_dir is not None:
-        #     Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
-        #                                                     save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
-        # # Если задан параметр test == True    
-        #if test:
-        #    error_df = Postprocessing.calculate_forecast_error(
-        #                        forecast_df = forecast_df,
-        #                        test_data = test_data
-        #                    )
-        #    error_df.to_excel(f'{error_dir}/{model_name}_MAPE(%).xlsx')
 
         forecasts.append({ model_name: forecast_df})
