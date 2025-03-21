@@ -1,70 +1,46 @@
 {
-    "GROUP_1_not_december": { "ARIMA": 0.1,  
-                              "Prophet": 0.3, 
-                              "Dec_with_trend_periods": 0.025, 
-                              "RollMean_periods": 0.15, 
-                              "SeasonDec_periods": 0.2,
-                              "RollMean_years": 0.2,
-                              "Regr_log": 0.025 
-    },
-    "GROUP_1_december": {"ARIMA": 0.05, 
-                         "Prophet": 0.45,  
-                         "Dec_with_trend_years": 0.03, 
-                         "RollMean_periods": 0.35, 
-                         "SeasonDec_periods": 0.1,
-                         "Regr_log": 0.07
-    },
-    "GROUP_2_not_december": {"ARIMA": 0.06, 
-                             "Prophet": 0.06, 
-                             "Regr_lin": 0.2,
-                             "Regr_log": 0.25, 
-                             "SeasonDec_periods": 0.08,
-                             "Naive_with_error_last_6_months": 0.35
-    },
-    "GROUP_2_december": {"ARIMA": 0.05, 
-                         "Prophet": 0.15, 
-                         "Regr_lin": 0.55, 
-                         "SeasonDec_periods": 0.05, 
-                         "Naive_with_error": 0.1,
-                         "Naive_with_error_last_6_months": 0.1
+    "GROUP_1": {
+        "SeasonDec_periods": 0.02551324900588705, 
+        "RollMean_years": 0.02551324900588705, 
+        "XGB_Regressor": 0.21613551303080264, 
+        "Naive_with_error": 0.10314511978257121, 
+        "ARIMA": 0.17966463531254115, 
+        "RollMean_periods": 0.024579502693183288, 
+        "Prophet": 0.22579077140667864, 
+        "Naive": 0.199657959762449
+    }, 
 
-    },
-    "GROUP_3_not_december": {"ARIMA": 0.1, 
-                             "Prophet": 0.15, 
-                             "Dec_without_trend_years": 0.06, 
-                             "Dec_without_trend_last_2_years": 0.08, 
-                             "Dec_without_trend_periods": 0.08, 
-                             "Dec_without_trend_last_2_periods": 0.08, 
-                             "RollMean_periods": 0.05,
-                             "SeasonDec_periods": 0.05, 
-                             "RollMean_years": 0.1, 
-                             "SeasonDec_years": 0.1, 
-                             "Regr_lin": 0.1
-    },
-    "GROUP_3_december": {"ARIMA": 0.15,
-                         "Prophet": 0.1,
-                         "Dec_without_trend_periods": 0.25,
-                         "Dec_without_trend_last_2_periods": 0.2,
-                         "RollMean_years": 0.075,
-                         "SeasonDec_years": 0.075,
-                         "Regr_lin": 0.15
-    },
-    "GROUP_4_not_december": {"ARIMA": 0.03, 
-                             "Prophet": 0.04, 
-                             "Naive": 0.25, 
-                             "Dec_without_trend_last_2_periods": 0.03, 
-                             "Regr_lin": 0.15, 
-                             "Regr_log": 0.05, 
-                             "SeasonDec_periods": 0.2, 
-                             "Naive_with_error_last_6_months": 0.25
-    },
-    "GROUP_4_december": {"ARIMA": 0.35, 
-                         "Prophet": 0.155, 
-                         "Naive": 0.01,
-                         "Naive_last_6_months": 0.01,
-                         "Regr_log": 0.01, 
-                         "SeasonDec_periods": 0.02, 
-                         "Naive_with_error": 0.2225,
-                         "Naive_with_error_last_6_months": 0.2225
+    "GROUP_2": {
+        "SeasonDec_periods": 0.03145115207879774, 
+        "XGB_Regressor": 0.45457945501056907, 
+        "Naive_with_error": 0.16504597152819037, 
+        "Regr_log": 0.031451152078797326, 
+        "RollMean_periods": 0.03145115207879774, 
+        "Naive": 0.16024070392354967, 
+        "Dec_with_trend_periods": 0.12578041330129808
+    }, 
+
+    "GROUP_3": {
+        "XGB_Regressor": 0.058302402229957716, 
+        "Dec_without_trend_years": 0.05361295424925307, 
+        "Regr_log": 0.04971394775001979, 
+        "Prophet": 0.07894354275318759, 
+        "Naive": 0.08102716354384097, 
+        "Random_Forest": 0.0899211958365693, 
+        "Dec_without_trend_periods": 0.054843002308371955, 
+        "Dec_with_trend_years": 0.2301563871717794, 
+        "Dec_with_trend_periods": 0.1631982394326015, 
+        "CatBoost_Regressor": 0.05398043774563958, 
+        "Regr_lin": 0.08630072697877905
+    }, 
+    
+    "GROUP_4": {
+        "XGB_Regressor": 0.23418030497993284, 
+        "Naive_with_error": 0.2399288013395345, 
+        "Dec_without_trend_years": 0.15227601379832287, 
+        "Regr_log": 0.013371819495850612, 
+        "RollMean_periods": 0.01990872212831466, 
+        "Dec_without_trend_periods": 0.21348797682079296, 
+        "Regr_lin": 0.12684636143725164
     }
 }

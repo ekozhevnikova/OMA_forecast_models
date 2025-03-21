@@ -52,7 +52,7 @@ class GROUPS():
                 df_list_2.append(self.df[column])
 
             #Есть сезонность, но нет тренда
-            if (correlation >= 0.5) and trend_test_result.h == False:
+            if (correlation >= 0.45) and trend_test_result.h == False:
                 df_list_3.append(self.df[column])
 
             #Нет сезонности и нет тренда
@@ -100,7 +100,8 @@ class GROUPS():
             groups = json.loads(file_content)
 
         #Определение типа группы в зависимости от последнего месяца в исходном DataFrame
-        group_key = f'{type_of_group}_{"not_december" if last_month_in_df != 12 else "december"}'
+        #group_key = f'{type_of_group}_{"not_december" if last_month_in_df != 12 else "december"}'
+        group_key = f'{type_of_group}'
         if group_key not in groups.keys():
             raise ValueError(f"Такой группы: '{group_key}' не существует! Выберите другую группу.")
 
@@ -112,24 +113,24 @@ class GROUPS():
         #создание папки для сохранения выходных файлов с ошибками
         #os.makedirs(path_to_save_errors, exist_ok = True)
         if type_of_group == 'GROUP_1' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/GROUP_1'
+            path_to_save = f'{plots_dir}/Сезонность и тренд'
         if type_of_group == 'GROUP_1' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/GROUP_1'
+            path_to_save_errors = f'{error_dir}/Сезонность и тренд'
 
         if type_of_group == 'GROUP_2' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/GROUP_2'
+            path_to_save = f'{plots_dir}/Тренд без сезонности'
         if type_of_group == 'GROUP_2' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/GROUP_2'
+            path_to_save_errors = f'{error_dir}/Тренд без сезонности'
 
         if type_of_group == 'GROUP_3' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/GROUP_3'
+            path_to_save = f'{plots_dir}/Сезонность без треда'
         if type_of_group == 'GROUP_3' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/GROUP_3'
+            path_to_save_errors = f'{error_dir}/Сезонность без треда'
 
         if type_of_group == 'GROUP_4' and plots_dir is not None:
-            path_to_save = f'{plots_dir}/GROUP_4'
+            path_to_save = f'{plots_dir}/Без сезонности и без тренда'
         if type_of_group == 'GROUP_4' and error_dir is not None:
-            path_to_save_errors = f'{error_dir}/GROUP_4'
+            path_to_save_errors = f'{error_dir}/Без сезонности и без тренда'
 
         #Обработка группы с моделями
         threads = []
@@ -142,7 +143,7 @@ class GROUPS():
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
                 t = threading.Thread(target = Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model_PARALLEL, 
-                                    args = (forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test))
+                                    args = (type_of_group, forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test))
                 t.start()
                 threads.append(t)
         for t in threads:
@@ -157,7 +158,7 @@ class GROUPS():
             #Если задан параметр test == True
             test_data = None
             if test:
-                train_data = list(list(filter(lambda x: model_name in list(x.keys()), trains))[0].values())[0]
+                #train_data = list(list(filter(lambda x: model_name in list(x.keys()), trains))[0].values())[0]
                 test_data = list(list(filter(lambda x: model_name in list(x.keys()), tests))[0].values())[0]
 
             # Если задан параметр plots == True
@@ -197,7 +198,6 @@ class GROUPS():
                 worksheet.set_column('A:A', 17.0)
                 #worksheet.set_column('B:B', width_col_2)
                 writer.close()
-
 
         avg_forecast = Postprocessing.calculate_average_forecast(forecasts_with_weight)
         #avg_forecast = Postprocessing.calculate_average_forecast(list(map(lambda x: list(x.values())[0], forecasts)))

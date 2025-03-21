@@ -543,6 +543,7 @@ class Forecast_Models:
         result_df.rename(columns = {result_df.columns[0]: self.column_name_with_date}, inplace=True)
         result_df.set_index(self.column_name_with_date, inplace = True)
 
+
         return result_df
 
 
@@ -770,8 +771,8 @@ class Forecast_Models:
             #min_value = min(values)
 
             #Логарифмирование данных
-            #log_transformer = FunctionTransformer(np.log)
-            #self.df[channel] = log_transformer.transform(self.df[channel])
+            log_transformer = FunctionTransformer(np.log)
+            self.df[channel] = log_transformer.transform(self.df[channel])
             ts = self.df[channel].dropna()
             original_series = ts.copy()
             was_non_stationary = False
@@ -807,7 +808,7 @@ class Forecast_Models:
                     last_observation = original_series.iloc[-1]
                     forecast = Preprocessing(pd.Series(forecast)).inverse_difference(last_observation)
 
-                #forecast = np.exp(forecast)
+                forecast = np.exp(forecast)
 
                 #Замена отрицательных значений на минимально возможное в колонке
                 #for i in range(len(forecast)):
@@ -874,7 +875,8 @@ class Forecast_Models:
                 bagging_temperature = 3,
                 subsample = 0.9,
                 verbose = False,
-                random_seed = 42
+                random_seed = 42,
+                allow_const_label = True
             )
             model.fit(X_train, y_train)
 
@@ -1097,6 +1099,7 @@ class Forecast_Models:
 
 
     def process_model(self,
+                      type_of_group,
                       model_name: str,
                       error_dir: str = None,
                       plots_dir: str = None,
@@ -1148,47 +1151,83 @@ class Forecast_Models:
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
                 'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
             }
+        df_init = self.df.copy()
+
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
-
-        #НИЖЕ ВСЁ СКЕЙЛИНГ
-        #scaler = RobustScaler()
-        ##Замена выбросов на значения медианы
-        #df_new = pd.DataFrame(index = self.df.index, columns = self.df.columns)
-        #for column in self.df.columns:
-        #    scaled_values = scaler.fit_transform(self.df[column].values.reshape(-1, 1))
-        #    scaled_values_list = [i[0] for i in scaled_values]
-        #    med = np.median(scaled_values_list)
-        #    avg = np.abs(np.mean(scaled_values_list))
+        
+        if type_of_group == 'GROUP_1' and model_name in ['Prophet', 
+                                                         'Regr_lin', 
+                                                         'Regr_log', 
+                                                         'RollMean_periods', 
+                                                         'RollMean_years'] or \
+           type_of_group == 'GROUP_2' and model_name in ['ARIMA', 
+                                                         'Dec_with_trend_periods', 
+                                                         'Regr_lin', 
+                                                         'Regr_log', 
+                                                         'RollMean_years', 
+                                                         'SeasonDec_periods', 
+                                                         'SeasonDec_years'] or \
+           type_of_group == 'GROUP_4' and model_name in ['CatBoost_Regressor', 
+                                                         'Dec_with_trend_periods', 
+                                                         'Dec_with_trend_years', 
+                                                         'Dec_without_trend_periods', 
+                                                         'Dec_without_trend_years', 
+                                                         'Random_Forest', 
+                                                         'Regr_lin', 
+                                                         'Regr_log', 
+                                                         'RollMean_periods', 
+                                                         'RollMean_years', 
+                                                         'SeasonDec_years']:
+            print(type_of_group, model_name)
+            for column in self.df.columns:
+                values = list(self.df[column])
+                
+                #Поиск медианы
+                med = np.median(values)
+                
+                Q1 = np.percentile(self.df[column], 25, method = 'midpoint')
+                Q3 = np.percentile(self.df[column], 75, method = 'midpoint')
+                IQR = Q3 - Q1
+            
+                upper = Q3 + 1.5 * IQR
+                lower = Q1 - 1.5 * IQR
+                
+                for val in range(len(values)):
+                    if values[val] >= upper:
+                        values[val] = med
+                    elif values[val] <= lower:
+                        values[val] = med
+                        
+                self.df[column].replace(list(self.df[column]), values, inplace = True)
 #
-        #    for i in range(len(scaled_values_list)):
-        #        if np.abs(scaled_values_list[i] - avg) > 1.0:
-        #            scaled_values_list[i] = med
-        #    df_new[column] = self.df[column].replace(list(self.df[column]), scaled_values_list)
-
-        # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
-        if test and self.forecast_periods <= 12:
-            train_data = self.df.iloc[:-self.forecast_periods]
-            test_data = self.df.iloc[-self.forecast_periods:]
-            self.df = train_data
+            # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
+            if test and self.forecast_periods <= 12:
+                test_data = df_init.iloc[-self.forecast_periods:]
+                train_data = self.df.iloc[:-self.forecast_periods]
+                self.df = train_data
+            else:
+                test = False
+#
+            forecast_df = method_map[model_name]()
+            #Замена отрицательных значений в прогнозном Датафрейма
+            forecast_df = Postprocessing(df_init, forecast_df).replace_value_with_non_negative()
         else:
-            test = False
+            # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
+            if test and self.forecast_periods <= 12:
+                train_data = self.df.iloc[:-self.forecast_periods]
+                test_data = self.df.iloc[-self.forecast_periods:]
+                self.df = train_data
+            else:
+                test = False
 
-        forecast_df = method_map[model_name]()
+            forecast_df = method_map[model_name]()
+            #Замена отрицательных значений в прогнозном Датафрейма
+            forecast_df = Postprocessing(df_init, forecast_df).replace_value_with_non_negative()
 
-        #Приведение данных к нормальному масштабу
-        #return_back_forecast = scaler.inverse_transform(forecast_df)
-        #forecast_back_to = pd.DataFrame(return_back_forecast, 
-        #                           index = forecast_df.index,
-        #                           columns = forecast_df.columns)
-        
-        #Замена отрицательных значений в прогнозном Датафрейма
-        #forecast_df = Postprocessing(self.df, forecast_df).replace_value_with_non_negative()
-        #print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}", forecast_df.round(4), sep = '\n', end = '\n\n')
-        
         # Если задан параметр plots == True
         if plots and plots_dir is not None:
-            Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
+            Postprocessing(df_init, forecast_df).get_plot(column_name_with_date = self.column_name_with_date,
                                                             save_dir = f'{plots_dir}/{model_name}', test_data = test_data)
         # Если задан параметр test == True    
         if test:
@@ -1200,16 +1239,17 @@ class Forecast_Models:
         return forecast_df
     
 
-    #Перегрузка функций
+    #Процессинг моделей для параллельного запуска
     def process_model_PARALLEL(self,
-                      forecasts,
-                      tests,
-                      trains,
-                      model_name: str,
-                      error_dir: str = None,
-                      plots_dir: str = None,
-                      plots: bool = False,
-                      test: bool = False):
+                            type_of_group,
+                            forecasts,
+                            tests,
+                            trains,
+                            model_name: str,
+                            error_dir: str = None,
+                            plots_dir: str = None,
+                            plots: bool = False,
+                            test: bool = False):
         """
             Функция для применения интересующей ML-модели.
             Args:
@@ -1256,48 +1296,85 @@ class Forecast_Models:
                 'Dec_without_trend_years': lambda: self.decomposition_calendar_years(method = 'without_trend'), #по умолчанию past_values = 3
                 'Dec_without_trend_last_2_years': lambda: self.decomposition_calendar_years(method = 'with_trend', past_values = 2)
             }
+        df_init = self.df.copy()
+
         if model_name not in method_map:
                 raise ValueError(f"Модель '{model_name}' не найдена в списке! Выберите другую модель.")
         
-        #НИЖЕ ВСЁ СКЕЙЛИНГ
-        #scaler = RobustScaler()
-        ##Замена выбросов на значения медианы
-        #df_new = pd.DataFrame(index = self.df.index, columns = self.df.columns)
-        #for column in self.df.columns:
-        #    scaled_values = scaler.fit_transform(self.df[column].values.reshape(-1, 1))
-        #    scaled_values_list = [i[0] for i in scaled_values]
-        #    med = np.median(scaled_values_list)
-        #    avg = np.abs(np.mean(scaled_values_list))
-#
-        #    for i in range(len(scaled_values_list)):
-        #        if np.abs(scaled_values_list[i] - avg) > 1.0:
-        #            scaled_values_list[i] = med
-        #    df_new[column] = self.df[column].replace(list(self.df[column]), scaled_values_list)
+        if type_of_group == 'GROUP_1' and model_name in ['Prophet', 
+                                                         'Regr_lin', 
+                                                         'Regr_log', 
+                                                         'RollMean_periods', 
+                                                         'RollMean_years'] or \
+           type_of_group == 'GROUP_2' and model_name in ['ARIMA', 
+                                                         'Dec_with_trend_periods', 
+                                                         'Regr_lin', 
+                                                         'Regr_log', 
+                                                         'RollMean_years', 
+                                                         'SeasonDec_periods', 
+                                                         'SeasonDec_years'] or \
+           type_of_group == 'GROUP_4' and model_name in ['CatBoost_Regressor', 
+                                                         'Dec_with_trend_periods', 
+                                                         'Dec_with_trend_years', 
+                                                         'Dec_without_trend_periods', 
+                                                         'Dec_without_trend_years', 
+                                                         'Random_Forest', 
+                                                         'Regr_lin', 
+                                                         'Regr_log', 
+                                                         'RollMean_periods', 
+                                                         'RollMean_years', 
+                                                         'SeasonDec_years']:
+            df_new = pd.DataFrame(index = self.df.index, columns = self.df.columns)
+            for column in self.df.columns:
+                values = list(self.df[column])
+                
+                #Поиск медианы
+                med = np.median(values)
+                
+                Q1 = np.percentile(self.df[column], 25, method = 'midpoint')
+                Q3 = np.percentile(self.df[column], 75, method = 'midpoint')
+                IQR = Q3 - Q1
+            
+                upper = Q3 + 1.5 * IQR
+                lower = Q1 - 1.5 * IQR
+                
+                for val in range(len(values)):
+                    if values[val] >= upper:
+                        values[val] = med
+                    elif values[val] <= lower:
+                        values[val] = med
+                        
+                df_new[column] = self.df[column].replace(list(self.df[column]), values)
+            self.df = df_new
 
+            # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
+            if test and self.forecast_periods <= 12:
+                test_data = self.df.iloc[-self.forecast_periods:]
+                train_data = df_new.iloc[:-self.forecast_periods]
+                self.df = train_data
+            else:
+                test = False
 
-        # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
-        if test and self.forecast_periods <= 12:
-            train_data = self.df.iloc[:-self.forecast_periods]
-            test_data = self.df.iloc[-self.forecast_periods:]
-            self.df = train_data
-            trains.append({ model_name: train_data })
-            tests.append ({ model_name: test_data })
+            forecast_df = method_map[model_name]()
+            #Замена отрицательных значений в прогнозном Датафрейма
+            forecast_df = Postprocessing(df_init, forecast_df).replace_value_with_non_negative()
         else:
-            test = False
+            # Тестинг проводится только если число предсказываемых периодов (месяцев) <= 12. В противном случае тестинг не проводится
+            if test and self.forecast_periods <= 12:
+                train_data = self.df.iloc[:-self.forecast_periods]
+                test_data = self.df.iloc[-self.forecast_periods:]
+                self.df = train_data
+                trains.append({ model_name: train_data })
+                tests.append ({ model_name: test_data })
+            else:
+                test = False
 
-        forecast_df = method_map[model_name]()
-        #Приведение данных к нормальному масштабу
-        #return_back_forecast = scaler.inverse_transform(forecast_df)
-        #forecast_back_to = pd.DataFrame(return_back_forecast, 
-        #                           index = forecast_df.index,
-        #                           columns = forecast_df.columns)
-        #
-        ##Замена отрицательных значений в прогнозном Датафрейма
-        #forecast_back_to = Postprocessing(self.df, forecast_back_to).replace_value_with_non_negative()
+            forecast_df = method_map[model_name]()
+            #Замена отрицательных значений в прогнозном Датафрейма
+            forecast_df = Postprocessing(df_init, forecast_df).replace_value_with_non_negative()
+            
+        print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}", forecast_df.round(4), sep = '\n', end = '\n\n')
 
         assert forecast_df is not None, f'DataFrame is null for method = {model_name}'
-
-        print(f"РЕЗУЛЬТАТ РАБОТЫ ФУНКЦИИ {model_name.upper()}",
-            forecast_df.round(4), sep = '\n', end = '\n\n')
 
         forecasts.append({ model_name: forecast_df})
