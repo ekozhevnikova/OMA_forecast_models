@@ -1,14 +1,14 @@
+import os
 import numpy as np
 import pandas as pd
 import json
 import pymannkendall as mk
 import threading
-#from ml_models.preprocessing import Preprocessing
-#from ml_models.processing import Forecast_Models
-#from ml_models.postprocessing import Postprocessing
-from OMA_forecast_models.ml_models.preprocessing import Preprocessing
-from OMA_forecast_models.ml_models.processing import Forecast_Models
-from OMA_forecast_models.ml_models.postprocessing import Postprocessing
+from OMA_tools.ml_models.preprocessing import Preprocessing
+from OMA_tools.ml_models.processing import Forecast_Models
+from OMA_tools.ml_models.postprocessing import Postprocessing
+from OMA_tools.io_data.operations import Table
+
 
 
 class GROUPS():
@@ -44,19 +44,19 @@ class GROUPS():
             trend_test_result = mk.original_test(time_series)
 
             #Есть сезонность и есть тренд
-            if (correlation >= 0.65) and trend_test_result.h == True:
+            if (correlation >= 0.7) and trend_test_result.h == True:
                 df_list_1.append(self.df[column])
 
             #Нет сезонности, но есть тренд
-            if (correlation < 0.65) and trend_test_result.h == True:
+            if (correlation < 0.7) and trend_test_result.h == True:
                 df_list_2.append(self.df[column])
 
             #Есть сезонность, но нет тренда
-            if (correlation >= 0.65) and trend_test_result.h == False:
+            if (correlation >= 0.7) and trend_test_result.h == False:
                 df_list_3.append(self.df[column])
 
             #Нет сезонности и нет тренда
-            if (correlation < 0.65) and trend_test_result.h == False:
+            if (correlation < 0.7) and trend_test_result.h == False:
                 df_list_4.append(self.df[column])
 
         group_1 = pd.DataFrame(df_list_1).T
@@ -124,6 +124,19 @@ class GROUPS():
         if type_of_group == 'GROUP_4' and error_dir is not None:
             path_to_save_errors = f'{error_dir}/Без сезонности и без тренда'
 
+        
+        ##Обработка группы с моделями
+        #forecasts = []
+        #for model_name in list_of_model_names:
+        #    if model_name not in groups[group_key]:
+        #            raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
+        #    else:
+        #        forecast_df = Forecast_Models(self.df, forecast_periods, column_name_with_date).process_model(model_name = model_name,
+        #                                                                                                      error_dir = path_to_save_errors,
+        #                                                                                                      plots_dir = path_to_save,
+        #                                                                                                      plots = plots,
+        #                                                                                                      test = test)
+        #        forecasts.append(forecast_df * groups[group_key][model_name])
 
         #Обработка группы с моделями
         threads = []
@@ -135,19 +148,17 @@ class GROUPS():
              if model_name not in groups[group_key]:
                     raise ValueError(f"Модель '{model_name}' не найдена в интересующей группе! Выберите другую модель.")
              else:
-                 t = threading.Thread(target=Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model_PARALLEL,
-                                      args=(forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test),
-                                      kwargs={'type_of_group': type_of_group})
-
-                 t.start()
-                 threads.append(t)
+                t = threading.Thread(target = Forecast_Models(self.df.copy(), forecast_periods, column_name_with_date).process_model_PARALLEL, 
+                                    args = (forecasts, tests, trains, model_name, path_to_save_errors, path_to_save, plots, test))
+                t.start()
+                threads.append(t)
         for t in threads:
             t.join()
-
+        
         for model_name_forecast_df in forecasts:
             model_name = list(model_name_forecast_df.keys())[0]
             forecast_df = list(model_name_forecast_df.values())[0]
-
+            
             forecasts_with_weight.append(forecast_df * groups[group_key][model_name])
 
             #Если задан параметр test == True
@@ -160,14 +171,42 @@ class GROUPS():
             if plots and plots_dir is not None:
                 Postprocessing(self.df, forecast_df).get_plot(column_name_with_date = column_name_with_date,
                                                                 save_dir = f'{path_to_save}/{model_name}', test_data = test_data)
-            # Если задан параметр test == True
+            # Если задан параметр test == True    
             if test:
                 error_df = Postprocessing.calculate_forecast_error(
                                     forecast_df = forecast_df,
                                     test_data = test_data
                                 )
                 error_df.to_excel(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx')
+                
+                #Установка внешнего вида итоговых таблиц
+                writer = pd.ExcelWriter(f'{path_to_save_errors}/{model_name}_MAPE(%).xlsx', engine = 'xlsxwriter')
+                self.df.to_excel(writer, sheet_name = 'Sheet1', startrow = 1, header = False)
+
+                workbook = writer.book
+                worksheet = writer.sheets['Sheet1']
+
+                header_format = workbook.add_format({
+                                                    'bold': True,
+                                                    'text_wrap': True, #перенос текста
+                                                    'align': 'center' #выравнение текста в ячейке
+                                                })
+                table_fmt = workbook.add_format({'num_format': '0.0', 
+                                                'align': 'center' #выравнение текста в ячейке
+                                                })
+
+                for col_num, value in enumerate(self.df.columns.values):
+                    worksheet.write(0, col_num + 1, value, header_format)
+
+                for col in range(len(self.df.columns)):
+                    writer.sheets['Sheet1'].set_column(1,  col + 1, 17.0, table_fmt)
+                    #writer.sheets[sheet_name].set_column(column_start, col + 1, width_col_3, table_fmt)
+                worksheet.set_column('A:A', 17.0)
+                #worksheet.set_column('B:B', width_col_2)
+                writer.close()
 
 
         avg_forecast = Postprocessing.calculate_average_forecast(forecasts_with_weight)
+        #avg_forecast = Postprocessing.calculate_average_forecast(list(map(lambda x: list(x.values())[0], forecasts)))
+        #return forecasts, trains, tests, avg_forecast.round(4)
         return avg_forecast.round(4)

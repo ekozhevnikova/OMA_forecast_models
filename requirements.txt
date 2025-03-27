@@ -1,10 +1,12 @@
 pandas~=2.2.3
 pymorphy3~=2.0.2
 numpy~=1.26.4
-docx~=0.2.4
+python-docx~=0.2.4
+img2pdf~=0.5.1
 pymannkendall~=1.4.3
 pmdarima~=2.0.4
 prophet~=1.1.6
 scikit-learn~=1.6.1
 scipy~=1.15.0
 statsmodels~=0.14.4
+xgboost~=2.1.3
