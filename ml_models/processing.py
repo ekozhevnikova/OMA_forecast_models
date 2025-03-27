@@ -1325,6 +1325,132 @@ class Forecast_Models:
         assert forecast_df is not None, f'DataFrame is null for method=random_forest'
 
         return forecast_df.set_index(self.column_name_with_date)
+    
+
+    def matrix_regr(self, k, num_seasons, g_functions, top_p):
+        """
+            Метод корректора для прогнозирования временного ряда.
+
+            Args:
+                k (int): Количество периодов в сезоне.
+                num_seasons (int): Количество сезонов для прогнозирования.
+                g_functions (list): Список функций для преобразования данных.
+                top_p (int): Количество лучших предикторов для каждого периода.
+
+            Returns:
+                Новый ДатаФрейм с прогнозом.
+        """
+
+        date_range = pd.date_range(start = self.df.index[-1] + pd.DateOffset(months = 1), periods = self.forecast_periods, freq = 'MS')
+
+        forecasts = {}
+        for channel in self.df.columns:
+            x = list(self.df[channel])
+            T = len(x)
+            if T % k != 0:
+                missing = k - (T % k)
+                x = np.concatenate((np.full(missing, np.nan), x))
+            #x = self.df[channel].to_numpy(copy = True)
+            # x = self.df[channel].dropna()
+            # original_series = x.copy()
+            #was_non_stationary = False
+
+            '''
+            # Проверка на стационарность
+            if not Preprocessing(x).check_stationarity():
+                x = Preprocessing(x).make_stationary()
+                was_non_stationary = True
+            '''
+
+
+            # x = self.df.values.flatten()
+            T = len(x)
+            m = T // k
+            matrix = []
+
+            for i in range(m - num_seasons + 1):  
+                season_data = []
+                for j in range(num_seasons):
+                    season_data.extend(x[(i + j) * k: (i + j + 1) * k])
+                matrix.append(season_data)
+            
+            #X = np.array(matrix[::-1])
+            X = np.array(matrix)
+
+            # k = X.shape[1]
+            predictors = []
+
+            for i in range(k):
+                x_i = X[:, i]
+                other_columns = [j for j in range(k) if j != i]
+                best_predictors = []
+
+                for j in other_columns:
+                    x_j = X[:, j]
+                    G_j = np.column_stack([g(x_j) for g in g_functions])
+                    
+                    mask = ~np.isnan(x_i) & ~np.isnan(G_j).any(axis=1)
+                    x_i_clean = x_i[mask]
+                    G_j_clean = G_j[mask]
+
+                    
+                    if G_j_clean.size == 0 or x_i_clean.size == 0:
+                        continue 
+
+                    try:
+                        coef = np.linalg.lstsq(G_j_clean, x_i_clean, rcond=None)[0]
+                        pred = G_j_clean @ coef
+                        rho = np.corrcoef(x_i_clean, pred)[0, 1]
+                        best_predictors.append((rho, G_j, coef))
+                    except np.linalg.LinAlgError:
+                        print(f"LinAlgError for column {j}")
+                        continue
+
+                best_predictors = sorted(best_predictors, key=lambda x: -x[0])[:top_p]
+                predictors.append(best_predictors)
+                #print(best_predictors)
+            
+            corrected_predictors = []
+
+            for i in range(k):
+                x_i = X[:, i]
+                H_p = np.column_stack([pred[1] @ pred[2] for pred in predictors[i]])
+
+                if H_p.ndim == 1:
+                    H_p = H_p[:, np.newaxis]
+                if H_p.shape[0] == 0 or H_p.shape[1] == 0:
+                    raise ValueError(f"Empty predictor matrix H_p for column {i}. Check the predictors.")
+                
+                if H_p.shape[0] != x_i.shape[0]:
+                    raise ValueError(f"Dimension mismatch: H_p shape {H_p.shape}, x_i shape {x_i.shape}")
+
+                coef = np.linalg.lstsq(H_p, x_i, rcond=None)[0]
+                corrected_predictors.append((coef, H_p))
+                
+            cur_forecast = []
+
+            for i in range(k):
+                coef, H_p = corrected_predictors[i]
+                cur_forecast.append(H_p @ coef)
+            
+            cur_forecast = np.array(cur_forecast[:self.forecast_periods]).T.flatten()
+
+            # Преобразование прогноза в исходный масштаб
+            #if was_non_stationary:
+            #    last_observation = original_series.iloc[-1]
+            #    cur_forecast = Preprocessing(pd.Series(cur_forecast)).inverse_difference(last_observation)
+
+            forecasts[channel] = cur_forecast[:self.forecast_periods]
+                    
+
+         # Формирование DataFrame с прогнозом
+        forecast_df = pd.DataFrame(forecasts, index = date_range)
+        # Введение названия столбца с индексом для столбца с датами
+        forecast_df = forecast_df.reset_index()
+        forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: self.column_name_with_date})
+        forecast_df.set_index(self.column_name_with_date, inplace = True)
+
+        return forecast_df
 
 
     def process_model(self,
@@ -1354,6 +1480,7 @@ class Forecast_Models:
                                                               target_value = 'Share'),
                 'CatBoost_Regressor': self.CatBoostRegressor_model,
                 'Random_Forest': self.random_forest_forecast,
+                'Matrix_regr': lambda: self.matrix_regr(k = 12, num_seasons = 2, g_functions = [lambda x: x], top_p = 2),
 
                 'Regr_lin': lambda: self.regression_model(method = 'linear_trend'),
                 'Regr_log': lambda: self.regression_model(method = 'logistic_trend'),
