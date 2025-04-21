@@ -8,18 +8,18 @@
         "RollMean_periods": 0.024579502693183288, 
         "Prophet": 0.22579077140667864, 
         "Naive": 0.199657959762449
-    }, 
+        }, 
 
     "GROUP_2": {
         "SeasonDec_periods": 0.03145115207879774, 
-        "XGB_Regressor": 0.45457945501056907, 
+        "XGB_Regressor": 0.45457945501056907,
         "Naive_with_error": 0.16504597152819037, 
         "Regr_log": 0.031451152078797326, 
         "RollMean_periods": 0.03145115207879774, 
         "Naive": 0.16024070392354967, 
         "Dec_with_trend_periods": 0.12578041330129808
-    }, 
-
+        }, 
+    
     "GROUP_3": {
         "XGB_Regressor": 0.058302402229957716, 
         "Dec_without_trend_years": 0.05361295424925307, 
@@ -32,7 +32,7 @@
         "Dec_with_trend_periods": 0.1631982394326015, 
         "CatBoost_Regressor": 0.05398043774563958, 
         "Regr_lin": 0.08630072697877905
-    }, 
+        }, 
     
     "GROUP_4": {
         "XGB_Regressor": 0.23418030497993284, 
@@ -42,5 +42,5 @@
         "RollMean_periods": 0.01990872212831466, 
         "Dec_without_trend_periods": 0.21348797682079296, 
         "Regr_lin": 0.12684636143725164
-    }
+        }
 }

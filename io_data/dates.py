@@ -1,7 +1,10 @@
 import numpy as np
+import sys
 import pandas as pd
 import pymorphy3 as pmrph
 import datetime as dt
+import locale
+locale.setlocale(locale.LC_ALL, 'ru_RU')
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -152,7 +155,7 @@ class Dates_Operations:
             return [month.inflect({'loct'}).word, month.inflect({'loct'}).word.capitalize()]
         
     @staticmethod    
-    def convert_dates_from_str_to_datetime_format(df, date_column_name: str, date_format_init: str):
+    def convert_dates_from_str_to_datetime_format(df, date_column_name: str, date_format_init: str, type_of_split: str, lang: str):
         """
         Converts date from format 'Январь 2021' to '2021.01.01'.
         Args:
@@ -165,7 +168,17 @@ class Dates_Operations:
         dates = list(df[date_column_name])
         dates_converted = []
         for i in dates:
-            dates_converted.append(datetime.strptime(i, date_format_init).strftime('%Y.%m.%d'))
+            if sys.platform == 'darwin' and lang == 'ru':
+                morph = pmrph.MorphAnalyzer(lang = 'ru')
+                month, year = i.split(type_of_split)
+                p = morph.parse(month)[0]
+                inflect_month_name = p.inflect({'gent'}).word
+                dates_converted.append(datetime.strptime(f'{inflect_month_name}{type_of_split}{year}', date_format_init).strftime('%d.%m.%Y'))
+            else:
+                dates_converted.append(datetime.strptime(i, date_format_init).strftime('%d.%m.%Y'))
+
+
+            #dates_converted.append(datetime.strptime(i, date_format_init).strftime('%Y.%m.%d'))
         df[date_column_name] = df[date_column_name].replace(dates, dates_converted)
         df[date_column_name] = df[date_column_name].apply(lambda x: pd.to_datetime(x))
         return df

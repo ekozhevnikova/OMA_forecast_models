@@ -52,7 +52,7 @@ class GROUPS():
                 df_list_2.append(self.df[column])
 
             #Есть сезонность, но нет тренда
-            if (correlation >= 0.45) and trend_test_result.h == False:
+            if (correlation >= 0.65) and trend_test_result.h == False:
                 df_list_3.append(self.df[column])
 
             #Нет сезонности и нет тренда
