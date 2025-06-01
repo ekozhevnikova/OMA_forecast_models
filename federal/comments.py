@@ -1,10 +1,41 @@
 import pandas as pd
 import numpy as np
+import pymorphy3 as pmrph
+import xlsxwriter
+from OMA_tools.federal.fed_preprocessing import Federal_Preprocessing
+
+class color:
+   BOLD = '\033[1m'
+   BLUE = '\033[94m'
+   RED = '\033[91m'
+   END = '\033[0m'
+
 
 class Federal_Comments:
+    """
+        Класс для генерации Федеральных комментариев, исходя из Федерального Кубика
+    """
     def __init__(self, df, delta_df):
         self.df = df
         self.delta_df = delta_df
+    
+    @staticmethod
+    def change_channels_name(channel_names_init, df, column_name: str):
+        """
+            Функция для замена имени канала на нужный для файла Комментарии
+            Args:
+                channel_names_init: Словарь из каналов, где ключ: имя капсом, значение: нужное название канала для файла Комментарии
+                df: Датафрейм, в котором нужно заменить названия каналов, список из каналов, нуждающихся в замене
+                column_name: Название колонки, которую будем заменять
+            Returns:
+                обновленный df с измененными названиями каналов
+        """
+        channels = list(df[column_name])
+        for i in range(len(channels)):
+            for channel, name_init in channel_names_init.items():
+                if channels[i] == channel:
+                    df[column_name].replace({channels[i]: name_init}, inplace = True)
+        return df
 
     
     def search_channel_and_info(self, month: str, channel: str):
@@ -20,14 +51,14 @@ class Federal_Comments:
         """
         #Проверка, что канал есть в списке Федеральный каналов
         if channel not in ['2X2', 'ДОМАШНИЙ', 'ЗВЕЗДА', 
-                           'КАРУСЕЛЬ', 'МАТЧ ТВ', 'МИР', 
-                           'МУЗ ТВ', 'НТВ', 'ПЕРВЫЙ КАНАЛ', 
-                           'ПЯТНИЦА', 'ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 
-                           'РОССИЯ 1', 'РОССИЯ 24', 'СОЛНЦЕ', 
-                           'СПАС', 'СТС', 'СТС LOVE', 
-                           'СУББОТА', 'ТВ ЦЕНТР', 'ТВ-3', 
-                           'ТНТ', 'ТНТ 4', 'ЧЕ', 'Ю']:
-            raise ValueError('Канал не найден в списке каналов! Выберите другой.')
+                        'КАРУСЕЛЬ', 'МАТЧ ТВ', 'МИР', 
+                        'МУЗ ТВ', 'НТВ', 'ПЕРВЫЙ КАНАЛ', 
+                        'ПЯТНИЦА', 'ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 
+                        'РОССИЯ 1', 'РОССИЯ 24', 'СОЛНЦЕ', 
+                        'СПАС', 'СТС', 'СТС LOVE', 
+                        'СУББОТА', 'ТВ ЦЕНТР', 'ТВ-3', 
+                        'ТНТ', 'ТНТ 4', 'ЧЕ', 'Ю']:
+            raise ValueError(f'{channel} не найден в списке каналов! Выберите другой.')
             
         #Выбор конкретного канала из всего DataFrame
         df_channel = self.df[self.df['Канал'] == channel]
@@ -67,19 +98,90 @@ class Federal_Comments:
         
         atributes = list(data['Значения'])
         for i in range(len(atributes)):
-            if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.005:
-                reasons.append('Share')
+            if data.iloc[0]['Канал'] in ['НТВ', 'РОССИЯ 1']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.001:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.001:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.001:
+                    reasons.append('КУС')
+
+            elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0015:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0015:
+                    reasons.append('КУС')
+
+            elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'МАТЧ ТВ', 'ПЕРВЫЙ КАНАЛ']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0017:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0017:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0017:
+                    reasons.append('КУС')
+
+            elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0024:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0024:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0024:
+                    reasons.append('КУС')
+
+            elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.00265:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.00265:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.00265:
+                    reasons.append('КУС')
+            
+            elif data.iloc[0]['Канал'] in ['Ю', 'СПАС', 'ТВ ЦЕНТР', 'ТВ-3']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.003:
+                    reasons.append('КУС')
+            
+            elif data.iloc[0]['Канал'] in ['ЧЕ', 'ТНТ 4']:
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0038:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0038:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0038:
+                    reasons.append('КУС')
+            
+            elif data.iloc[0]['Канал'] == '2X2':
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0067:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0067:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0067:
+                    reasons.append('КУС')
+            
+            elif data.iloc[0]['Канал'] == 'СТС LOVE':
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0055:
+                    reasons.append('КУС')
+            
+            elif data.iloc[0]['Канал'] == 'МИР':
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0045:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0045:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0045:
+                    reasons.append('КУС')
                 
-            elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.005:
-                reasons.append('TTV')
-                
-            elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.005:
-                reasons.append('КУС')
-                
-            elif atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
+            if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
                 reasons.append('Т Общие')
                 
-            elif atributes[i] == 'GRP ТП канала' and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])) >= 1e-5:
+            elif atributes[i] == 'GRP ТП канала' and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])) > 0.025:
                 reasons.append('GRP ТП канала')
                 
             elif atributes[i] == 'GRP КСР' and np.abs(float(data.loc[data['Значения'] == 'GRP КСР', _month])) >= 0.01:
@@ -87,6 +189,9 @@ class Federal_Comments:
                 
             elif atributes[i] == 'GRP Телемагазины' and np.abs(float(data.loc[data['Значения'] == 'GRP Телемагазины', _month])) >= 1e-3:
                 reasons.append('GRP Телемагазины')
+            
+            elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-3:
+                reasons.append('GRP СП')
         return reasons
 
 
@@ -150,29 +255,44 @@ class Federal_Comments:
         elif changed_statistic == 'GRP КСР':
             delta_GRP = new_data['GRP КСР'] - old_data['GRP КСР']
             return round(delta_GRP)
+        
+         #Если поменялись ТП Канал
+        elif changed_statistic == 'GRP СП':
+            delta_GRP = new_data['GRP СП'] - old_data['GRP СП']
+            return round(delta_GRP)
     
         #Расчет спонсорства с новым TVR
         tvr_sp = old_data['КУС СП'] * TVR
         GRP_SP = (old_data['Т СП'] * tvr_sp) / 20
             
         #Если есть ТП Канала
-        if channel in ['ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'ТНТ 4', 'ТВ-3', 'ТВ ЦЕНТР',
-                       'СУББОТА', 'СТС LOVE', 'СТС', 'СОЛНЦЕ', 'РОССИЯ 24', 
-                       'РЕН ТВ', 'ПЯТНИЦА', 'НТВ', 'МАТЧ ТВ', 'МУЗ ТВ', 
-                       'ЗВЕЗДА', 'ДОМАШНИЙ', 'ПЯТЫЙ КАНАЛ', '2X2', 'ТНТ', 'ЧЕ', 'Ю'
+        if channel in ['ТНТ 4', 'ТВ-3', 'ТВ ЦЕНТР',
+                    'СУББОТА', 'СТС LOVE', 'СТС', 'СОЛНЦЕ', 'РОССИЯ 24', 
+                    'РЕН ТВ', 'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
+                    'ЗВЕЗДА', 'ДОМАШНИЙ', '2X2', 'ТНТ', 'ЧЕ', 'Ю'
                         ]:
             GRP_NRA = GRP - GRP_SP - old_data['GRP ТП канала']
+
+        elif channel in ['ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1']:
+            GRP_KR = GRP - old_data['GRP КРМ'] - GRP_SP
+            GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+
+        elif channel == 'НТВ' or channel == 'ПЯТЫЙ КАНАЛ':
+            GRP_full_sp = old_data['GRP Телемагазины'] + GRP_SP
+            GRP_KR = GRP - GRP_full_sp
+            GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+
         elif channel == 'СПАС':
             GRP_NRA = GRP - old_data['GRP Телемагазины'] - GRP_SP
+
         elif channel in ['КАРУСЕЛЬ', 'МИР']:
             GRP_NRA = GRP - GRP_SP
                 
         delta_GRP = GRP_NRA -  old_data['GRP ТП НРА']
-        
         return round(delta_GRP)
 
 
-    def get_reasons_according_to_table_cubik(self, reasons_channels_in_grp, month: str, grp_limit = 30):
+    def get_reasons_according_to_table_cubik(self, reasons_channels_in_grp, month: str, grp_limit = 50, write_warning = True):
         """
             Функция для сопоставления каналов, по которым есть изменения из Федерального кубика (delta_df) и каналов, изменения
             по которым были сгенерированы, исходя их таблицы сравнение прогнозов (forecast_comparison). 
@@ -183,6 +303,8 @@ class Federal_Comments:
                 delta_df: Изменения по дням, исходя из данных Федерального кубика.
                 reasons_channels_in_grp: изменения по статистикам в GRP, которые были сгенерированы с помощью forecast_comparison.
                 month: месяц, по которому смотрим все изменения инвентаря.
+                write_warning: Если True, то выводятся комментарии по каналам, для которых не нашлось достаточно причин. Если False, то сообщения не выводятся.
+                По дефолту True.
             Returns:
                 missing_channels: каналы, по которым есть изменения из федерального кубика, но нет в таблице со сравнением прогнозов.
                 sorted_reasons_channels_in_grp: словарь словарей из каналов, статистик, а также значений GRP,
@@ -213,8 +335,13 @@ class Federal_Comments:
                 result_contributors = {}
                 if Channel == channel:
                     for statistic, value in contributions.items():
-                        if value * delta_grp > 0:
-                            result_contributors[statistic] = value
+                        #Рассматривается отдельно ситуация с СП. Если СП < 0 => КР растет; если СП > 0 => КР падает.
+                        if statistic == 'GRP СП' or statistic == 'GRP ТП канала' or statistic == 'GRP Телемагазины':
+                            if value * delta_grp < 0:
+                                result_contributors[statistic] = value
+                        else:
+                            if value * delta_grp > 0:
+                                result_contributors[statistic] = value
                 else:
                     continue
                 res[channel] = result_contributors
@@ -230,7 +357,9 @@ class Federal_Comments:
                 sorted_reasons_channels_in_grp[channel] = dict(sorted_metrics)
     
         channels_not_exist = []
+        channels_not_exist_dict = {}
         channels_not_enough_reasons = []
+        channels_not_enough_reasons_dict = {}
         for i in range(len(delta_df_)):
             #Выделяем канал, изменения по которому хотим объяснить
             channel = delta_df_.iloc[i]['Канал']
@@ -240,15 +369,29 @@ class Federal_Comments:
                 channels_not_exist.append(channel)
             else:
                 for statistic, grp in sorted_reasons_channels_in_grp[channel].items():
-                    if np.abs(delta_grp) - np.abs(np.sum(list(sorted_reasons_channels_in_grp[channel].values()))) >= grp_limit:
+                    #Получение списка из GRP
+                    list_of_grp = list(sorted_reasons_channels_in_grp[channel].values())
+                    #Замена отрицательных GRP на положительные
+                    list_of_grp_updated = [x * (-1) if x < 0 else x for x in list_of_grp]
+                    if np.abs(delta_grp) - np.abs(np.sum(list_of_grp_updated)) >= grp_limit:
                         channels_not_enough_reasons.append(channel)
-                    elif np.abs(delta_grp) - np.abs(np.sum(list(sorted_reasons_channels_in_grp[channel].values()))) <= grp_limit:
+                    elif np.abs(delta_grp) - np.abs(np.sum(list_of_grp_updated)) <= grp_limit:
                         continue
-        if set(channels_not_exist):
-            print(f'Не нашлось релевантных причин в {month} для: {set(channels_not_exist)}.')
-        if set(channels_not_enough_reasons):
-            print(f'Найдено недостаточно причин в {month} для {set(channels_not_enough_reasons)}.')
-        return missing_channels, sorted_reasons_channels_in_grp
+        
+        if write_warning == True:
+            if set(channels_not_exist):
+                morph = pmrph.MorphAnalyzer()
+                month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
+                print(color.BOLD + color.RED + f'Требуется написать комментарий САМОСТОЯТЕЛЬНО для: {", ".join(set(channels_not_exist))} в {month_}.' + color.END, end = '\n\n')
+            if set(channels_not_enough_reasons):
+                morph = pmrph.MorphAnalyzer()
+                month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
+                print(color.BOLD + color.BLUE + f'Найдено НЕДОСТАТОЧНО причин в {month_} для: {", ".join(set(channels_not_enough_reasons))}.' + color.END, end = '\n\n')
+            return sorted_reasons_channels_in_grp
+        else:
+            channels_not_exist_dict[month] = list(set(channels_not_exist))
+            channels_not_enough_reasons_dict[month] = list(set(channels_not_enough_reasons))
+            return sorted_reasons_channels_in_grp, channels_not_exist_dict, channels_not_enough_reasons_dict
 
 
     def write_comments(self, dict_of_result_reasons):
@@ -262,10 +405,10 @@ class Federal_Comments:
                 value: словарь из статистик с комментариями.)
         """
         comments_per_month = {}
-        for month, reasons_dict in dict_of_result_reasons.items():
+        for month, reasons in dict_of_result_reasons.items():
             comment_per_channel = {}
-            for channel, reasons_dict in reasons_dict.items():
-                old_data, new_data = search_channel_and_info(self.df, channel, month)
+            for channel, reasons_dict in reasons.items():
+                old_data, new_data = self.search_channel_and_info(month, channel)
                 comments = {}
                 for statistic, delta_grp in reasons_dict.items():
                     if statistic == 'Share':
@@ -287,15 +430,33 @@ class Federal_Comments:
                             comments[statistic] = 'Рост КУС.'
                         else:
                             comments[statistic] = 'Снижение КУС.'
-        
-                    elif statistic == 'GRP Телемагазины':
+                    
+                    elif statistic == 'GRP Телемагазины' and channel == 'СПАС':
                         val = reasons_dict['GRP Телемагазины']
                         if val > 0:
                             comments[statistic] = f'Размещение телемагазинов {val} GRP.'
                         else:
                             comments[statistic] = f'Снятие телемагазинов {(-1) * val} GRP.'
+                    
+                    elif statistic == 'GRP ТП канала':
+                        if reasons_dict['GRP ТП канала'] > 0:
+                            comments[statistic] = f'Рост ТП канала.'
+                        else:
+                            comments[statistic] = f'Снижение ТП канала.'
+                    
+                    elif statistic == 'GRP КСР':
+                        if reasons_dict['GRP КСР'] > 0:
+                            comments[statistic] = f'Рост КСР.'
+                        else:
+                            comments[statistic] = f'Снижение КСР.'
+
+                    elif statistic == 'GRP СП':
+                        if reasons_dict['GRP СП'] > 0:
+                            comments[statistic] = f'Рост прогноза СП.'
+                        else:
+                            comments[statistic] = f'Снижение прогноза СП.'
         
-                    elif statistic == 'Т Общие':
+                    elif statistic == 'Т Общие' and channel == 'КАРУСЕЛЬ':
                         val = reasons_dict['Т Общие']
                         if val > 0:
                             comments[statistic] = f'Дооткрытие рекламных объемов {val} GRP.'
@@ -347,19 +508,22 @@ class Federal_Comments:
             df_res = pd.merge(df_from_cubik, df, on = ['Канал', 'Месяц'], how = 'left')
             
             #Join комментариев с порогами
-            df_res = pd.merge(df_res, limits, on = ['Канал'], how = 'inner')
-            df_res = df_res[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+            #df_res = pd.merge(df_res, limits, on = ['Канал'], how = 'inner')
+            df_res = df_res[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Доп столбец', 'Комментарий']]
             res.append(df_res)
         data_output = pd.concat(res)
-        return data_output
+        data_output_ = pd.merge(self.delta_df, data_output, on = ['Канал', 'Месяц', 'Дата', 'Изменение GRP'], how = 'left')
+        result_df = pd.merge(data_output_, limits, on = ['Канал'], how = 'inner')
+        return result_df[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
 
 
-    def get_result(self):
+    def get_result(self, df_limits, flag = False):
         """
             Функция для получения full-result
             Args:
                 df: DataFrame со сравнением прогнозов
                 delta_df: DataFrame с изменениями по дням согласно Федеральному кубику
+                flag: По дефолту False, отвечает за возвращение сетов из каналов, для которых не нашлось достаточно причин
             Return:
                 data_output: DataFrame с шаблонными комментариями
         """
@@ -387,13 +551,7 @@ class Federal_Comments:
             for changed_statistic in reasons:
                 delta_GRP = self.calculate_delta_GRP(month, channel, changed_statistic)
                 contributions[changed_statistic] = delta_GRP
-        
-            #Словарь с изменения по каналам для конкретного месяца
-            #reasons_channels[channel] = contributions
-        
-            #Отсортированный словарь с GRP
-            #missing_channels, sorted_reasons_channels_in_grp = get_reasons_according_to_table_cubik(df_summ_need_comment_sorted, reasons_channels, month)
-            
+                    
             if not month in reasons_channels.keys():
                 reasons_channels[month] = {
                     channel: contributions
@@ -403,13 +561,39 @@ class Federal_Comments:
             
             #Удаляем пустые элементы из словаря или каналы, по которым нет изменений
             #reasons_channels = {k:v for k,v in reasons_channels.items() if v}
-        res = {}
-        for month, reasons in reasons_channels.items():
-            missing_channels, sorted_reasons_channels_in_grp = self.get_reasons_according_to_table_cubik(reasons, month)
-            res[month] = sorted_reasons_channels_in_grp
+        #res = {}
+        #Случай, когда каналы, для которых найдено недостаточно причин, на экран не выводятся. Выводятся в виде отдельной переменной
+        if flag == True:
+            res = {}
+            for month, reasons in reasons_channels.items():
+                sorted_reasons_channels_in_grp, channels_not_exist, channels_not_enough_reasons = self.get_reasons_according_to_table_cubik(reasons, 
+                                                                                            month, 
+                                                                                            write_warning = False)
+                res[month] = sorted_reasons_channels_in_grp
+            
+            general_comments = self.write_comments(res)
+            data_output = self.generate_result_table(general_comments, df_limits)
+            return data_output.reset_index(drop = True), channels_not_exist, channels_not_enough_reasons
         
-        general_comments = self.write_comments(res)
-        data_output = self.generate_result_table(general_comments, df_limits)
-        # Замена столбца дат на старый столбец
-        data_output['Месяц'] = data_output['Месяц'].replace(months_new, months_init)
-        return data_output
+        #Случай, когда каналы, для которых найдено недостаточно причин выводятся на экран, но не выводятся в виде отдельной переменной.
+        else:
+            res = {}
+            for month, reasons in reasons_channels.items():
+                sorted_reasons_channels_in_grp = self.get_reasons_according_to_table_cubik(reasons, 
+                                                                                            month
+                                                                                            )
+                res[month] = sorted_reasons_channels_in_grp
+            
+            general_comments = self.write_comments(res)
+            data_output = self.generate_result_table(general_comments, df_limits)
+            return data_output.reset_index(drop = True)
+    
+
+    @staticmethod
+    def combine_columns(row):
+        if pd.isna(row['Комментарий_y']):
+            return row['Комментарий_x']
+        elif isinstance(row['Комментарий_x'], str) and isinstance(row['Комментарий_y'], str):
+            return f"{row['Комментарий_y']} {row['Комментарий_x']}" 
+        else:
+            return row['Комментарий_x']
