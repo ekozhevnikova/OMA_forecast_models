@@ -41,7 +41,7 @@ channel_names_init = {
     'СПАС': 'Спас',
     'ЧЕ': 'Че',
     'МАТЧ ТВ': 'Матч ТВ',
-    'ТВ Центр': 'ТВ ЦЕНТР',
+    'ТВ Центр': 'ТВ Центр',
     'ТВ-3': 'ТВ3', 
     'ПЕРВЫЙ КАНАЛ': 'Первый',
     'ПЯТНИЦА': 'Пятница',
@@ -154,6 +154,7 @@ class Federal_Processing:
                 #Форматирование столбца с Месяцем
                 by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
                 Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
+                Federal_Postprocessing(by_days).comments_dublicates_actualize()
                 return by_days, channels_not_exist, channels_not_enough_reasons
             else:
                 merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
@@ -212,6 +213,7 @@ class Federal_Processing:
         prepr = Federal_Preprocessing(data_cubik)
         df_summ_need_comment = prepr.calculate_accumulated_diff(general_df_by_dates, 
                                                                 df_limits)
+        #print(df_summ_need_comment)
         #Генерация первичных комментариев с накопленными изменениями, исходя из данных Фед Кубика и таблицы со сравнением прогнозов
         data_output_summ, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
                                                                                              df_summ_need_comment).get_result(df_limits, flag = True)
@@ -246,10 +248,10 @@ class Federal_Processing:
             Federal_Comments.change_channels_name(channel_names_init, general_summ, 'Канал')
             
             #Форматирование столбца с Месяцем
-            general_summ = Processing.replace_name_of_months(general_summ, 'Месяц', year)
+            general_summ = Federal_Postprocessing(general_summ).replace_name_of_months('Месяц', year)
             
             ##Определение даты старта и даты конца
-            day_start, month_name_start, day_stop, month_name_stop = Processing.define_start_stop_day(data_cubik, start_date)
+            day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
                 general_summ['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
@@ -279,7 +281,7 @@ class Federal_Processing:
     def comments_per_period(start_date: str, 
                             data, 
                             comments_filepath_init: str, 
-                            criteria = 2.0 / 3.0):
+                            criteria = 0.55):
         """
             Функция для написания Накопленных Комментариев за определенный Период, начиная с какой-то даты
             Args:
@@ -295,6 +297,7 @@ class Federal_Processing:
         #Чтение исходного файла с Комментариями
         comments = pd.read_excel(comments_filepath_init)
         comments['Дата'] = pd.to_datetime(comments['Дата'])
+        comments.sort_values(by = ['Дата'], inplace = True)
         comments.set_index('Дата', inplace = True)
         
         comments_cleaned = Federal_Preprocessing(comments).cut_data_cubik(start_date)
@@ -303,7 +306,6 @@ class Federal_Processing:
         comments_cleaned.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 
         comments_cleaned = comments_cleaned[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
 
-        delta_per_period = {}
         res = []
         for i in range(len(data)):
             channel = data.iloc[i]['Канал']
@@ -317,23 +319,26 @@ class Federal_Processing:
                 if len(delta) != 0:
                     #Проверяем, чтобы изменения за период были одного знака с изменениями по дням.
                     #Отбираем только те изменения, которые одного знака
-                    for d in range(len(delta)):
-                        if delta[d] * delta_grp_summ > 0:
-                            delta_cleaned.append(delta[d])
+                    if len(delta) > 1:
+                        for d in range(len(delta)):
+                            if delta[d] * delta_grp_summ > 0:
+                                delta_cleaned.append(delta[d])
+
+                    elif len(delta) == 1:
+                        delta_cleaned.append(delta)
                 #Суммируем найденные изменения за период и проверяем, чтобы было объяснено более 2/3 недельного инвентаря
                 if np.abs(np.sum(delta_cleaned)) < np.abs(delta_grp_summ * criteria):
-                    delta_per_period[channel] = np.sum(delta_cleaned)
                     data_need = data[((data['Канал'] == channel) & (data['Месяц'] == month))]
                     res.append(data_need)
             else:
                 data_need = data[((data['Канал'] == channel) & (data['Месяц'] == month))]
                 res.append(data_need)
-                #continue
+
         if len(res) == 0:
-            return res, delta_per_period
+            return res
         else:
             result = pd.concat(res)
-            return result, delta_per_period
+            return result
     
 
     @staticmethod

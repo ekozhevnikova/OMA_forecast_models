@@ -95,6 +95,7 @@ class Federal_Comments:
         _month = f'{month}.2'
         df_channel = self.df[self.df['Канал'] == channel]
         data = df_channel[['Канал', 'Значения', _month]].dropna()
+        data_copy = df_channel[['Канал', 'Значения', _month]]
         
         atributes = list(data['Значения'])
         for i in range(len(atributes)):
@@ -103,92 +104,138 @@ class Federal_Comments:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.001:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.001:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.001 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.03:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.03:
+                    reasons.append('КУС Внедом')
 
-            elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ']:
+            elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ', 'СТС']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0015:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0015:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0015 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'МАТЧ ТВ', 'ПЕРВЫЙ КАНАЛ']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0017:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0017:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0017:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0017 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0024:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0024:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0024:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0024 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.00265:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.00265:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.00265:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.00265 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
             
-            elif data.iloc[0]['Канал'] in ['Ю', 'СПАС', 'ТВ ЦЕНТР', 'ТВ-3']:
+            elif data.iloc[0]['Канал'] in ['Ю', 'ТВ ЦЕНТР', 'ТВ-3']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.003:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.003 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
+            
+            elif data.iloc[0]['Канал'] == 'СПАС':
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.008:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.008:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.008 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
+                    reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] in ['ЧЕ', 'ТНТ 4']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0038:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0038:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0038:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0038 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == '2X2':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0067:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0067:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0067:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0067 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == 'СТС LOVE':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0055:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0055 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == 'МИР':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0045:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0045:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0045:
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0045 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
                     reasons.append('КУС')
+                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
+                    reasons.append('КУС Внедом')
                 
             if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
                 reasons.append('Т Общие')
-                
-            elif atributes[i] == 'GRP ТП канала' and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])) > 0.025:
-                reasons.append('GRP ТП канала')
+            
+            elif atributes[i] == 'GRP ТП канала':
+                if np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])) > 0.025:
+                    reasons.append('GRP ТП канала')
+                elif np.isnan(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])):
+                    #month_2 = f'{month}.1'
+                    if np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', month])) == 0.0 and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', f'{month}.1'])) != 0.0:
+                        reasons.append('GRP ТП канала')
+                    elif np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', month])) != 0.0 and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', f'{month}.1'])) == 0.0:
+                        reasons.append('GRP ТП канала')
                 
             elif atributes[i] == 'GRP КСР' and np.abs(float(data.loc[data['Значения'] == 'GRP КСР', _month])) >= 0.01:
                 reasons.append('GRP КСР')
                 
-            elif atributes[i] == 'GRP Телемагазины' and np.abs(float(data.loc[data['Значения'] == 'GRP Телемагазины', _month])) >= 1e-3:
-                reasons.append('GRP Телемагазины')
+            elif atributes[i] == 'GRP Телемагазины':
+
+                if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])) >= 1e-3:
+                    reasons.append('GRP Телемагазины')
+                elif np.isnan(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])):
+                    #print(channel, month)
+                    #month_2 = f'{month}.1'
+                    if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) == 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) != 0.0:
+                        reasons.append('GRP Телемагазины')
+                    elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
+                        reasons.append('GRP Телемагазины')
             
             elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-3:
                 reasons.append('GRP СП')
@@ -430,6 +477,12 @@ class Federal_Comments:
                             comments[statistic] = 'Рост КУС.'
                         else:
                             comments[statistic] = 'Снижение КУС.'
+
+                    elif statistic == 'КУС Внедом':
+                        if reasons_dict['КУС Внедом'] > 0:
+                            comments[statistic] = 'Рост КУС за счет роста прогноза внедомашнего телесмотрения.'
+                        else:
+                            comments[statistic] = 'Снижение КУС за счет снижения прогноза внедомашнего телесмотрения.'
                     
                     elif statistic == 'GRP Телемагазины' and channel == 'СПАС':
                         val = reasons_dict['GRP Телемагазины']

@@ -31,20 +31,21 @@ class Federal_Postprocessing:
             Функция для удаления дубликатов Комментариев или дубликатов подстрок в Комментариях.
         """
         for i, irow in self.df.iterrows():
-            icomments = irow['Комментарий'].split('. ')
-            for j, jrow in self.df.iloc[i + 1: ].iterrows():
-                if jrow['Канал'] != irow['Канал']:
-                    continue
-                jcomments = jrow['Комментарий'].split('. ')
-                if len(icomments + jcomments) != len(set(icomments + jcomments)):
-                    if irow['Дата'] < jrow['Дата']:
-                        for comment in icomments:
-                            jcomments = [c for c in jcomments if c != comment]
-                            self.df.at[j, 'Комментарий'] = '. '.join(jcomments)
-                    else:
-                        for comment in jcomments:
-                            icomments = [c for c in icomments if c != comment]
-                            self.df.at[i, 'Комментарий'] = '. '.join(icomments)
+            if not irow['Комментарий'] or irow['Комментарий'] == np.nan:
+                icomments = irow['Комментарий'].split('. ')
+                for j, jrow in self.df.iloc[i + 1: ].iterrows():
+                    if jrow['Канал'] != irow['Канал']:
+                        continue
+                    jcomments = jrow['Комментарий'].split('. ')
+                    if len(icomments + jcomments) != len(set(icomments + jcomments)):
+                        if irow['Дата'] < jrow['Дата']:
+                            for comment in icomments:
+                                jcomments = [c for c in jcomments if c != comment]
+                                self.df.at[j, 'Комментарий'] = '. '.join(jcomments)
+                        else:
+                            for comment in jcomments:
+                                icomments = [c for c in icomments if c != comment]
+                                self.df.at[i, 'Комментарий'] = '. '.join(icomments)
 
     @staticmethod
     def make_style_of_table(filepath, output_df, sheet_name):
@@ -123,6 +124,6 @@ class Federal_Postprocessing:
         """
         comments = pd.read_excel(filepath)
         comments_full = pd.concat([comments, data_new]).reset_index(drop = True)
-        PostProcessing.make_style_of_table(filepath = filepath, 
+        Federal_Postprocessing.make_style_of_table(filepath = filepath, 
                                            output_df = comments_full, 
                                            sheet_name = 'Sheet1')
