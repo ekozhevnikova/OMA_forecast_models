@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 import pymorphy3 as pmrph
+import datetime
 from OMA_tools.federal.fed_preprocessing import Federal_Preprocessing
 from OMA_tools.federal.fed_postprocessing import Federal_Postprocessing
 from OMA_tools.federal.smi_info import SMI_info
@@ -41,7 +42,7 @@ channel_names_init = {
     'СПАС': 'Спас',
     'ЧЕ': 'Че',
     'МАТЧ ТВ': 'Матч ТВ',
-    'ТВ Центр': 'ТВ Центр',
+    'ТВ ЦЕНТР': 'ТВ Центр',
     'ТВ-3': 'ТВ3', 
     'ПЕРВЫЙ КАНАЛ': 'Первый',
     'ПЯТНИЦА': 'Пятница',
@@ -93,6 +94,11 @@ class Federal_Processing:
         df_limits = Federal_Processing.define_limits(self.limits_file)
         
         #Считывание файла со сравнением прогнозов
+        forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 2, sheet_name = 'Сводная')
+
+        #date_old_forecast = forecast_comparison.iloc[0]['Дата обновления']
+        date_new_forecast = forecast_comparison.iloc[0]['Unnamed: 23']
+
         forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 5, sheet_name = 'Сводная')
         
         columns = ['Канал', 'Значения', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май',
@@ -113,7 +119,7 @@ class Federal_Processing:
         general_df_by_dates, df_by_dates_need_comment = Federal_Preprocessing.calculate_differencies(need_data, 
                                                                                                 df_limits
                                                                                                 )
-        return df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment
+        return df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast
 
     
     def BY_DAYS(self, start_date: str, year: str, smi_criteria):
@@ -131,10 +137,10 @@ class Federal_Processing:
                 smi_by_days: Комментарии с изменениями объемов по дням
                 general_by_days: Комментарии с изменения по дням, исходя из таблицы со сравнением прогнозов, а также файла от СМИ
         """
-        df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment = self.get_data_per_analys(start_date)
+        df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast = self.get_data_per_analys(start_date)
         ################# Генерация комментариев, исходя из файла со сравнением прогнозов #################
         data_output_dates, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
-                                             df_by_dates_need_comment).get_result(df_limits,  flag = True)
+                                             df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, flag = True)
         
         smi = SMI_info(self.smi_file)
         smi_by_days = smi.get_volumes_comments(delta_df = df_by_dates_need_comment, 
@@ -208,7 +214,7 @@ class Federal_Processing:
                 smi_by_days: Комментарии с изменениями объемов по дням
                 general_by_days: Комментарии с изменения по дням, исходя из таблицы со сравнением прогнозов, а также файла от СМИ
         """
-        df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment = self.get_data_per_analys(start_date)
+        df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast = self.get_data_per_analys(start_date)
         #Выделение каналов и дат с накопленными изменениями из Федерального Кубика
         prepr = Federal_Preprocessing(data_cubik)
         df_summ_need_comment = prepr.calculate_accumulated_diff(general_df_by_dates, 
@@ -216,7 +222,7 @@ class Federal_Processing:
         #print(df_summ_need_comment)
         #Генерация первичных комментариев с накопленными изменениями, исходя из данных Фед Кубика и таблицы со сравнением прогнозов
         data_output_summ, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
-                                                                                             df_summ_need_comment).get_result(df_limits, flag = True)
+                                                                                             df_summ_need_comment).get_result(df_limits, date_new_forecast, flag = True)
         #Генерация комментариев по изменениям Объемов
         smi = SMI_info(self.smi_file)
         smi_summ = smi.get_volumes_comments(delta_df = df_summ_need_comment, 
@@ -294,13 +300,18 @@ class Federal_Processing:
                 delta_per_period: Словарь с изменениями, где ключ: Канал, значение: Суммарное изменение, которое 
                 было уже объяснено за Период.
         """
+        #Изменения начинаем смотреть с даты начала периода + 1 (если период 2 - 9 мая, то изменения начинаем смотреть с 3 мая.)
+        start_date = pd.to_datetime(start_date, format = '%Y-%m-%d')
+        start_date_modified = start_date + datetime.timedelta(days = 1)
+        start_date_modified = start_date_modified.strftime('%Y-%m-%d')
+
         #Чтение исходного файла с Комментариями
         comments = pd.read_excel(comments_filepath_init)
         comments['Дата'] = pd.to_datetime(comments['Дата'])
         comments.sort_values(by = ['Дата'], inplace = True)
         comments.set_index('Дата', inplace = True)
         
-        comments_cleaned = Federal_Preprocessing(comments).cut_data_cubik(start_date)
+        comments_cleaned = Federal_Preprocessing(comments).cut_data_cubik(start_date_modified)
         comments_cleaned['Изменение GRP'] = comments_cleaned['Изменение GRP'].astype(int)
         comments_cleaned['Порог'] = comments_cleaned['Порог'].astype(int)
         comments_cleaned.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 

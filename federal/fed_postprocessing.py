@@ -109,7 +109,7 @@ class Federal_Postprocessing:
             worksheet.set_column('D:D', 13.9, table_fmt_4)
             worksheet.set_column('E:E', 10.7, format_column)
             worksheet.set_column('F:F', 44.0, table_fmt_3)
-            worksheet.set_column('G:G', 85.0, table_fmt_2)
+            worksheet.set_column('G:G', 145.0, table_fmt_2)
     
 
     @staticmethod

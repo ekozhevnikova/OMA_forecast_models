@@ -108,7 +108,7 @@ class Federal_Preprocessing:
                                 'Месяц': f'{period}', 
                                 'Дата': df.iloc[i][0],
                                 'Изменение GRP': diff,
-                                'Flag': np.abs(diff) >= int(df_limits[column])
+                                'Flag': np.abs(diff) > int(df_limits[column])
                             }
                     data_with_difference_by_dates[i] = dict_differences
                     
@@ -142,7 +142,7 @@ class Federal_Preprocessing:
         flags = []
         for i in range(len(summed_data)):
             channel = summed_data.iloc[i]['Канал']
-            flags.append(np.abs((summed_data.iloc[i]['Изменение GRP'])) >= int(df_limits[channel]))
+            flags.append(np.abs((summed_data.iloc[i]['Изменение GRP'])) > int(df_limits[channel]))
         summed_data['Flag'] = flags
         #Отбор каналов и дат, которые вылетели за порог
         df_summ_need_comment = summed_data.loc[(summed_data['Flag'] == True)]

@@ -339,7 +339,7 @@ class Federal_Comments:
         return round(delta_GRP)
 
 
-    def get_reasons_according_to_table_cubik(self, reasons_channels_in_grp, month: str, grp_limit = 50, write_warning = True):
+    def get_reasons_according_to_table_cubik(self, reasons_channels_in_grp, month: str, forecast_new, grp_limit = 50, write_warning = True):
         """
             Функция для сопоставления каналов, по которым есть изменения из Федерального кубика (delta_df) и каналов, изменения
             по которым были сгенерированы, исходя их таблицы сравнение прогнозов (forecast_comparison). 
@@ -352,6 +352,8 @@ class Federal_Comments:
                 month: месяц, по которому смотрим все изменения инвентаря.
                 write_warning: Если True, то выводятся комментарии по каналам, для которых не нашлось достаточно причин. Если False, то сообщения не выводятся.
                 По дефолту True.
+                forecast_old: Дата прошлого обновления
+                forecast_new: Дата нового обновления
             Returns:
                 missing_channels: каналы, по которым есть изменения из федерального кубика, но нет в таблице со сравнением прогнозов.
                 sorted_reasons_channels_in_grp: словарь словарей из каналов, статистик, а также значений GRP,
@@ -374,13 +376,14 @@ class Federal_Comments:
     
         res = {}
         for i in range(len(delta_df_)):
+            date = delta_df_.iloc[i]['Дата']
             #Выделяем канал, изменения по которому хотим объяснить
             Channel = delta_df_.iloc[i]['Канал']
             #Выделяем изменение
             delta_grp = delta_df_.iloc[i]['Изменение GRP']
             for channel, contributions in reasons_channels_in_grp.items():
                 result_contributors = {}
-                if Channel == channel:
+                if Channel == channel and date == forecast_new:
                     for statistic, value in contributions.items():
                         #Рассматривается отдельно ситуация с СП. Если СП < 0 => КР растет; если СП > 0 => КР падает.
                         if statistic == 'GRP СП' or statistic == 'GRP ТП канала' or statistic == 'GRP Телемагазины':
@@ -570,7 +573,7 @@ class Federal_Comments:
         return result_df[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
 
 
-    def get_result(self, df_limits, flag = False):
+    def get_result(self, df_limits, date_of_forecast, flag = False):
         """
             Функция для получения full-result
             Args:
@@ -621,6 +624,7 @@ class Federal_Comments:
             for month, reasons in reasons_channels.items():
                 sorted_reasons_channels_in_grp, channels_not_exist, channels_not_enough_reasons = self.get_reasons_according_to_table_cubik(reasons, 
                                                                                             month, 
+                                                                                            date_of_forecast,
                                                                                             write_warning = False)
                 res[month] = sorted_reasons_channels_in_grp
             
