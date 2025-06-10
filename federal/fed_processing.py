@@ -3,6 +3,7 @@ import numpy as np
 import re
 import pymorphy3 as pmrph
 import datetime
+from OMA_tools.io_data.operations import Dict_Operations
 from OMA_tools.federal.fed_preprocessing import Federal_Preprocessing
 from OMA_tools.federal.fed_postprocessing import Federal_Postprocessing
 from OMA_tools.federal.smi_info import SMI_info
@@ -18,6 +19,7 @@ class color:
    BOLD = '\033[1m'
    BLUE = '\033[94m'
    GREEN = '\033[92m'
+   PURPLE = '\033[95m'
    RED = '\033[91m'
    END = '\033[0m'
    UNDERLINE = '\033[4m'
@@ -143,7 +145,7 @@ class Federal_Processing:
                                              df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, flag = True)
         
         smi = SMI_info(self.smi_file)
-        smi_by_days = smi.get_volumes_comments(delta_df = df_by_dates_need_comment, 
+        smi_by_days, channels_not_found_smi = smi.get_volumes_comments(delta_df = df_by_dates_need_comment, 
                                                 channels_need_replace = channels_need_replace,
                                                 year = 2025, 
                                                 df_limits = df_limits, 
@@ -161,7 +163,7 @@ class Federal_Processing:
                 by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
                 Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
                 Federal_Postprocessing(by_days).comments_dublicates_actualize()
-                return by_days, channels_not_exist, channels_not_enough_reasons
+                return by_days, channels_not_exist, channels_not_enough_reasons, channels_not_found_smi
             else:
                 merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
                 merged_df['Комментарий'] = merged_df.apply(Federal_Comments.combine_columns, axis = 1)
@@ -172,7 +174,7 @@ class Federal_Processing:
                 general_by_days = Federal_Postprocessing(general_by_days).replace_name_of_months('Месяц', year)
                 general_by_days_ = Federal_Comments.change_channels_name(channel_names_init, general_by_days, 'Канал')
                 Federal_Postprocessing(general_by_days_).comments_dublicates_actualize()
-                return general_by_days_, channels_not_exist, channels_not_enough_reasons
+                return general_by_days_, channels_not_exist, channels_not_enough_reasons, channels_not_found_smi
         
         #Если НЕ было планового обновления Сегодня или Вчера, то возвращаем исключительно Комментариев СМИ
         else:
@@ -197,7 +199,7 @@ class Federal_Processing:
             by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
             by_days_final_ = Federal_Postprocessing(by_days_final).replace_name_of_months('Месяц', year)
             Federal_Postprocessing(by_days_final_).comments_dublicates_actualize()
-            return by_days_final_, channels_not_exist, channels_not_enough_reasons
+            return by_days_final_, channels_not_exist, channels_not_enough_reasons, channels_not_found_smi
 
 
     def SUMM(self, start_date: str, year: str, smi_criteria):
@@ -225,7 +227,7 @@ class Federal_Processing:
                                                                                              df_summ_need_comment).get_result(df_limits, date_new_forecast, flag = True)
         #Генерация комментариев по изменениям Объемов
         smi = SMI_info(self.smi_file)
-        smi_summ = smi.get_volumes_comments(delta_df = df_summ_need_comment, 
+        smi_summ, channels_not_found_smi = smi.get_volumes_comments(delta_df = df_summ_need_comment, 
                                                 channels_need_replace = channels_need_replace,
                                                 year = 2025, 
                                                 df_limits = df_limits, 
@@ -242,7 +244,7 @@ class Federal_Processing:
                 data_output_summ['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
                 data_output_summ['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
-            return data_output_summ, channels_not_exist, channels_not_enough_reasons
+            return data_output_summ, channels_not_exist, channels_not_enough_reasons, channels_not_found_smi
         
         else:
             smi_summ_ = smi_summ.copy()
@@ -262,7 +264,7 @@ class Federal_Processing:
                 general_summ['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
                 general_summ['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
-            return general_summ, channels_not_exist, channels_not_enough_reasons
+            return general_summ, channels_not_exist, channels_not_enough_reasons, channels_not_found_smi
     
 
     @staticmethod
@@ -350,10 +352,10 @@ class Federal_Processing:
         else:
             result = pd.concat(res)
             return result
+        
     
-
     @staticmethod
-    def print_warning_comments(data, channels_not_exist, channels_not_enough_reasons, type_of_comments: str):
+    def print_warning_comments(data, channels_not_exist, channels_not_enough_reasons, channels_not_found_smi, type_of_comments: str):
         """
             Функция для написания финальных ВОРНИНГОВ для накопленных изменений за период.
             С помощью данной функции можно понять, для каких каналов стоит дописать причины или наоборот написать причины САМОСТОЯТЕЛЬНО.
@@ -364,10 +366,37 @@ class Federal_Processing:
             Returns:
                 Комментарии-ворнинги
         """
+        def support_func_per_comment(dict_1, dict_2, comment):
+            """
+                Вспомогательная функция для вывода комментариев в консоль.
+            """
+            for month, channel in list(dict_1.items()):
+                    # Проверяем, существует ли ключ во втором словаре
+                    if month in dict_2:
+                        # Оставляем только те значения, которые есть во втором словаре
+                        dict_1[month] = [value for value in dict_1[month] if value in dict_2[month]]
+                    else:
+                        # Если ключа нет во втором словаре, можем удалить его из dict1
+                        del dict_1[month]
+
+            #Написание комментария для каналов, для которых не нашлось причин и требуется написать комментарий самостоятельно
+            if all(value in [] for value in dict_1.values()):
+                print('')
+            else:
+                for month, channels in dict_1.items():
+                    if channels == []:
+                        print('')
+                    else:
+                        morph = pmrph.MorphAnalyzer()
+                        month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
+                        print(comment + f' для: {", ".join(list(channels))} в {month_}.' + color.END, end = '\n\n')
+
+
         #Вывод комментариев для изменений по дням
         if type_of_comments == 'by days':
             not_enough_reasons = []
             not_found = []
+            not_found_smi = []
             for i in range(len(data)):
                 channel = data.iloc[i]['Канал']
                 limit = data.iloc[i]['Порог']
@@ -411,64 +440,26 @@ class Federal_Processing:
 
             #Группируем по месяцу и собираем каналы в списки
             months__and__channels = data_.groupby('Месяц')['Канал'].apply(list).to_dict()
-
-            channels_not_exist_new = {}
-            #Замена названий каналов в словарях
-            for month, channels in channels_not_exist.items():
-                channels_new = [channel_names_init.get(item, item) for item in channels]
-                channels_not_exist_new[month] = channels_new
+#
+            #################################### ДЛЯ НЕ НАЙДЕННЫХ КАНАЛОВ ####################################
+            channels_not_exist_new = Dict_Operations(channels_not_exist).rename_items_in_dict(channel_names_init)
+            support_func_per_comment(channels_not_exist_new, 
+                         months__and__channels, 
+                         color.BOLD + color.RED + 'Требуется написать комментарий ' + \
+                              color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + color.END + color.BOLD + color.RED)
             
-            channels_not_enough_reasons_new = {}
-            #Замена названий каналов в словарях
-            for month, channels in channels_not_enough_reasons.items():
-                channels_new = [channel_names_init.get(item, item) for item in channels]
-                channels_not_enough_reasons_new[month] = channels_new
-
-
-            # Проходим по ключам первого словаря
-            for month, channel in list(channels_not_exist_new.items()):
-                # Проверяем, существует ли ключ во втором словаре
-                if month in months__and__channels:
-                    # Оставляем только те значения, которые есть во втором словаре
-                    channels_not_exist_new[month] = [value for value in channels_not_exist_new[month] if value in months__and__channels[month]]
-                else:
-                    # Если ключа нет во втором словаре, можем удалить его из dict1
-                    del channels_not_exist_new[month]
-
-            #Написание комментария для каналов, для которых не нашлось причин и требуется написать комментарий самостоятельно
-            if all(value in [] for value in channels_not_exist_new.values()):
-                print('')
-            else:
-                for month, channels in channels_not_exist_new.items():
-                    if channels == []:
-                        print('')
-                    else:
-                        morph = pmrph.MorphAnalyzer()
-                        month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
-                        print(color.BOLD + color.RED + 'Требуется написать комментарий ' + \
-                              color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + color.END + color.BOLD + color.RED + \
-                              f' для: {", ".join(list(channels))} в {month_}.' + color.END, end = '\n\n')
+            #################################### ДЛЯ НЕ НАЙДЕННЫХ КАНАЛОВ СМИ ################################
+            channels_not_exist_smi = Dict_Operations(channels_not_found_smi).rename_items_in_dict(channel_names_init)
+            support_func_per_comment(channels_not_exist_smi, 
+                         months__and__channels, 
+                         color.BOLD + color.PURPLE + 'Не найдено данных от ' + color.UNDERLINE + 'СМИ' + color.END + ' ' + \
+                              color.BOLD + color.PURPLE)
             
-            for key, channel in list(channels_not_enough_reasons_new.items()):
-                # Проверяем, существует ли ключ во втором словаре
-                if key in months__and__channels:
-                    # Оставляем только те значения, которые есть во втором словаре
-                    channels_not_enough_reasons_new[key] = [value for value in channels_not_enough_reasons_new[key] if value in months__and__channels[key]]
-                else:
-                    # Если ключа нет во втором словаре, можем удалить его из dict1
-                    del channels_not_enough_reasons_new[key]
-
-            #Написание комментария для каналов, для которых требуется написать дополнительные комментарии
-            if all(value in [] for value in channels_not_enough_reasons_new.values()):
-                print('')
-            else:
-                for month, channels in channels_not_enough_reasons_new.items():
-                    if channels == []:
-                        print('')
-                    else:
-                        morph = pmrph.MorphAnalyzer()
-                        month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
-                        print(color.BOLD + color.GREEN + 'Найдено ' + color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
-                              color.END + color.BOLD + color.GREEN + f' причин в {month_} для: {", ".join(list(channels))}.' + color.END, end = '\n\n')
+            #################################### ДЛЯ КАНАЛОВ, ДЛЯ КОТОРЫХ НАЙДЕНО НЕДОСТАТОЧНО ПРИЧИН ########
+            channels_not_enough_reasons_new = Dict_Operations(channels_not_enough_reasons).rename_items_in_dict(channel_names_init)
+            support_func_per_comment(channels_not_enough_reasons_new, 
+                         months__and__channels, 
+                         color.BOLD + color.GREEN + 'Найдено ' + color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
+                              color.END + color.BOLD + color.GREEN + ' причин')
         else:
             print(color.BOLD + color.RED + 'ПЕРЕМЕННАЯ type_of_comments ДОЛЖНА БЫТЬ ЛИБО by days, либо summ' + color.END)

@@ -437,6 +437,18 @@ class Dict_Operations:
         return self.dictionary
     
     
+    def rename_items_in_dict(self, dict_names_init):
+        """
+            Функция для замены значений в одном словаре с использованием другого словаря, где во втором словаре - значения - нужные нам.
+        """
+        dict_new = {}
+        #Замена названий каналов в словарях
+        for key, items_old in self.dictionary.items():
+            items_new = [dict_names_init.get(item, item) for item in items_old]
+            dict_new[key] = items_new
+        return dict_new
+
+    
     @staticmethod
     def make_concat_of_dicts_dataframes(dict_1, dict_2):
         """

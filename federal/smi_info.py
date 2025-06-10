@@ -332,9 +332,9 @@ class SMI_info:
         df_result_cleaned['Комментарий'] = df_result_cleaned['Комментарий'].replace(text_init, text_updated)
         
         #Вывод на экран каналов, для которых не нашлось данных из файла от СМИ
-        for month, channels in channels_not_found.items():
-            morph = pmrph.MorphAnalyzer()
-            month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
-            if channels:  # Проверяем, есть ли каналы для данного месяца
-                print(color.BOLD + color.PURPLE + f'Не найдено данных от СМИ в {month_} для канала {", ".join(set(channels))}.' + color.END, end = '\n\n')
-        return df_result_cleaned
+        #for month, channels in channels_not_found.items():
+        #    morph = pmrph.MorphAnalyzer()
+        #    month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
+        #    if channels:  # Проверяем, есть ли каналы для данного месяца
+        #        print(color.BOLD + color.PURPLE + f'Не найдено данных от СМИ в {month_} для канала {", ".join(set(channels))}.' + color.END, end = '\n\n')
+        return df_result_cleaned, channels_not_found
