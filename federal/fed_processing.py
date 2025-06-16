@@ -196,34 +196,59 @@ class Federal_Processing:
                                                     year = 2025, 
                                                     df_limits = df_limits, 
                                                     smi_criteria = smi_criteria)
+            #Если DataFrame от СМИ НЕ пустой
+            if len(smi_by_days) != 0:
+                #Замена столбца с месяцем
+                months_init = list(df_by_dates_need_comment['Месяц'])
+                months_new = []
+                for old_month in months_init:
+                    month_new = str(old_month).split('\'')[0].title()
+                    months_new.append(month_new)
+                df_by_dates_need_comment['Месяц'] = df_by_dates_need_comment['Месяц'].replace(months_init, months_new)
+
+                merged_df = pd.merge(df_by_dates_need_comment, smi_by_days, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
+
+                #Добавление пустого столбца для комментариев руководителя
+                merged_df['Доп столбец'] = ''
+
+                #Join комментариев с порогами
+                by_days = pd.merge(merged_df, df_limits.T, on = ['Канал'], how = 'inner')
+
+                by_days = by_days[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+
+                by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
+                by_days_final_ = Federal_Postprocessing(by_days_final).replace_name_of_months('Месяц', year)
+                Federal_Postprocessing(by_days_final_).comments_dublicates_actualize()
+                problem_channels = {
+                        'Channel not exist': '',
+                        'Not enough reasons': '',
+                        'SMI not': channels_not_found_smi
+                    }
+                return by_days_final_, problem_channels
             
-            #Замена столбца с месяцем
-            months_init = list(df_by_dates_need_comment['Месяц'])
-            months_new = []
-            for old_month in months_init:
-                month_new = str(old_month).split('\'')[0].title()
-                months_new.append(month_new)
-            df_by_dates_need_comment['Месяц'] = df_by_dates_need_comment['Месяц'].replace(months_init, months_new)
+            #Если DataFrame от СМИ пустой
+            else:
+                #Замена столбца с месяцем
+                months_init = list(df_by_dates_need_comment['Месяц'])
+                months_new = []
+                for old_month in months_init:
+                    month_new = str(old_month).split('\'')[0].title()
+                    months_new.append(month_new)
+                df_by_dates_need_comment['Месяц'] = df_by_dates_need_comment['Месяц'].replace(months_init, months_new)
 
-            merged_df = pd.merge(df_by_dates_need_comment, smi_by_days, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
-
-            #Добавление пустого столбца для комментариев руководителя
-            merged_df['Доп столбец'] = ''
-
-            #Join комментариев с порогами
-            by_days = pd.merge(merged_df, df_limits.T, on = ['Канал'], how = 'inner')
-
-            by_days = by_days[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
-
-            by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
-            by_days_final_ = Federal_Postprocessing(by_days_final).replace_name_of_months('Месяц', year)
-            Federal_Postprocessing(by_days_final_).comments_dublicates_actualize()
-            problem_channels = {
-                    'Channel not exist': '',
-                    'Not enough reasons': '',
-                    'SMI not': channels_not_found_smi
-                }
-            return by_days_final_, problem_channels
+                #Join комментариев с порогами
+                by_days = pd.merge(df_by_dates_need_comment, df_limits.T, on = ['Канал'], how = 'inner')
+                #Добавление пустого столбца для комментариев руководителя
+                by_days['Доп столбец'] = ''
+                by_days['Комментарий'] = ''
+                by_days = by_days[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+                by_days_= Federal_Postprocessing(by_days).replace_name_of_months('Месяц', year)
+                problem_channels = {
+                                        'Channel not exist': '',
+                                        'Not enough reasons': '',
+                                        'SMI not': ''
+                                    }
+                return by_days_, problem_channels
 
 
     def SUMM(self, start_date: str, year: str, smi_criteria):

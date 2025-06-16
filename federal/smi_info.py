@@ -299,7 +299,7 @@ class SMI_info:
 
         #Если не нашлось релевантных данных
         if len(result) == 0:
-            return []
+            return [], []
         
         result_df = pd.concat(result)
         result_df['Дата'] = pd.to_datetime(result_df['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
