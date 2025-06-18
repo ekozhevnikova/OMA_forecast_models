@@ -45,7 +45,43 @@ class Federal_Postprocessing:
                         else:
                             for comment in jcomments:
                                 icomments = [c for c in icomments if c != comment]
-                                self.df.at[i, 'Комментарий'] = '. '.join(icomments)
+
+                                
+    def clean_comments(self, result_df, date_of_forecast):
+        """
+            Функция для зачистки комментариев.
+        """
+        possible_comments = ['Рост доли', 
+                     'Снижение доли', 
+                     'Рост телесмотрения', 
+                     'Снижение телесмотрения', 
+                     'Рост КУС', 
+                     'Снижение КУС', 
+                     'Рост КУС за счет роста прогноза внедомашнего телесмотрения', 
+                     'Снижение КУС за счет роста прогноза внедомашнего телесмотрения', 
+                     'Рост прогноза СП', 
+                     'Снижение прогноза СП', 
+                     'Рост ТП канала', 
+                     'Снижение ТП канала'
+                    ]
+        for i in range(len(self.df)):
+            channel_i = self.df.iloc[i]['Канал']
+            date_i = self.df.iloc[i]['Дата']
+            for j in range(len(result_df)):
+                channel_j = result_df.iloc[j]['Канал']
+                date_j = result_df.iloc[j]['Дата']
+                if channel_i == channel_j and date_i == date_j:
+                    if date_j == date_of_forecast:
+                        comment = result_df.iloc[j]['Комментарий']
+                        if comment is not np.nan:
+                            comment_splitted = comment.split('. ')
+                            # Фильтруем комментарии
+                            filtered_comments = [comment for comment in comment_splitted if any(possible in comment for possible in possible_comments)]
+                            result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                    else:
+                        result_df.at[j, 'Комментарий'] = ''
+        return result_df
+
 
     @staticmethod
     def make_style_of_table(filepath, output_df, sheet_name):

@@ -166,14 +166,15 @@ class Federal_Processing:
                 #Форматирование столбца с Месяцем
                 by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
                 Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
-                Federal_Postprocessing(by_days).comments_dublicates_actualize()
+                #Federal_Postprocessing(by_days).comments_dublicates_actualize()
                 by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц')
+                by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
                 problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-                return by_days_sorted, problem_channels
+                return by_days_sorted_, problem_channels
             else:
                 merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
                 merged_df['Комментарий'] = merged_df.apply(Federal_Comments.combine_columns, axis = 1)
@@ -183,14 +184,16 @@ class Federal_Processing:
                 #Форматирование столбца с Месяцем
                 general_by_days = Federal_Postprocessing(general_by_days).replace_name_of_months('Месяц', year)
                 general_by_days_ = Federal_Comments.change_channels_name(channel_names_init, general_by_days, 'Канал')
-                Federal_Postprocessing(general_by_days_).comments_dublicates_actualize()
+                #Federal_Postprocessing(general_by_days_).comments_dublicates_actualize()
                 general_by_days_sorted = Table(general_by_days_).sort_in_specific_way(month_order, 'Месяц')
+                general_by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_by_days_sorted, date_new_forecast)
+
                 problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-                return general_by_days_sorted, problem_channels
+                return general_by_days_sorted_, problem_channels
             
         else:
             df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment = self.get_data_per_analys(start_date, flag = False)
@@ -225,6 +228,7 @@ class Federal_Processing:
                 by_days_final_ = Federal_Postprocessing(by_days_final).replace_name_of_months('Месяц', year)
                 Federal_Postprocessing(by_days_final_).comments_dublicates_actualize()
                 by_days_final_sorted = Table(by_days_final_).sort_in_specific_way(month_order, 'Месяц')
+                #by_days_final_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_final_sorted, date_new_forecast)
                 problem_channels = {
                         'Channel not exist': '',
                         'Not enough reasons': '',
@@ -249,7 +253,9 @@ class Federal_Processing:
                 by_days['Комментарий'] = ''
                 by_days = by_days[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
                 by_days_= Federal_Postprocessing(by_days).replace_name_of_months('Месяц', year)
-                by_days_sorted = Table(by_days_).sort_in_specific_way(month_order, 'Месяц')
+                by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days_, 'Канал')
+                by_days_sorted = Table(by_days_final).sort_in_specific_way(month_order, 'Месяц')
+                #by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
                 problem_channels = {
                                         'Channel not exist': '',
                                         'Not enough reasons': '',
@@ -297,20 +303,21 @@ class Federal_Processing:
             #Форматирование столбца с Месяцем
             data_output_summ = Federal_Postprocessing(data_output_summ).replace_name_of_months('Месяц', year)
             data_output_summ_sorted = Table(data_output_summ).sort_in_specific_way(month_order, 'Месяц')
+            data_output_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(data_output_summ_sorted, date_new_forecast)
         
             #Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
-                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            return data_output_summ_sorted, problem_channels
+            return data_output_summ_sorted_, problem_channels
         
         else:
             smi_summ_ = smi_summ.copy()
@@ -324,20 +331,21 @@ class Federal_Processing:
             #Форматирование столбца с Месяцем
             general_summ = Federal_Postprocessing(general_summ).replace_name_of_months('Месяц', year)
             general_summ_sorted = Table(general_summ).sort_in_specific_way(month_order, 'Месяц')
+            general_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_summ_sorted, date_new_forecast)
             
             ##Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                general_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
-                general_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
+                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            return general_summ, problem_channels
+            return general_summ_sorted_, problem_channels
     
 
     @staticmethod
