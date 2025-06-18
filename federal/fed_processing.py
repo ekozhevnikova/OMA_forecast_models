@@ -3,7 +3,7 @@ import numpy as np
 import re
 import pymorphy3 as pmrph
 import datetime
-from OMA_tools.io_data.operations import Dict_Operations
+from OMA_tools.io_data.operations import Table, Dict_Operations
 from OMA_tools.federal.fed_preprocessing import Federal_Preprocessing
 from OMA_tools.federal.fed_postprocessing import Federal_Postprocessing
 from OMA_tools.federal.smi_info import SMI_info
@@ -126,7 +126,7 @@ class Federal_Processing:
             return df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment
 
     
-    def BY_DAYS(self, start_date: str, year: str, smi_criteria):
+    def BY_DAYS(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str):
         """
             Функция для генерация комментариев по дням
             Args:
@@ -149,7 +149,7 @@ class Federal_Processing:
             df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast = self.get_data_per_analys(start_date, flag = True)
             ################# Генерация комментариев, исходя из файла со сравнением прогнозов #################
             data_output_dates, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
-                                                df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, flag = True)
+                                                df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, kus_file, flag = True)
             
             smi = SMI_info(self.smi_file)
             smi_by_days, channels_not_found_smi = smi.get_volumes_comments(delta_df = df_by_dates_need_comment, 
@@ -158,18 +158,22 @@ class Federal_Processing:
                                                     df_limits = df_limits, 
                                                     smi_criteria = smi_criteria)
             smi_by_days_ = smi_by_days.copy()
-            if len(smi_by_days) == 0:
+            if  len(data_output_dates) == 0 and len(smi_by_days) == 0:
+                print('НЕ НАЙДЕНО ДАННЫХ ДЛЯ УКАЗАННОГО ПЕРИОДА')
+
+            elif len(smi_by_days) == 0:
                 data_output_dates_ = data_output_dates[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
                 #Форматирование столбца с Месяцем
                 by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
                 Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
                 Federal_Postprocessing(by_days).comments_dublicates_actualize()
+                by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц')
                 problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-                return by_days, problem_channels
+                return by_days_sorted, problem_channels
             else:
                 merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
                 merged_df['Комментарий'] = merged_df.apply(Federal_Comments.combine_columns, axis = 1)
@@ -180,12 +184,13 @@ class Federal_Processing:
                 general_by_days = Federal_Postprocessing(general_by_days).replace_name_of_months('Месяц', year)
                 general_by_days_ = Federal_Comments.change_channels_name(channel_names_init, general_by_days, 'Канал')
                 Federal_Postprocessing(general_by_days_).comments_dublicates_actualize()
+                general_by_days_sorted = Table(general_by_days_).sort_in_specific_way(month_order, 'Месяц')
                 problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-                return general_by_days_, problem_channels
+                return general_by_days_sorted, problem_channels
             
         else:
             df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment = self.get_data_per_analys(start_date, flag = False)
@@ -219,12 +224,13 @@ class Federal_Processing:
                 by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
                 by_days_final_ = Federal_Postprocessing(by_days_final).replace_name_of_months('Месяц', year)
                 Federal_Postprocessing(by_days_final_).comments_dublicates_actualize()
+                by_days_final_sorted = Table(by_days_final_).sort_in_specific_way(month_order, 'Месяц')
                 problem_channels = {
                         'Channel not exist': '',
                         'Not enough reasons': '',
                         'SMI not': channels_not_found_smi
                     }
-                return by_days_final_, problem_channels
+                return by_days_final_sorted, problem_channels
             
             #Если DataFrame от СМИ пустой
             else:
@@ -243,15 +249,16 @@ class Federal_Processing:
                 by_days['Комментарий'] = ''
                 by_days = by_days[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
                 by_days_= Federal_Postprocessing(by_days).replace_name_of_months('Месяц', year)
+                by_days_sorted = Table(by_days_).sort_in_specific_way(month_order, 'Месяц')
                 problem_channels = {
                                         'Channel not exist': '',
                                         'Not enough reasons': '',
                                         'SMI not': ''
                                     }
-                return by_days_, problem_channels
+                return by_days_sorted, problem_channels
 
 
-    def SUMM(self, start_date: str, year: str, smi_criteria):
+    def SUMM(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str):
         """
             Функция для генерация комментариев по дням
             Args:
@@ -273,7 +280,10 @@ class Federal_Processing:
         #print(df_summ_need_comment)
         #Генерация первичных комментариев с накопленными изменениями, исходя из данных Фед Кубика и таблицы со сравнением прогнозов
         data_output_summ, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
-                                                                                             df_summ_need_comment).get_result(df_limits, date_new_forecast, flag = True)
+                                                                                             df_summ_need_comment).get_result(df_limits, 
+                                                                                                                              date_new_forecast, 
+                                                                                                                              kus_file, 
+                                                                                                                              flag = True)
         #Генерация комментариев по изменениям Объемов
         smi = SMI_info(self.smi_file)
         smi_summ, channels_not_found_smi = smi.get_volumes_comments(delta_df = df_summ_need_comment, 
@@ -286,20 +296,21 @@ class Federal_Processing:
             Federal_Comments.change_channels_name(channel_names_init, data_output_summ, 'Канал')
             #Форматирование столбца с Месяцем
             data_output_summ = Federal_Postprocessing(data_output_summ).replace_name_of_months('Месяц', year)
+            data_output_summ_sorted = Table(data_output_summ).sort_in_specific_way(month_order, 'Месяц')
         
             #Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                data_output_summ['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
-                data_output_summ['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            return data_output_summ, problem_channels
+            return data_output_summ_sorted, problem_channels
         
         else:
             smi_summ_ = smi_summ.copy()
@@ -312,13 +323,14 @@ class Federal_Processing:
             
             #Форматирование столбца с Месяцем
             general_summ = Federal_Postprocessing(general_summ).replace_name_of_months('Месяц', year)
+            general_summ_sorted = Table(general_summ).sort_in_specific_way(month_order, 'Месяц')
             
             ##Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                general_summ['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                general_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
-                general_summ['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
+                general_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
@@ -504,26 +516,35 @@ class Federal_Processing:
 #
             #################################### ДЛЯ НЕ НАЙДЕННЫХ КАНАЛОВ ####################################
             channels_not_exist = problem_channels['Channel not exist']
-            channels_not_exist_new = Dict_Operations(channels_not_exist).rename_items_in_dict(channel_names_init)
-            support_func_per_comment(channels_not_exist_new, 
-                         months__and__channels, 
-                         color.BOLD + color.RED + 'Требуется написать комментарий ' + \
-                              color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + color.END + color.BOLD + color.RED)
+            if len(channels_not_exist) > 1:
+                channels_not_exist_new = Dict_Operations(channels_not_exist).rename_items_in_dict(channel_names_init)
+                support_func_per_comment(channels_not_exist_new, 
+                            months__and__channels, 
+                            color.BOLD + color.RED + 'Требуется написать комментарий ' + \
+                                color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + color.END + color.BOLD + color.RED)
+            else:
+                print('')
             
             #################################### ДЛЯ НЕ НАЙДЕННЫХ КАНАЛОВ СМИ ################################
             channels_not_found_smi = problem_channels['SMI not']
-            channels_not_exist_smi = Dict_Operations(channels_not_found_smi).rename_items_in_dict(channel_names_init)
-            support_func_per_comment(channels_not_exist_smi, 
-                         months__and__channels, 
-                         color.BOLD + color.PURPLE + 'Не найдено данных от ' + color.UNDERLINE + 'СМИ' + color.END + ' ' + \
-                              color.BOLD + color.PURPLE)
+            if len(channels_not_found_smi) > 1:
+                channels_not_exist_smi = Dict_Operations(channels_not_found_smi).rename_items_in_dict(channel_names_init)
+                support_func_per_comment(channels_not_exist_smi, 
+                            months__and__channels, 
+                            color.BOLD + color.PURPLE + 'Не найдено данных от ' + color.UNDERLINE + 'СМИ' + color.END + ' ' + \
+                                color.BOLD + color.PURPLE)
+            else:
+                print('')
             
             #################################### ДЛЯ КАНАЛОВ, ДЛЯ КОТОРЫХ НАЙДЕНО НЕДОСТАТОЧНО ПРИЧИН ########
             channels_not_enough_reasons = problem_channels['Not enough reasons']
-            channels_not_enough_reasons_new = Dict_Operations(channels_not_enough_reasons).rename_items_in_dict(channel_names_init)
-            support_func_per_comment(channels_not_enough_reasons_new, 
-                         months__and__channels, 
-                         color.BOLD + color.GREEN + 'Найдено ' + color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
-                              color.END + color.BOLD + color.GREEN + ' причин')
+            if len(channels_not_enough_reasons) > 1:
+                channels_not_enough_reasons_new = Dict_Operations(channels_not_enough_reasons).rename_items_in_dict(channel_names_init)
+                support_func_per_comment(channels_not_enough_reasons_new, 
+                            months__and__channels, 
+                            color.BOLD + color.GREEN + 'Найдено ' + color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
+                                color.END + color.BOLD + color.GREEN + ' причин')
+            else:
+                print('')
         else:
             print(color.BOLD + color.RED + 'ПЕРЕМЕННАЯ type_of_comments ДОЛЖНА БЫТЬ ЛИБО by days, либо summ' + color.END)

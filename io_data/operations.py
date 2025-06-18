@@ -175,7 +175,22 @@ class Table:
     def __init__(self, df):
         self.df = df
         
-        
+    
+    def sort_in_specific_way(self, desired_sequence: list, column: str):
+        """
+            Функция для сортировки в нужном порядке в столбце DataFrame, когда обычный метод sort_values не работает
+        """
+        # Преобразуем столбец "Месяц" в категориальный тип с заданным порядком
+        self.df[column] = pd.Categorical(self.df[column], categories = desired_sequence, ordered = True)
+
+        # Сортируем датафрейм по столбцу "Месяц"
+        df_sorted = self.df.sort_values(by = column)
+
+        # Сбрасываем индексы, если нужно
+        df_sorted.reset_index(drop = True, inplace = True)
+        return df_sorted
+    
+
     def split_column(self, split, col_name, col_name_new):
         """
         Function that splits column into two other columns

@@ -36,8 +36,59 @@ class Federal_Comments:
                 if channels[i] == channel:
                     df[column_name].replace({channels[i]: name_init}, inplace = True)
         return df
-
     
+    @staticmethod
+    def influence_out_house(kus_file):
+        """
+            Функция для чтения файла с коэффициентами внедома
+            Args:
+                kus_file: путь к файлу с прогнозом КУСа.
+            Returns:
+                KUS_koeff_cleaned: DataFrame c коэффициентами внедома
+        """
+        KUS_koeff = pd.read_excel(kus_file, sheet_name = 'коэф.внедом', skiprows = 2)
+        KUS_koeff = KUS_koeff[['Канал', 'январь.2', 'февраль.2', 'март.2', 'апрель.2', 'май.2',
+            'июнь.2', 'июль.2', 'август.2', 'сентябрь.2', 'октябрь.2', 'ноябрь.2',
+            'декабрь.2']]
+        KUS_koeff_cleaned = KUS_koeff.dropna() 
+        
+        KUS_koeff_cleaned.rename(columns = {
+            'январь.2': 'Январь.2',
+            'февраль.2': 'Февраль.2',
+            'март.2': 'Март.2',
+            'апрель.2': 'Апрель.2',
+            'май.2': 'Май.2',
+            'июнь.2': 'Июнь.2',
+            'июль.2': 'Июль.2',
+            'август.2': 'Август.2',
+            'сентябрь.2': 'Сентябрь.2',
+            'октябрь.2': 'Октябрь.2',
+            'ноябрь.2': 'Ноябрь.2',
+            'декабрь.2': 'Декабрь.2'
+            },
+            inplace = True)
+        
+        #KUS_koeff_cleaned = Federal_Comments.change_channels_name(channel_names_init, KUS_koeff_cleaned, 'Канал')
+        KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].str.upper()
+        
+        #Изменение столбца с каналами
+        channels_need_replace = {
+                    '2Х2': '2X2',
+                    '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ',
+                    'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ',
+                    'СТС ЛАВ': 'СТС LOVE',
+                    'ТВ3': 'ТВ-3',
+                    'ТНТ4': 'ТНТ 4'
+                }
+        channels_old = list(KUS_koeff_cleaned['Канал'])
+        channels_new = []
+        for i in range(len(channels_old)):
+            channels_new.append(channels_old[i].upper())
+        KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].replace(channels_old, channels_new)
+        KUS_koeff_cleaned['Канал'].replace(channels_need_replace, inplace = True)
+        return KUS_koeff_cleaned
+
+
     def search_channel_and_info(self, month: str, channel: str):
         """
             Функция для выделения DataFrame с каналом, по которому собираемся искать изменения инвентаря. А также создание словарей 
@@ -80,7 +131,7 @@ class Federal_Comments:
         return old_data, new_data
 
 
-    def get_reasons(self, month: str, channel: str):
+    def get_reasons(self, month: str, channel: str, kus_df):
         """
             Функция для поиска причин, которые повлекли за собой изменение GRP.
             Args:
@@ -91,11 +142,16 @@ class Federal_Comments:
                 reasons: список причин, согласно которым предположительно произошли изменения инвентаря.
             
         """
+        #Если изменения по коэффициентам внедома составляют больше 0.5 общего изменения КУСа, то это внедом
+        criteria = 0.5
+
         reasons = []
         _month = f'{month}.2'
         df_channel = self.df[self.df['Канал'] == channel]
         data = df_channel[['Канал', 'Значения', _month]].dropna()
         data_copy = df_channel[['Канал', 'Значения', _month]]
+
+        outhouse = float(kus_df.loc[kus_df['Канал'] == channel, _month])
         
         atributes = list(data['Значения'])
         for i in range(len(atributes)):
@@ -104,110 +160,132 @@ class Federal_Comments:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.001:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.001 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.03:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.03:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.001 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ', 'СТС']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0015:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0015 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0015 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'МАТЧ ТВ', 'ПЕРВЫЙ КАНАЛ']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0017:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0017:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0017 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0017 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0024:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0024:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0024 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0024 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
 
             elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.00265:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.00265:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.00265 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.00265 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] in ['Ю', 'ТВ ЦЕНТР', 'ТВ-3']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.003 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.003 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == 'СПАС':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.008:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.008:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.008 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.008 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] in ['ЧЕ', 'ТНТ 4']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0038:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0038:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0038 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0038 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == '2X2':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0067:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0067:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0067 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0067 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == 'СТС LOVE':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0055 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0055 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
             
             elif data.iloc[0]['Канал'] == 'МИР':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0045:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0045:
                     reasons.append('TTV')  
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.0045 and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) < 0.025:
-                    reasons.append('КУС')
-                elif atributes[i] == 'КУС' and np.abs(float(data.loc[data['Значения'] == 'КУС', _month])) >= 0.025:
-                    reasons.append('КУС Внедом')
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta >= 0.0045 and outhouse < criteria * delta:
+                        reasons.append('КУС')
+                    else:
+                        reasons.append('КУС Внедом')
                 
             if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
                 reasons.append('Т Общие')
@@ -230,8 +308,6 @@ class Federal_Comments:
                 if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])) >= 1e-3:
                     reasons.append('GRP Телемагазины')
                 elif np.isnan(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])):
-                    #print(channel, month)
-                    #month_2 = f'{month}.1'
                     if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) == 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) != 0.0:
                         reasons.append('GRP Телемагазины')
                     elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
@@ -277,7 +353,7 @@ class Federal_Comments:
             GRP = (old_data['Т Общие'] * tvr) / 20
             
         #Если поменялся КУС
-        elif changed_statistic == 'КУС':
+        elif changed_statistic == 'КУС' or changed_statistic == 'КУС Внедом':
             TVR = old_data['TTV'] * old_data['Share'] / 100
             tvr = new_data['КУС'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
@@ -373,7 +449,7 @@ class Federal_Comments:
         
         # Находим элементы, которые есть в channels, но отсутствуют в merged_channels
         missing_channels = set_channels - set_merged_channels
-    
+
         res = {}
         for i in range(len(delta_df_)):
             date = delta_df_.iloc[i]['Дата']
@@ -567,13 +643,16 @@ class Federal_Comments:
             #df_res = pd.merge(df_res, limits, on = ['Канал'], how = 'inner')
             df_res = df_res[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Доп столбец', 'Комментарий']]
             res.append(df_res)
-        data_output = pd.concat(res)
-        data_output_ = pd.merge(self.delta_df, data_output, on = ['Канал', 'Месяц', 'Дата', 'Изменение GRP'], how = 'left')
-        result_df = pd.merge(data_output_, limits, on = ['Канал'], how = 'inner')
-        return result_df[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+        if len(res) != 0:
+            data_output = pd.concat(res)
+            data_output_ = pd.merge(self.delta_df, data_output, on = ['Канал', 'Месяц', 'Дата', 'Изменение GRP'], how = 'left')
+            result_df = pd.merge(data_output_, limits, on = ['Канал'], how = 'inner')
+            return result_df[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+        else:
+            return []
 
 
-    def get_result(self, df_limits, date_of_forecast, flag = False):
+    def get_result(self, df_limits, date_of_forecast, kus_file: str, flag = False):
         """
             Функция для получения full-result
             Args:
@@ -583,6 +662,9 @@ class Federal_Comments:
             Return:
                 data_output: DataFrame с шаблонными комментариями
         """
+        #Чтение файла с коэффициентами внедома
+        outhouse_koeffs = Federal_Comments.influence_out_house(kus_file)
+
         reasons_channels = {}
         result = {}
         self.delta_df = self.delta_df.sort_values(by = 'Месяц')
@@ -594,14 +676,15 @@ class Federal_Comments:
             
         # Замена столбца дат на новый конвертированный столбец
         self.delta_df['Месяц'] = self.delta_df['Месяц'].replace(months_init, months_new)
+
         
         for i in range(len(self.delta_df)):
             #Выделяем канал, изменения по которому хотим объяснить
             channel = self.delta_df.iloc[i]['Канал']
             #Выделяем месяц, по которому наблюдаются существенные изменения
             month = self.delta_df.iloc[i]['Месяц']
-        
-            reasons = self.get_reasons(month, channel)
+            date = self.delta_df.iloc[i]['Дата']
+            reasons = self.get_reasons(month, channel, outhouse_koeffs)
             
             contributions = {}
             for changed_statistic in reasons:
@@ -630,7 +713,10 @@ class Federal_Comments:
             
             general_comments = self.write_comments(res)
             data_output = self.generate_result_table(general_comments, df_limits)
-            return data_output.reset_index(drop = True), channels_not_exist, channels_not_enough_reasons
+            if len(data_output) != 0:
+                return data_output.reset_index(drop = True), channels_not_exist, channels_not_enough_reasons
+            else:
+                return pd.DataFrame(), channels_not_exist, channels_not_enough_reasons
         
         #Случай, когда каналы, для которых найдено недостаточно причин выводятся на экран, но не выводятся в виде отдельной переменной.
         else:
@@ -643,7 +729,10 @@ class Federal_Comments:
             
             general_comments = self.write_comments(res)
             data_output = self.generate_result_table(general_comments, df_limits)
-            return data_output.reset_index(drop = True)
+            if len(data_output) != 0:
+                return data_output.reset_index(drop = True)
+            else:
+                return pd.DataFrame()
     
 
     @staticmethod
