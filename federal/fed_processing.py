@@ -312,10 +312,10 @@ class Federal_Processing:
             #Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}'
             else:
-                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
-
+                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}'
+            
             problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
@@ -341,9 +341,9 @@ class Federal_Processing:
             ##Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}'
             else:
-                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
+                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
@@ -388,6 +388,10 @@ class Federal_Processing:
                 delta_per_period: Словарь с изменениями, где ключ: Канал, значение: Суммарное изменение, которое 
                 было уже объяснено за Период.
         """
+        #Вспомогательная функция для объединения 
+        def combine_change(row):
+            return f"{row['Доп столбец']} {row['Изменение GRP']} GRP."
+        
         #Изменения начинаем смотреть с даты начала периода + 1 (если период 2 - 9 мая, то изменения начинаем смотреть с 3 мая.)
         start_date = pd.to_datetime(start_date, format = '%Y-%m-%d')
         start_date_modified = start_date + datetime.timedelta(days = 1)
@@ -437,7 +441,17 @@ class Federal_Processing:
             return res
         else:
             result = pd.concat(res)
-            return result
+            # Применяем функцию к DataFrame и создаем новую колонку
+            result['Объединение'] = result.apply(combine_change, axis = 1)
+
+            # Оставляем столбец "Изменение GRP" пустым
+            result['Изменение GRP'] = ''
+
+            # Выводим результат
+            res_updated = result[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Объединение', 'Комментарий']]
+            res_updated.rename(columns = {'Объединение': 'Доп столбец'}, inplace = True)
+            res_updated = res_updated.reset_index(drop = True)
+            return res_updated
         
     
     @staticmethod
