@@ -15,6 +15,7 @@ class Federal_Preprocessing:
             Функция для чтения данных из Федерального Кубика
             Args:
                 filename: Полный путь к файлу с данными из Федерального Кубика
+                sheet_name: имя листа, с которого будем брать данные (по умолчанию "прогнозВИ")
             Return:
                 data_cubik: Данные из Федерального кубика
         """
@@ -84,6 +85,7 @@ class Federal_Preprocessing:
             Функция для расчета изменений по дням, исходя из Федерального кубика.
             Args:
                 need_data: обрезанные данные из Федерального кубика
+                df_limits: DataFrame с порогами
             Return:
                 general_df_by_dates: DataFrame с изменениями по дням для каждого канала   
                 df_by_dates_need_comment: DataFrame с изменениями по дням для каждого канала, приведенный к определенному виду
@@ -134,7 +136,11 @@ class Federal_Preprocessing:
     def calculate_accumulated_diff(self, general_df_by_dates, df_limits):
         """
             Функция для расчета накопленных измененй за несколько дней.
-            data_full_by_days: словарь с изменениями по дням, согласно данным из Федерального кубика
+            Args:
+                general_df_by_dates: словарь с изменениями по дням, согласно данным из Федерального кубика
+                df_limits: DataFrame с порогами
+            Returns:
+                df_summ_need_comment: DataFrame с накопленными изменениями за определенный период
         """
         dates = self.df.index.to_list()
         #Сбор суммарнных изменений за период в единый DataFrame

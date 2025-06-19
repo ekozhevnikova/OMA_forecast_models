@@ -128,14 +128,13 @@ class Federal_Processing:
     
     def BY_DAYS(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str):
         """
-            Функция для генерация комментариев по дням
+            Функция для генерация комментариев по дням.
             Args:
                 start_date: Дата, от которой начинаем смотреть изменения
-                limits_file: Имя файла/Путь к файлу с Порогами
-                cubik_file: Имя файла/Путь к файлу с Порогами
-                forecast_comparison_file: Имя файла/Путь к файлу со Сравнением прогнозов
-                smi_file: Имя файла/Путь к файлу по Переброскам - Сокращениям
                 year: Год
+                smi_criteria: критерий для отбора значений СМИ
+                month_order: желаемый порядок месяцев в выходном DataFrame
+                kus_file: Путь к файлу с коэффициентами внедома
             Returns:
                 Обновленный файл с Комментариями
                 smi_by_days: Комментарии с изменениями объемов по дням
@@ -161,6 +160,7 @@ class Federal_Processing:
             if  len(data_output_dates) == 0 and len(smi_by_days) == 0:
                 print('НЕ НАЙДЕНО ДАННЫХ ДЛЯ УКАЗАННОГО ПЕРИОДА')
 
+            #Если не нашлось релеватных данных от СМИ
             elif len(smi_by_days) == 0:
                 data_output_dates_ = data_output_dates[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
                 #Форматирование столбца с Месяцем
@@ -175,6 +175,8 @@ class Federal_Processing:
                     'SMI not': channels_not_found_smi
                 }
                 return by_days_sorted_, problem_channels
+            
+            #Если нашлись релеватные данные от СМИ и нашлись объяснения из таблицы со сравнением прогнозов
             else:
                 merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
                 merged_df['Комментарий'] = merged_df.apply(Federal_Comments.combine_columns, axis = 1)
@@ -195,6 +197,7 @@ class Federal_Processing:
                 }
                 return general_by_days_sorted_, problem_channels
             
+        #Случай, если планового обновления сегодня или вчера не было (Рассматриваем только данные СМИ)
         else:
             df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment = self.get_data_per_analys(start_date, flag = False)
 
@@ -266,13 +269,13 @@ class Federal_Processing:
 
     def SUMM(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str):
         """
-            Функция для генерация комментариев по дням
+            Функция для генерация накопленных комментариев за период.
             Args:
                 start_date: Дата, от которой начинаем смотреть изменения
-                limits_file: Имя файла/Путь к файлу с Порогами
-                cubik_file: Имя файла/Путь к файлу с Порогами
-                forecast_comparison_file: Имя файла/Путь к файлу со Сравнением прогнозов
-                smi_file: Имя файла/Путь к файлу по Переброскам - Сокращениям
+                year: Год
+                smi_criteria: критерий СМИ для отбора значений
+                month_order: желаемый порядок месяцев в выходном DataFrame
+                kus_file: Файл с коэффициентами внедома
             Returns:
                 Обновленный файл с Комментариями
                 smi_by_days: Комментарии с изменениями объемов по дням
@@ -283,7 +286,6 @@ class Federal_Processing:
         prepr = Federal_Preprocessing(data_cubik)
         df_summ_need_comment = prepr.calculate_accumulated_diff(general_df_by_dates, 
                                                                 df_limits)
-        #print(df_summ_need_comment)
         #Генерация первичных комментариев с накопленными изменениями, исходя из данных Фед Кубика и таблицы со сравнением прогнозов
         data_output_summ, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
                                                                                              df_summ_need_comment).get_result(df_limits, 
@@ -297,28 +299,31 @@ class Federal_Processing:
                                                 year = 2025, 
                                                 df_limits = df_limits, 
                                                 smi_criteria = smi_criteria)
+        
+        #Если не нашлось релеватных данных от СМИ (учитываются только данные из таблицы со сравнением прогнозов)
         if len(smi_summ) == 0:
             #Изменение названий каналов в соответствии с тем, что было изначально
             Federal_Comments.change_channels_name(channel_names_init, data_output_summ, 'Канал')
             #Форматирование столбца с Месяцем
             data_output_summ = Federal_Postprocessing(data_output_summ).replace_name_of_months('Месяц', year)
             data_output_summ_sorted = Table(data_output_summ).sort_in_specific_way(month_order, 'Месяц')
-            data_output_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(data_output_summ_sorted, date_new_forecast)
+            #data_output_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(data_output_summ_sorted, date_new_forecast)
         
             #Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                data_output_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}.'
             else:
-                data_output_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
+                data_output_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}.'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            return data_output_summ_sorted_, problem_channels
+            return data_output_summ_sorted, problem_channels
         
+        #Если нашлись релеватные данные от СМИ и из таблицы со сравнением прогнозов (merge этих двух составляющих)
         else:
             smi_summ_ = smi_summ.copy()
             #Join комментариев со сравнением прогнозов и СМИ
