@@ -211,13 +211,29 @@ class Federal_Comments:
 
 
             
-            elif data.iloc[0]['Канал'] in ['Ю', 'ТВ ЦЕНТР', 'ТВ-3']:
+            elif data.iloc[0]['Канал'] in ['Ю', 'ТВ-3']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                        if delta >= 0.003 and outhouse < criteria * delta:
+                            reasons.append('КУС')
+                        else:
+                            reasons.append('КУС Внедом')
+            
+
+            elif data.iloc[0]['Канал'] == 'ТВ ЦЕНТР':
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС КР', _month]))
                     if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
@@ -394,7 +410,11 @@ class Federal_Comments:
         #Если поменялся КУС
         elif changed_statistic == 'КУС' or changed_statistic == 'КУС Внедом':
             TVR = old_data['TTV'] * old_data['Share'] / 100
-            tvr = new_data['КУС'] * TVR
+            #Рассматриваем отдельно случай для ТВЦ
+            if channel == 'ТВ ЦЕНТР':
+                tvr = tvr = new_data['КУС КР'] * TVR
+            else:
+                tvr = new_data['КУС'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
     
         #Если поменялись Объемы
