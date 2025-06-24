@@ -128,8 +128,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
 
             elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ', 'СТС']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
@@ -145,8 +144,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
 
             elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'ПЕРВЫЙ КАНАЛ']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0017:
@@ -162,14 +160,12 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
             
 
             elif data.iloc[0]['Канал'] == 'МАТЧ ТВ':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.006:
                     reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.006:
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.005:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
@@ -180,8 +176,6 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
 
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
@@ -198,8 +192,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
 
             elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.00265:
@@ -215,8 +208,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
 
             
             elif data.iloc[0]['Канал'] in ['Ю', 'ТВ ЦЕНТР', 'ТВ-3']:
@@ -233,8 +225,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
             
             elif data.iloc[0]['Канал'] == 'СПАС':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.008:
@@ -250,8 +241,6 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
 
             
             elif data.iloc[0]['Канал'] == 'ТНТ 4':
@@ -268,8 +257,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
                         
             
             elif data.iloc[0]['Канал'] == 'ЧЕ':
@@ -286,8 +274,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
 
             
             elif data.iloc[0]['Канал'] == '2X2':
@@ -304,8 +291,6 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
 
             
             elif data.iloc[0]['Канал'] == 'СТС LOVE':
@@ -322,8 +307,7 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
+
 
             
             elif data.iloc[0]['Канал'] == 'МИР':
@@ -340,8 +324,6 @@ class Federal_Comments:
                             reasons.append('КУС')
                         else:
                             reasons.append('КУС Внедом')
-                    else:
-                        reasons.append('КУС')
 
                 
             if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
