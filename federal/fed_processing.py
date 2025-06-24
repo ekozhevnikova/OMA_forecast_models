@@ -148,7 +148,7 @@ class Federal_Processing:
             df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast = self.get_data_per_analys(start_date, flag = True)
             ################# Генерация комментариев, исходя из файла со сравнением прогнозов #################
             data_output_dates, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
-                                                df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, kus_file, flag = True)
+                                                df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, kus_file, cummulative_diff_flag = False, flag = True)
             
             smi = SMI_info(self.smi_file)
             smi_by_days, channels_not_found_smi = smi.get_volumes_comments(delta_df = df_by_dates_need_comment, 
@@ -291,6 +291,7 @@ class Federal_Processing:
                                                                                              df_summ_need_comment).get_result(df_limits, 
                                                                                                                               date_new_forecast, 
                                                                                                                               kus_file, 
+                                                                                                                              cummulative_diff_flag = True,
                                                                                                                               flag = True)
         #Генерация комментариев по изменениям Объемов
         smi = SMI_info(self.smi_file)
@@ -321,7 +322,11 @@ class Federal_Processing:
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            return data_output_summ_sorted, problem_channels
+            if len(data_output_summ_sorted) != 0:
+                return data_output_summ_sorted, problem_channels
+            else:
+                print('Все изменения объяснены')
+                return data_output_summ_sorted, problem_channels
         
         #Если нашлись релеватные данные от СМИ и из таблицы со сравнением прогнозов (merge этих двух составляющих)
         else:
@@ -350,8 +355,12 @@ class Federal_Processing:
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            return general_summ_sorted_, problem_channels
-    
+            if len(general_summ_sorted_) != 0:
+                return general_summ_sorted_, problem_channels
+            else:
+                print('Все изменения объяснены')
+                return general_summ_sorted_, problem_channels
+
 
     @staticmethod
     def read_comments(comments_filepath_init: str):
@@ -451,6 +460,28 @@ class Federal_Processing:
             res_updated = result[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Объединение', 'Комментарий']]
             res_updated.rename(columns = {'Объединение': 'Доп столбец'}, inplace = True)
             res_updated = res_updated.reset_index(drop = True)
+
+            #Удаляем дублирующиеся комментарии за период. Оставляем нужные.
+            for i in range(len(res_updated)):
+                channel = res_updated.iloc[i]['Канал']
+                month = res_updated.iloc[i]['Месяц']
+                comments_per_week = res_updated.iloc[i]['Комментарий']
+                comment_per_week_splitted = comments_per_week.split('. ')
+
+                filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
+                if len(filtered_df) != 0:
+                    comments = list(filtered_df['Комментарий'])
+                    list_of_comments = [item.split('. ') for item in comments]
+
+                    #Получаем вложенный список
+                    nested_list = list_of_comments[0]
+                
+                    #Удаляем элементы из первого списка, если они содержатся во втором
+                    result_list = [item for item in comment_per_week_splitted if item not in nested_list]
+                    
+                    res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
+                else:
+                    continue
             return res_updated
         
     

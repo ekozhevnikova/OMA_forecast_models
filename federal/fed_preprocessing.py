@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import re
+from datetime import datetime
 
 
 class Federal_Preprocessing:
@@ -8,6 +10,25 @@ class Federal_Preprocessing:
     """
     def __init__(self, df):
         self.df = df
+
+
+    @staticmethod
+    def extract_date_from_filename(filename):
+        """
+            Функция для извлечения даты из файла с использованием регулярных выражений.
+        """
+        # Регулярное выражение для поиска даты в формате DD.MM.YYYY
+        date_pattern = r'\((\d{2})\.(\d{2})\.(\d{4})\)'
+        
+        match = re.search(date_pattern, filename)
+        if match:
+            # Извлечение группы с найденной датой
+            date_str = match.group(0)[1: -1]  # Убираем скобки
+            # Преобразование строки в объект datetime
+            return datetime.strptime(date_str, '%d.%m.%Y')
+        else:
+            raise ValueError("Дата не найдена в названии файла.")
+
 
     @staticmethod
     def read_cubik(filename, sheet_name = 'прогнозВИ'):
@@ -161,3 +182,61 @@ class Federal_Preprocessing:
         df_summ_need_comment = df_summ_need_comment[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Flag']]
         df_summ_need_comment = df_summ_need_comment.sort_values(by = 'Месяц')
         return df_summ_need_comment
+
+
+    @staticmethod
+    def influence_out_house(kus_file):
+        """
+            Функция для чтения файла с коэффициентами внедома
+            Args:
+                kus_file: путь к файлу с прогнозом КУСа.
+            Returns:
+                KUS_koeff_cleaned: DataFrame c коэффициентами внедома
+        """
+        KUS_koeff = pd.read_excel(kus_file, sheet_name = 'коэф.внедом', skiprows = 2)
+        KUS_koeff = KUS_koeff[['Канал', 'январь.2', 'февраль.2', 'март.2', 'апрель.2', 'май.2',
+            'июнь.2', 'июль.2', 'август.2', 'сентябрь.2', 'октябрь.2', 'ноябрь.2',
+            'декабрь.2']]
+        KUS_koeff_cleaned = KUS_koeff.dropna() 
+        
+        KUS_koeff_cleaned.rename(columns = {
+            'январь.2': 'Январь.2',
+            'февраль.2': 'Февраль.2',
+            'март.2': 'Март.2',
+            'апрель.2': 'Апрель.2',
+            'май.2': 'Май.2',
+            'июнь.2': 'Июнь.2',
+            'июль.2': 'Июль.2',
+            'август.2': 'Август.2',
+            'сентябрь.2': 'Сентябрь.2',
+            'октябрь.2': 'Октябрь.2',
+            'ноябрь.2': 'Ноябрь.2',
+            'декабрь.2': 'Декабрь.2'
+            },
+            inplace = True)
+        
+        #KUS_koeff_cleaned = Federal_Comments.change_channels_name(channel_names_init, KUS_koeff_cleaned, 'Канал')
+        KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].str.upper()
+        
+        #Изменение столбца с каналами
+        channels_need_replace = {
+                    '2Х2': '2X2',
+                    '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ',
+                    'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ',
+                    'СТС ЛАВ': 'СТС LOVE',
+                    'ТВ3': 'ТВ-3',
+                    'ТНТ4': 'ТНТ 4'
+                }
+        channels_old = list(KUS_koeff_cleaned['Канал'])
+        channels_new = []
+        for i in range(len(channels_old)):
+            channels_new.append(channels_old[i].upper())
+        KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].replace(channels_old, channels_new)
+        KUS_koeff_cleaned['Канал'].replace(channels_need_replace, inplace = True)
+
+        try:
+            extracted_date = Federal_Preprocessing.extract_date_from_filename(kus_file)
+            extracted_date_ = pd.to_datetime(extracted_date)
+        except ValueError as e:
+            print('Дата не найдена.')
+        return KUS_koeff_cleaned, extracted_date_
