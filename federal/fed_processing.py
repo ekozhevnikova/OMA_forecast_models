@@ -303,7 +303,6 @@ class Federal_Processing:
                                                 df_limits = df_limits, 
                                                 flag_by_days = False,
                                                 smi_criteria = smi_criteria)
-        print(smi_summ)
         
         #Если не нашлось релеватных данных от СМИ (учитываются только данные из таблицы со сравнением прогнозов)
         if len(smi_summ) == 0:
@@ -346,25 +345,25 @@ class Federal_Processing:
             #Форматирование столбца с Месяцем
             general_summ = Federal_Postprocessing(general_summ).replace_name_of_months('Месяц', year)
             general_summ_sorted = Table(general_summ).sort_in_specific_way(month_order, 'Месяц')
-            general_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_summ_sorted, date_new_forecast)
+            #general_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_summ_sorted, date_new_forecast)
             
             ##Определение даты старта и даты конца
             day_start, month_name_start, day_stop, month_name_stop = Federal_Processing.define_start_stop_day(data_cubik, start_date)
             if month_name_start == month_name_stop:
-                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}'
+                general_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} по {day_stop} {month_name_stop}'
             else:
-                general_summ_sorted_['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}'
+                general_summ_sorted['Доп столбец'] = f'Общее изменение с {day_start} {month_name_start} по {day_stop} {month_name_stop}'
 
             problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
                     'SMI not': channels_not_found_smi
                 }
-            if len(general_summ_sorted_) != 0:
-                return general_summ_sorted_, problem_channels
+            if len(general_summ_sorted) != 0:
+                return general_summ_sorted, problem_channels
             else:
                 print('Все изменения объяснены')
-                return general_summ_sorted_, problem_channels
+                return general_summ_sorted, problem_channels
 
 
     @staticmethod
@@ -476,15 +475,20 @@ class Federal_Processing:
                 filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
                 if len(filtered_df) != 0:
                     comments = list(filtered_df['Комментарий'])
-                    list_of_comments = [item.split('. ') for item in comments]
 
-                    #Получаем вложенный список
-                    nested_list = list_of_comments[0]
-                
-                    #Удаляем элементы из первого списка, если они содержатся во втором
-                    result_list = [item for item in comment_per_week_splitted if item not in nested_list]
+                    def check_comments():
+                        return all(map(lambda x: x is not None if isinstance(x, str) else not np.isnan(x), comments))
+                                
+                    if check_comments():
+                        list_of_comments = [item.split('. ') for item in comments]
+
+                        #Получаем вложенный список
+                        nested_list = list_of_comments[0]
                     
-                    res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
+                        #Удаляем элементы из первого списка, если они содержатся во втором
+                        result_list = [item for item in comment_per_week_splitted if item not in nested_list]
+                        
+                        res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
                 else:
                     continue
             return res_updated

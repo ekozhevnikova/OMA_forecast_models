@@ -32,24 +32,39 @@ class SMI_info:
         # Используем регулярное выражение для замены
         return re.sub(r'\d+\.\d+', SMI_info.round_number, comment)
 
-
     @staticmethod
     # Функция для объединения комментариев
-    def combine_comments(group):
+    def combine_comments(group, flag_by_days):
         """
             Функция, объединяющая комментарии по одинаковым каналам, месяцам и датам.
         """
         combined_comment = ' '.join(group['Комментарий'])
 
-        return pd.Series({
-            'Канал': group['Канал'].iloc[0],
-            'Месяц': group['Месяц'].iloc[0],
-            'Дата': group['Дата'].iloc[0],
-            #'Дата из СМИ': group['Дата из СМИ'].iloc[0],
-            'Комментарий': combined_comment,
-            'Дата осуществления': group['Дата осуществления'].iloc[0]
-        })
+        if flag_by_days:
+            return pd.Series({
+                'Канал': group['Канал'].iloc[0],
+                'Месяц': group['Месяц'].iloc[0],
+                'Дата': group['Дата'].iloc[0],
+                #'Дата из СМИ': group['Дата из СМИ'].iloc[0],
+                'Комментарий': combined_comment,
+                'Дата осуществления': group['Дата осуществления'].iloc[0]
+            })
+        else:
+            return pd.Series({
+                'Канал': group['Канал'].iloc[0],
+                'Месяц': group['Месяц'].iloc[0],
+                'Дата': group['Дата'].iloc[0],
+                #'Дата из СМИ': group['Дата из СМИ'].iloc[0],
+                'Комментарий': combined_comment
+            })
     
+    @staticmethod
+    def combine_comments_by_days(group):
+        return SMI_info.combine_comments(group, True)
+    
+    @staticmethod
+    def combine_comments_by_periods(group):
+        return SMI_info.combine_comments(group, False)
 
     @staticmethod
     def sum_identical_sentences(sentences):
@@ -205,44 +220,76 @@ class SMI_info:
                             if np.abs(grp_minus) >= limit * smi_criteria:
                                 #Генерация комментариев для снятия телемагазинов
                                 if re.search(pattern_telemag, volume_transfer.iloc[j]['Комментарий']):
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Размещение телемагазинов {(-1) * grp_minus} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Размещение телемагазинов {(-1) * grp_minus} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Размещение телемагазинов {(-1) * grp_minus} GRP.'
+                                        }
                                     
                                 elif re.search(pattern_setka, volume_transfer.iloc[j]['Комментарий']):
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Корректировка сетки {(-1) * grp_minus} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Корректировка сетки {(-1) * grp_minus} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Корректировка сетки {(-1) * grp_minus} GRP.'
+                                        }
 
                                 #Генерация комментариев для остальных случаев
                                 else:
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Сокращение рекламных объемов {(-1) * grp_minus} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Сокращение рекламных объемов {(-1) * grp_minus} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Сокращение рекламных объемов {(-1) * grp_minus} GRP.'
+                                        }
                         #Обработка случая, если в столбце 'GRP открыто' и интересующей строчке j значение NaN
                         else:
                             grp_minus_ = volume_transfer.iloc[j]['Итог GRP в регионы -']
                             if not np.isnan(grp_minus_):
                                 if np.abs(grp_minus_) >= limit * smi_criteria:
-                                    comments = {
-                                    'Канал': channel_2,
-                                    'Дата': date_1,
-                                    'Дата из СМИ': date_2,
-                                    'Комментарий': f'Перераспределение в регионы {(-1) * grp_minus_} GRP.',
-                                    'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                        'Канал': channel_2,
+                                        'Дата': date_1,
+                                        'Дата из СМИ': date_2,
+                                        'Комментарий': f'Перераспределение в регионы {(-1) * grp_minus_} GRP.',
+                                        'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                        'Канал': channel_2,
+                                        'Дата': date_1,
+                                        'Дата из СМИ': date_2,
+                                        'Комментарий': f'Перераспределение в регионы {(-1) * grp_minus_} GRP.'
+                                        }
         
                     elif delta_grp > 0:
                         grp_plus = volume_transfer.iloc[j]['GRP открыто']
@@ -251,44 +298,76 @@ class SMI_info:
                             if grp_plus >= limit * smi_criteria:
                                 #Генерация комментариев для размещения телемагазинов
                                 if re.search(pattern_telemag, volume_transfer.iloc[j]['Комментарий']):
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Снятие телемагазинов {grp_plus} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Снятие телемагазинов {grp_plus} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Снятие телемагазинов {grp_plus} GRP.'
+                                        }
 
                                 elif re.search(pattern_setka, volume_transfer.iloc[j]['Комментарий']):
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Корректировка сетки {grp_plus} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Корректировка сетки {grp_plus} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Корректировка сетки {grp_plus} GRP.'
+                                        }
 
                                 #Генерация комментариев для остальных случаев
                                 else:
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Дооткрытие рекламных объемов {grp_plus} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Дооткрытие рекламных объемов {grp_plus} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Дооткрытие рекламных объемов {grp_plus} GRP.'
+                                        }
                         #Обработка случая, если в столбце 'GRP открыто' и интересующей строчке j значение NaN
                         else:
                             grp_plus_ = volume_transfer.iloc[j]['Итог GRP из регионов +']
                             if not np.isnan(grp_plus_):
                                 if grp_plus_ >= limit * smi_criteria:
-                                    comments = {
-                                        'Канал': channel_2,
-                                        'Дата': date_1,
-                                        'Дата из СМИ': date_2,
-                                        'Комментарий': f'Перераспределение из регионов {(-1) * grp_plus_} GRP.',
-                                        'Дата осуществления': date_1 == date_2
-                                    }
+                                    if flag_by_days:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Перераспределение из регионов {(-1) * grp_plus_} GRP.',
+                                            'Дата осуществления': date_1 == date_2
+                                        }
+                                    else:
+                                        comments = {
+                                            'Канал': channel_2,
+                                            'Дата': date_1,
+                                            'Дата из СМИ': date_2,
+                                            'Комментарий': f'Перераспределение из регионов {(-1) * grp_plus_} GRP.'
+                                        }
                 #Заполнение итогового словаря с изменениями             
                 if comments:
                     channel_date = channel_2 + month_2
@@ -303,7 +382,10 @@ class SMI_info:
         for month, channel_comments in comments_full.items():
             df = pd.DataFrame(comments_full[month])
             df['Месяц'] = month
-            df = df[['Канал', 'Месяц', 'Дата', 'Дата из СМИ', 'Комментарий', 'Дата осуществления']]
+            if flag_by_days:
+                df = df[['Канал', 'Месяц', 'Дата', 'Дата из СМИ', 'Комментарий', 'Дата осуществления']]
+            else:
+                df = df[['Канал', 'Месяц', 'Дата', 'Дата из СМИ', 'Комментарий']]
             result.append(df)
 
         #Если не нашлось релевантных данных
@@ -320,9 +402,14 @@ class SMI_info:
         df['Дата из СМИ'] = pd.to_datetime(df['Дата из СМИ'])
 
         # Группируем по 'Канал', 'Месяц' и объединяем комментарии
-        df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
-            lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
-        ).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments).reset_index(drop = True)
+        if flag_by_days:
+            df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
+                lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
+            ).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop = True)
+        else:
+            df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
+                lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
+            ).groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop = True)
 
         #df_result.drop_duplicates(['Канал', 'Месяц', 'Дата'], inplace=True)
 
@@ -339,10 +426,9 @@ class SMI_info:
         # Применяем функцию к нашему списку
         text_updated = SMI_info.sum_identical_sentences(text_init)
         df_result_cleaned['Комментарий'] = df_result_cleaned['Комментарий'].replace(text_init, text_updated)
-        print(df_result_cleaned)
+
         if flag_by_days:
             df_result_cleaned_ = df_result_cleaned.loc[(df_result_cleaned['Дата осуществления'] == True)]
             return df_result_cleaned_, channels_not_found
         else:
-            df_result_cleaned_ = df_result_cleaned[['Канал', 'Месяц', 'Дата', 'Комментарий']]
-            return df_result_cleaned_, channels_not_found
+            return df_result_cleaned, channels_not_found
