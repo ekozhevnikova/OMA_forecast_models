@@ -46,7 +46,8 @@ class SMI_info:
             'Месяц': group['Месяц'].iloc[0],
             'Дата': group['Дата'].iloc[0],
             #'Дата из СМИ': group['Дата из СМИ'].iloc[0],
-            'Комментарий': combined_comment
+            'Комментарий': combined_comment,
+            'Дата осуществления': group['Дата осуществления'].iloc[0]
         })
     
 
@@ -151,7 +152,7 @@ class SMI_info:
         return volume_transfer_, channel_not_found
 
     
-    def get_volumes_comments(self, delta_df, channels_need_replace, year: int, df_limits, smi_criteria = 0.1):
+    def get_volumes_comments(self, delta_df, channels_need_replace, year: int, df_limits, flag_by_days, smi_criteria = 0.1):
         """
             Функция для генерации комментариев по изменению объемов из файла от отдела СМИ (Новое)Переброски-сокращения.xlsm.
             Args:
@@ -208,7 +209,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Размещение телемагазинов {(-1) * grp_minus} GRP.'
+                                        'Комментарий': f'Размещение телемагазинов {(-1) * grp_minus} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
                                     
                                 elif re.search(pattern_setka, volume_transfer.iloc[j]['Комментарий']):
@@ -216,7 +218,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Корректировка сетки {(-1) * grp_minus} GRP.'
+                                        'Комментарий': f'Корректировка сетки {(-1) * grp_minus} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
 
                                 #Генерация комментариев для остальных случаев
@@ -225,7 +228,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Сокращение рекламных объемов {(-1) * grp_minus} GRP.'
+                                        'Комментарий': f'Сокращение рекламных объемов {(-1) * grp_minus} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
                         #Обработка случая, если в столбце 'GRP открыто' и интересующей строчке j значение NaN
                         else:
@@ -236,7 +240,8 @@ class SMI_info:
                                     'Канал': channel_2,
                                     'Дата': date_1,
                                     'Дата из СМИ': date_2,
-                                    'Комментарий': f'Перераспределение в регионы {(-1) * grp_minus_} GRP.'
+                                    'Комментарий': f'Перераспределение в регионы {(-1) * grp_minus_} GRP.',
+                                    'Дата осуществления': date_1 == date_2
                                     }
         
                     elif delta_grp > 0:
@@ -250,7 +255,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Снятие телемагазинов {grp_plus} GRP.'
+                                        'Комментарий': f'Снятие телемагазинов {grp_plus} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
 
                                 elif re.search(pattern_setka, volume_transfer.iloc[j]['Комментарий']):
@@ -258,7 +264,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Корректировка сетки {grp_plus} GRP.'
+                                        'Комментарий': f'Корректировка сетки {grp_plus} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
 
                                 #Генерация комментариев для остальных случаев
@@ -267,7 +274,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Дооткрытие рекламных объемов {grp_plus} GRP.'
+                                        'Комментарий': f'Дооткрытие рекламных объемов {grp_plus} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
                         #Обработка случая, если в столбце 'GRP открыто' и интересующей строчке j значение NaN
                         else:
@@ -278,7 +286,8 @@ class SMI_info:
                                         'Канал': channel_2,
                                         'Дата': date_1,
                                         'Дата из СМИ': date_2,
-                                        'Комментарий': f'Перераспределение из регионов {(-1) * grp_plus_} GRP.'
+                                        'Комментарий': f'Перераспределение из регионов {(-1) * grp_plus_} GRP.',
+                                        'Дата осуществления': date_1 == date_2
                                     }
                 #Заполнение итогового словаря с изменениями             
                 if comments:
@@ -294,7 +303,7 @@ class SMI_info:
         for month, channel_comments in comments_full.items():
             df = pd.DataFrame(comments_full[month])
             df['Месяц'] = month
-            df = df[['Канал', 'Месяц', 'Дата', 'Дата из СМИ', 'Комментарий']]
+            df = df[['Канал', 'Месяц', 'Дата', 'Дата из СМИ', 'Комментарий', 'Дата осуществления']]
             result.append(df)
 
         #Если не нашлось релевантных данных
@@ -313,7 +322,7 @@ class SMI_info:
         # Группируем по 'Канал', 'Месяц' и объединяем комментарии
         df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
             lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
-        ).groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments).reset_index(drop = True)
+        ).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments).reset_index(drop = True)
 
         #df_result.drop_duplicates(['Канал', 'Месяц', 'Дата'], inplace=True)
 
@@ -330,5 +339,10 @@ class SMI_info:
         # Применяем функцию к нашему списку
         text_updated = SMI_info.sum_identical_sentences(text_init)
         df_result_cleaned['Комментарий'] = df_result_cleaned['Комментарий'].replace(text_init, text_updated)
-        
-        return df_result_cleaned, channels_not_found
+        print(df_result_cleaned)
+        if flag_by_days:
+            df_result_cleaned_ = df_result_cleaned.loc[(df_result_cleaned['Дата осуществления'] == True)]
+            return df_result_cleaned_, channels_not_found
+        else:
+            df_result_cleaned_ = df_result_cleaned[['Канал', 'Месяц', 'Дата', 'Комментарий']]
+            return df_result_cleaned_, channels_not_found
