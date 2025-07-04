@@ -121,13 +121,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.001 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.001 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ', 'СТС']:
@@ -137,13 +138,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0015 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0015 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'ПЕРВЫЙ КАНАЛ']:
@@ -153,13 +155,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0017 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0017 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
             
 
             elif data.iloc[0]['Канал'] == 'МАТЧ ТВ':
@@ -169,13 +172,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.006 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.006 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
@@ -185,13 +189,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0024 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0024 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
@@ -201,13 +206,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.00265 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.00265 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             
@@ -218,13 +224,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.003 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.003 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
             
 
             elif data.iloc[0]['Канал'] == 'ТВ ЦЕНТР':
@@ -234,13 +241,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС КР', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.003 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.003 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
             
             elif data.iloc[0]['Канал'] == 'СПАС':
@@ -250,13 +258,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.008 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.008 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
             
             elif data.iloc[0]['Канал'] == 'ТНТ 4':
@@ -266,13 +275,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0038 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0038 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
                         
             
@@ -283,13 +293,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0055 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0055 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             
@@ -300,13 +311,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0067 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0067 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
             
             elif data.iloc[0]['Канал'] == 'СТС LOVE':
@@ -316,13 +328,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0055 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0055 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
 
             
@@ -333,13 +346,14 @@ class Federal_Comments:
                     reasons.append('TTV')  
                 elif atributes[i] == 'КУС':
                     delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                       (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                       (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                        if delta >= 0.0045 and outhouse < criteria * delta:
-                            reasons.append('КУС')
-                        else:
-                            reasons.append('КУС Внедом')
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.0045 and outhouse < criteria * delta:
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
 
                 
             if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:

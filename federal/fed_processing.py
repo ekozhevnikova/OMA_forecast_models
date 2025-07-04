@@ -168,8 +168,8 @@ class Federal_Processing:
                 #Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
                 #Federal_Postprocessing(by_days).comments_dublicates_actualize()
                 by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц')
-                by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
-                by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sorted_, 'Канал')
+                #by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
+                by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sorted, 'Канал')
                 problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
