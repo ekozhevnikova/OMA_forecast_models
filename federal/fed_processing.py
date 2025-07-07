@@ -408,14 +408,24 @@ class Federal_Processing:
         #Изменения начинаем смотреть с даты начала периода + 1 (если период 2 - 9 мая, то изменения начинаем смотреть с 3 мая.)
         start_date = pd.to_datetime(start_date, format = '%Y-%m-%d')
         start_date_modified = start_date + datetime.timedelta(days = 1)
-        start_date_modified = start_date_modified.strftime('%Y-%m-%d')
+        #start_date_modified = start_date_modified.strftime('%Y-%m-%d')
 
         #Чтение исходного файла с Комментариями
         comments = pd.read_excel(comments_filepath_init)
         comments['Дата'] = pd.to_datetime(comments['Дата'])
         comments.sort_values(by = ['Дата'], inplace = True)
         comments.set_index('Дата', inplace = True)
+
+
+        date_of_start = start_date_modified
+        #Если в файле с Комментариями нет подходящей даты для начала отсчета изменений.
+        while date_of_start not in comments.index:
+            print(f'Текущая дата: {date_of_start} не совпадает с целевой.')
+            print('Ищем дальше ...')
+            date_of_start += datetime.timedelta(days = 1)
+            print(f'Найдена следующая подходящая дата: {date_of_start}')
         
+        start_date_modified = date_of_start.strftime('%Y-%m-%d')
         comments_cleaned = Federal_Preprocessing(comments).cut_data_cubik(start_date_modified)
         comments_cleaned['Изменение GRP'] = comments_cleaned['Изменение GRP'].astype(int)
         comments_cleaned['Порог'] = comments_cleaned['Порог'].astype(int)
