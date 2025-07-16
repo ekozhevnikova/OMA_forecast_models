@@ -1,3 +1,9 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[4]:
+
+
 import pandas as pd
 from prophet import Prophet
 import datetime as dt
@@ -135,7 +141,7 @@ class TTV_Regions_Forecast:
 
                 tmp = forecast.loc[:, ['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
                 forecast_cut = tmp[tmp.ds > last_fact_date]
-                tmp_df = tmp_df[tmp_df.ds >= dt.datetime(last_fact_date.year - 2, 1, 1)]
+                tmp_df = tmp_df[tmp_df.ds >= dt.datetime(last_fact_date.year - 4, 1, 1)]
                 result = pd.concat([tmp_df, forecast_cut], axis = 0)
                 result['bca'] = df.columns[icol + 1]
 
@@ -143,7 +149,8 @@ class TTV_Regions_Forecast:
             results_df[bca] = results
         return results_df
 
-    def get_result(self, filename_fact_data, filename_result_data, path, file_names):
+    
+    def get_result(self, filename_fact_data):
         """
         The sum function that concludes API calculation and forecast process using Prophet.
         
@@ -162,6 +169,10 @@ class TTV_Regions_Forecast:
                                                                         'Novosibirsk', 
                                                                         'SaintPetersburg']
                                                     )
+        return total
+    
+    
+    def make_forecast(self, total, filename_result_data, path, file_names):
         
         predictions, last_fact_date = self.get_predictions(total, 'All 4-45')
         df, ds_dict = TTV_Regions_Forecast.convert_columns_to_prophet_format(dict_of_total = total)

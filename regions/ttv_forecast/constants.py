@@ -142,8 +142,7 @@ class Constants_Calculation:
         'САНКТ-ПЕТЕРБУРГ 25-54': 'age >= 25 AND age <= 54',
         'САНКТ-ПЕТЕРБУРГ Ж 14-44': 'age >= 14 AND age <= 44 AND sex = 2'
     }
-    regions_list = [regions_dict_4_45, regions_dict_6_54, regions_dict_14_54, regions_dict_18, None, None, None, None, None]
-    targets_list = [targets_ekaterinburg, targets_nizniy_novgorod, targets_novosibirsk, targets_saint_petersburg]
+
 
 class Constants__Columns:
     
@@ -345,7 +344,7 @@ class Prophet_Constants:
     }
 
     cond_date_count = {
-        'All 4-45': ['2021-12-31'] * len(Constants__Columns.columns_new_4_45),
+        'All 4-45': ['2021-01-01'] * len(Constants__Columns.columns_new_4_45),
         'All 6-54': ['2013-12-31', '2014-12-31', '2013-12-31', '2013-12-31', '2018-12-31', '2016-12-31', 
                         '2013-12-31', '2013-12-31', '2018-12-31', '2013-12-31',  '2013-12-31', '2017-12-31', 
                         '2013-12-31', '2015-12-31', '2013-12-31', '2016-12-31', '2017-12-31', '2018-12-31', 
