@@ -26,6 +26,32 @@ class Federal_Postprocessing:
         return self.df
     
 
+    @staticmethod
+    def filter_comments_channel_overtime(by_days, df_summ):
+        """
+            Функция, которая удаляет комментарии в накопленных изменениях, если данный канал по данному месяцу встретился выше в изменениях по дням.
+            Удаляется канад, месяц, комментарий. А доп комментарий из столбца "Доп столбец" переносится выше в блок с изменениями по дням.
+        """
+        idx_to_delete = []
+        #цикл по изменениям по дням
+        for i in range(len(by_days)):
+            channel_i = by_days.iloc[i]['Канал']
+            month_i = by_days.iloc[i]['Месяц']
+            #цикл по накопленным изменениям за период
+            for j in range(len(df_summ)):
+                channel_j = df_summ.iloc[j]['Канал']
+                month_j = df_summ.iloc[j]['Месяц']
+                additional_comment = df_summ.iloc[j]['Доп столбец']
+
+                if channel_i == channel_j and month_i == month_j:
+                    by_days.at[i, 'Доп столбец'] = additional_comment
+                    idx_to_delete.append(j)
+                else:
+                    continue
+        df_summ.drop(idx_to_delete, inplace = True)
+        return by_days, df_summ
+    
+
     def comments_dublicates_actualize(self):
         """
             Функция для удаления дубликатов Комментариев или дубликатов подстрок в Комментариях.
@@ -52,8 +78,8 @@ class Federal_Postprocessing:
             Функция для зачистки комментариев.
         """
         possible_comments = [
-                     'Рост доли', 
-                     'Снижение доли', 
+                     'Рост доли с', 
+                     'Снижение доли с', 
                      'Рост телесмотрения', 
                      'Снижение телесмотрения', 
                      'Рост КУС', 
@@ -83,23 +109,36 @@ class Federal_Postprocessing:
             for j in range(len(result_df)):
                 channel_j = result_df.iloc[j]['Канал']
                 date_j = result_df.iloc[j]['Дата']
-                smi_date_flag = result_df.iloc[j]['Дата осуществления']
-                if channel_i == channel_j and date_i == date_j:
-                    comment = result_df.iloc[j]['Комментарий']
-                    if comment is not np.nan:
-                        if date_j == date_of_forecast:
-                            if smi_date_flag != True:
+                if 'Дата осуществления' in result_df.columns:
+                    smi_date_flag = result_df.iloc[j]['Дата осуществления']
+                    if channel_i == channel_j and date_i == date_j:
+                        comment = result_df.iloc[j]['Комментарий']
+                        if comment is not np.nan:
+                            if date_j == date_of_forecast:
+                                if smi_date_flag != True:
+                                    comment_splitted = comment.split('. ')
+                                    # Фильтруем комментарии
+                                    filtered_comments = [comment for comment in comment_splitted if any(possible in comment for possible in possible_comments)]
+                                    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                                elif smi_date_flag == True:
+                                    comment_splitted = comment.split('. ')
+                                    # Фильтруем комментарии
+                                    filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in possible_comments_smi)]
+                                    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                            else:
+                                result_df.at[j, 'Комментарий'] = ''
+                else:
+                    if channel_i == channel_j and date_i == date_j:
+                        comment = result_df.iloc[j]['Комментарий']
+                        if comment is not np.nan:
+                            if date_j == date_of_forecast:
                                 comment_splitted = comment.split('. ')
                                 # Фильтруем комментарии
                                 filtered_comments = [comment for comment in comment_splitted if any(possible in comment for possible in possible_comments)]
                                 result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
-                            elif smi_date_flag == True:
-                                comment_splitted = comment.split('. ')
-                                # Фильтруем комментарии
-                                filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in possible_comments_smi)]
-                                result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
-                        else:
-                            result_df.at[j, 'Комментарий'] = ''
+                            else:
+                                result_df.at[j, 'Комментарий'] = ''
+
         result_df_ = result_df[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
         return result_df_
 

@@ -4,10 +4,10 @@ import re
 import pymorphy3 as pmrph
 import datetime
 from OMA_tools.io_data.operations import Table, Dict_Operations
-from OMA_tools.federal.fed_preprocessing import Federal_Preprocessing
-from OMA_tools.federal.fed_postprocessing import Federal_Postprocessing
-from OMA_tools.federal.smi_info import SMI_info
-from OMA_tools.federal.comments import Federal_Comments
+from OMA_tools.federal.fed_comments.fed_preprocessing import Federal_Preprocessing
+from OMA_tools.federal.fed_comments.fed_postprocessing import Federal_Postprocessing
+from OMA_tools.federal.fed_comments.smi_info import SMI_info
+from OMA_tools.federal.fed_comments.comments import Federal_Comments
 
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
@@ -126,7 +126,7 @@ class Federal_Processing:
             return df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment
 
     
-    def BY_DAYS(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str):
+    def BY_DAYS(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str, comments_filename: str):
         """
             Функция для генерация комментариев по дням.
             Args:
@@ -165,11 +165,9 @@ class Federal_Processing:
                 data_output_dates_ = data_output_dates[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
                 #Форматирование столбца с Месяцем
                 by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
-                #Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
-                #Federal_Postprocessing(by_days).comments_dublicates_actualize()
                 by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц')
-                #by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
-                by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sorted, 'Канал')
+                by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
+                by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sorted_, 'Канал')
                 problem_channels = {
                     'Channel not exist': channels_not_exist,
                     'Not enough reasons': channels_not_enough_reasons,
@@ -186,7 +184,6 @@ class Federal_Processing:
 
                 #Форматирование столбца с Месяцем
                 general_by_days = Federal_Postprocessing(general_by_days).replace_name_of_months('Месяц', year)
-                #general_by_days_ = Federal_Comments.change_channels_name(channel_names_init, general_by_days, 'Канал')
                 general_by_days_sorted = Table(general_by_days).sort_in_specific_way(month_order, 'Месяц')
                 general_by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_by_days_sorted, date_new_forecast)
                 general_by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, general_by_days_sorted_, 'Канал')
@@ -231,15 +228,16 @@ class Federal_Processing:
 
                 by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days, 'Канал')
                 by_days_final_ = Federal_Postprocessing(by_days_final).replace_name_of_months('Месяц', year)
-                #Federal_Postprocessing(by_days_final_).comments_dublicates_actualize()
                 by_days_final_sorted = Table(by_days_final_).sort_in_specific_way(month_order, 'Месяц')
-                #by_days_final_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_final_sorted, date_new_forecast)
+                by_days_final_sorted.drop(columns = ['Дата осуществления'], inplace = True)
                 problem_channels = {
                         'Channel not exist': '',
                         'Not enough reasons': '',
                         'SMI not': channels_not_found_smi
                     }
-                return by_days_final_sorted.drop(columns = ['Дата осуществления'], inplace = True), problem_channels
+                #Сохранение в файл
+                Federal_Postprocessing.update_comments_file(comments_filename, data_new = by_days_final_sorted)
+                return by_days_final_sorted, problem_channels
             
             #Если DataFrame от СМИ пустой
             else:
@@ -260,12 +258,13 @@ class Federal_Processing:
                 by_days_= Federal_Postprocessing(by_days).replace_name_of_months('Месяц', year)
                 by_days_final = Federal_Comments.change_channels_name(channel_names_init, by_days_, 'Канал')
                 by_days_sorted = Table(by_days_final).sort_in_specific_way(month_order, 'Месяц')
-                #by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
                 problem_channels = {
                                         'Channel not exist': '',
                                         'Not enough reasons': '',
                                         'SMI not': ''
                                     }
+                #Сохранение в файл
+                Federal_Postprocessing.update_comments_file(comments_filename, data_new = by_days_sorted)
                 return by_days_sorted, problem_channels
 
 

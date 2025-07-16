@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import pymorphy3 as pmrph
 import xlsxwriter
-from OMA_tools.federal.fed_preprocessing import Federal_Preprocessing
+from OMA_tools.federal.fed_comments.fed_preprocessing import Federal_Preprocessing
 
 class color:
    BOLD = '\033[1m'
