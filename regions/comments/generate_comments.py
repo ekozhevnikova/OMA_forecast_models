@@ -2,10 +2,11 @@ import pandas as pd
 import pandas as pd
 import pymorphy3 as pmrph
 import docx
+import re
 import numpy as np
 from pathlib import Path
-from io_data.dates import Dates_Operations
-from io_data.operations import Dict_Operations, File
+from OMA_tools.io_data.dates import Dates_Operations
+from OMA_tools.io_data.operations import Dict_Operations, File
 
 
 
@@ -13,6 +14,26 @@ class Generate_Comments:
     def __init__(self, month_num, day_num):
         self.month_num = month_num
         self.day_num = day_num
+
+
+    @staticmethod
+    def standartize_channel_name(channels_replacements, df, column_name: str):
+        """
+            Функция для замены названий Телеканалов с помощью регулярных выражений
+            Args:
+                channels_replacements: словарь из каналов, которые нуждаются в замене
+                df: DataFrame, в котором необходимо произвести замену
+                column_name: название столбца, в котором будем производить замену
+            Return:
+        """
+        channels_names_init = list(df[column_name])
+        channels_names_new = []
+        for i in range(len(channels_names_init)):
+            for pattern, replacement in channels_replacements.items():
+                if re.search(pattern, channels_names_init[i]):
+                    result = re.sub(pattern, replacement, channels_names_init[i], flags = re.IGNORECASE)
+                    df[column_name] = df[column_name].replace(channels_names_init[i], result)
+        return df
         
     
     @staticmethod
@@ -31,11 +52,29 @@ class Generate_Comments:
         else: return city_name, city_name
         
 
-    def get_reason_channels__and__res_data(self, data, data_api, column_fact_month, column_last_14_days, column_prev_14_days, column_prev_to_fact_month, cond_grp, cond_share, cond_kus, cond_ttv):
+    def get_reason_channels__and__res_data(self, 
+                                           data, 
+                                           data_api, 
+                                           channels_replacements, 
+                                           column_fact_month, 
+                                           column_last_14_days, 
+                                           column_prev_14_days, 
+                                           column_prev_to_fact_month, 
+                                           cond_grp, 
+                                           cond_share, 
+                                           cond_kus, 
+                                           cond_ttv):
         """
         data - DataFrame with Previous data, Current data and Differencies between them.
         data_api - data from API
         """
+        data_api = Generate_Comments.standartize_channel_name(channels_replacements, data_api, 'Телеканал')
+
+        #Проверка, что каналы, которые есть в data_api совпадают с теми, что есть в data_grp:
+        channels_api = list(set(list(data_api['Телеканал'])))
+        channels_data = list(set(list(data['Телеканал'])))
+        missing_elements = [item for item in channels_api if item not in channels_data]
+
         reason_channels = {
         'kus+': [],
         'ttv+': [],
@@ -88,9 +127,6 @@ class Generate_Comments:
                     print(f'Не нашелся объем для Город = {row["Город"]} и Телеканал = {row["Телеканал"]}')
                     continue
                 if abs(row[f'{month}.2']) >= cond_grp and (abs(row[f'{month}.2'] - row_vol[f'{month}.2'])) >= cond_grp:
-                #if (abs(row[f'{month}.2']) - abs(row_vol[f'{month}.2'])) >= cond_grp:
-                    #is_kus_4 = False
-                    #is_ttv_4 = False
                     is_share_4 = False
                     
                     if len(res_data_1[(res_data_1['Телеканал'] == row['Телеканал']) & (res_data_1['Город'] == Generate_Comments.get_right_city_name(city_name = row['Город'].lower().title())[0])]) > 0:
@@ -106,7 +142,10 @@ class Generate_Comments:
                     row_kus = data_kus[(data_kus['Телеканал'] == row['Телеканал']) & (data_kus['Город'] == row['Город'])].iloc[0]
                     row_ttv = data_ttv[(data_ttv['Телеканал'] == row['Телеканал']) & (data_ttv['Город'] == row['Город'])].iloc[0]
                     #print(row['Телеканал'], row['Город'])
-                    row_share_api = data_api[(data_api['Телеканал'] == row['Телеканал']) & (data_api['Город'] == row['Город'])].iloc[0]
+                    try:
+                        row_share_api = data_api[(data_api['Телеканал'] == row['Телеканал']) & (data_api['Город'] == row['Город'])].iloc[0]
+                    except ValueError:
+                        print('В ВЫГРУЗКЕ ДОЛЕЙ ОТСУТСТВУЮТ КАНАЛЫ: ', missing_elements)
                     #print((data_api['Телеканал'] == row['Телеканал'], data_api['Город'] == row['Город']))
 
                     if ((row[f'{month}.2'] - row_vol[f'{month}.2']) * ((row_share_api[column_fact_month] / row_share[f'{previous_month}.1']) - 1)) > 0 and abs((row_share_api[column_fact_month] / row_share[f'{previous_month}.1']) - 1) > cond_share:
@@ -789,8 +828,8 @@ class Generate_Comments:
         doc.save(output_filename)
     
     
-    def get__comments(self, filename, output_filename, data, data_api, column_fact_month, column_last_14_days, column_prev_14_days, column_prev_to_fact_month, sorted_keys, cond_grp, cond_share, cond_kus, cond_ttv, channels_group_1, channels_group_2, channels_group_3):
-        reason_channels, res_data_1, res_data_2, res_data_3, res_data_4 = self.get_reason_channels__and__res_data(data, data_api, column_fact_month, column_last_14_days, column_prev_14_days, column_prev_to_fact_month, cond_grp, cond_share, cond_kus, cond_ttv)
+    def get__comments(self, filename, output_filename, data, data_api, channels_replacements, column_fact_month, column_last_14_days, column_prev_14_days, column_prev_to_fact_month, sorted_keys, cond_grp, cond_share, cond_kus, cond_ttv, channels_group_1, channels_group_2, channels_group_3):
+        reason_channels, res_data_1, res_data_2, res_data_3, res_data_4 = self.get_reason_channels__and__res_data(data, data_api, channels_replacements, column_fact_month, column_last_14_days, column_prev_14_days, column_prev_to_fact_month, cond_grp, cond_share, cond_kus, cond_ttv)
         reason_channels_formatted = Generate_Comments.get_cities_formatted(reason_channels)
         channel_reason_cities = Generate_Comments.get_cities_and_reasons(reason_channels_formatted = reason_channels_formatted)
         channel_phrase = self.get_explanations(channel_reason_cities, sorted_keys, channels_group_1, channels_group_2, channels_group_3)
