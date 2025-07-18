@@ -236,7 +236,7 @@ class Federal_Processing:
                         'SMI not': channels_not_found_smi
                     }
                 #Сохранение в файл
-                Federal_Postprocessing.update_comments_file(comments_filename, data_new = by_days_final_sorted)
+                #Federal_Postprocessing.update_comments_file(comments_filename, data_new = by_days_final_sorted)
                 return by_days_final_sorted, problem_channels
             
             #Если DataFrame от СМИ пустой
@@ -264,7 +264,7 @@ class Federal_Processing:
                                         'SMI not': ''
                                     }
                 #Сохранение в файл
-                Federal_Postprocessing.update_comments_file(comments_filename, data_new = by_days_sorted)
+                #Federal_Postprocessing.update_comments_file(comments_filename, data_new = by_days_sorted)
                 return by_days_sorted, problem_channels
 
 
@@ -385,7 +385,7 @@ class Federal_Processing:
 
     @staticmethod
     def comments_per_period(start_date: str, 
-                            data, 
+                            data,
                             comments_filepath_init: str, 
                             criteria = 0.55):
         """
@@ -415,7 +415,6 @@ class Federal_Processing:
         comments.sort_values(by = ['Дата'], inplace = True)
         comments.set_index('Дата', inplace = True)
 
-
         date_of_start = start_date_modified
         #Если в файле с Комментариями нет подходящей даты для начала отсчета изменений.
         while date_of_start not in comments.index:
@@ -430,6 +429,7 @@ class Federal_Processing:
         comments_cleaned['Порог'] = comments_cleaned['Порог'].astype(int)
         comments_cleaned.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 
         comments_cleaned = comments_cleaned[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+        
 
         res = []
         for i in range(len(data)):

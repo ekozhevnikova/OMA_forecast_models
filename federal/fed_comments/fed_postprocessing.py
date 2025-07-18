@@ -26,11 +26,36 @@ class Federal_Postprocessing:
         return self.df
     
 
+    def clean_comments_from_new_ones(self, comments_filepath):
+        """
+            Функция для зачистки только что добавленных комментариев. Используется для генерации накопленных изменений за период.
+            Args:
+                comments_filepath: Путь к файлу с Комментариями
+                Здесь подразумевается, что self.df: Свежие комментарии с изменениями по дням. (именно от них будем зачищать файл Комментарии.xlsx)
+            Returns:
+                result: зачищенный DataFrame от новых комментариев.
+        """
+        comments = pd.read_excel(comments_filepath)
+
+        cols = ['Канал', 'Месяц', 'Дата', 'Изменение GRP']
+        # Устанавливаем составной индекс
+        df_indexed = comments.set_index(cols)
+        b_indexed = self.df.set_index(cols)
+        
+        # Фильтруем строки, которых нет в B
+        result = comments[~df_indexed.index.isin(b_indexed.index)].reset_index()
+        return result
+
+    
+
     @staticmethod
     def filter_comments_channel_overtime(by_days, df_summ):
         """
             Функция, которая удаляет комментарии в накопленных изменениях, если данный канал по данному месяцу встретился выше в изменениях по дням.
             Удаляется канад, месяц, комментарий. А доп комментарий из столбца "Доп столбец" переносится выше в блок с изменениями по дням.
+            Args:
+                by_days: DataFrame по дням
+                df_summ: DataFrame с накопленными изменениями за период
         """
         idx_to_delete = []
         #цикл по изменениям по дням
