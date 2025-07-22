@@ -40,42 +40,45 @@ class Federal_Preprocessing:
             Return:
                 data_cubik: Данные из Федерального кубика
         """
-        data_cubik = pd.read_excel(filename, sheet_name = sheet_name, skiprows = 2)
-    
-        #Конвертация столбца с Датой выгрузки в формат даты
-        data_cubik['Дата историрования'] = pd.to_datetime(data_cubik['Дата историрования'])
+        try:
+            data_cubik = pd.read_excel(filename, sheet_name = sheet_name, skiprows = 2)
         
-        old_dates = list(data_cubik['Дата историрования'])
-        new_dates = []
-        for i in range(len(old_dates)):
-            new_date = old_dates[i].strftime('%Y-%m-%d')
-            new_dates.append(new_date)
-        data_cubik['Дата историрования'] = data_cubik['Дата историрования'].replace(old_dates, new_dates)
-        
-        #Сортировка значений в столбце с Периодом по возрастанию
-        data_cubik.sort_values(by = 'Дата историрования', inplace = True)
-        data_cubik.set_index('Дата историрования', inplace = True)
-        
-        #Замена формата значений на тип int
-        for column in data_cubik.columns[1:]:
-            data_cubik[column] = data_cubik[column].astype(int)
-        
-        #Конвертация названий столбцов в капс
-        cols_transform = {}
-        for col in list(data_cubik.columns):
-            cols_transform[col] = col.upper()
-        data_cubik.rename(cols_transform, axis = 'columns', inplace = True)
-        
-        #Переименование некоторых каналов
-        data_cubik.rename({'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ', 
-                           '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ', 
-                           'ТВ3': 'ТВ-3', 
-                           'ТНТ4': 'ТНТ 4', 
-                           '2Х2': '2X2',
-                           'СТС ЛАВ': 'СТС LOVE'}, 
-                          axis = 'columns', 
-                          inplace = True)
-        return data_cubik
+            #Конвертация столбца с Датой выгрузки в формат даты
+            data_cubik['Дата историрования'] = pd.to_datetime(data_cubik['Дата историрования'])
+            
+            old_dates = list(data_cubik['Дата историрования'])
+            new_dates = []
+            for i in range(len(old_dates)):
+                new_date = old_dates[i].strftime('%Y-%m-%d')
+                new_dates.append(new_date)
+            data_cubik['Дата историрования'] = data_cubik['Дата историрования'].replace(old_dates, new_dates)
+            
+            #Сортировка значений в столбце с Периодом по возрастанию
+            data_cubik.sort_values(by = 'Дата историрования', inplace = True)
+            data_cubik.set_index('Дата историрования', inplace = True)
+            
+            #Замена формата значений на тип int
+            for column in data_cubik.columns[1:]:
+                data_cubik[column] = data_cubik[column].astype(int)
+            
+            #Конвертация названий столбцов в капс
+            cols_transform = {}
+            for col in list(data_cubik.columns):
+                cols_transform[col] = col.upper()
+            data_cubik.rename(cols_transform, axis = 'columns', inplace = True)
+            
+            #Переименование некоторых каналов
+            data_cubik.rename({'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ', 
+                            '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ', 
+                            'ТВ3': 'ТВ-3', 
+                            'ТНТ4': 'ТНТ 4', 
+                            '2Х2': '2X2',
+                            'СТС ЛАВ': 'СТС LOVE'}, 
+                            axis = 'columns', 
+                            inplace = True)
+            return data_cubik
+        except FileNotFoundError:
+            print('Файл с данными из Федерального кубика не найден! Пожалуйста, добавьте его в соответствующую папку!')
     
     
     def cut_data_cubik(self, start_date: str):
@@ -193,50 +196,53 @@ class Federal_Preprocessing:
             Returns:
                 KUS_koeff_cleaned: DataFrame c коэффициентами внедома
         """
-        KUS_koeff = pd.read_excel(kus_file, sheet_name = 'коэф.внедом', skiprows = 2)
-        KUS_koeff = KUS_koeff[['Канал', 'январь.2', 'февраль.2', 'март.2', 'апрель.2', 'май.2',
-            'июнь.2', 'июль.2', 'август.2', 'сентябрь.2', 'октябрь.2', 'ноябрь.2',
-            'декабрь.2']]
-        KUS_koeff_cleaned = KUS_koeff.dropna() 
-        
-        KUS_koeff_cleaned.rename(columns = {
-            'январь.2': 'Январь.2',
-            'февраль.2': 'Февраль.2',
-            'март.2': 'Март.2',
-            'апрель.2': 'Апрель.2',
-            'май.2': 'Май.2',
-            'июнь.2': 'Июнь.2',
-            'июль.2': 'Июль.2',
-            'август.2': 'Август.2',
-            'сентябрь.2': 'Сентябрь.2',
-            'октябрь.2': 'Октябрь.2',
-            'ноябрь.2': 'Ноябрь.2',
-            'декабрь.2': 'Декабрь.2'
-            },
-            inplace = True)
-        
-        #KUS_koeff_cleaned = Federal_Comments.change_channels_name(channel_names_init, KUS_koeff_cleaned, 'Канал')
-        KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].str.upper()
-        
-        #Изменение столбца с каналами
-        channels_need_replace = {
-                    '2Х2': '2X2',
-                    '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ',
-                    'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ',
-                    'СТС ЛАВ': 'СТС LOVE',
-                    'ТВ3': 'ТВ-3',
-                    'ТНТ4': 'ТНТ 4'
-                }
-        channels_old = list(KUS_koeff_cleaned['Канал'])
-        channels_new = []
-        for i in range(len(channels_old)):
-            channels_new.append(channels_old[i].upper())
-        KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].replace(channels_old, channels_new)
-        KUS_koeff_cleaned['Канал'].replace(channels_need_replace, inplace = True)
-
         try:
-            extracted_date = Federal_Preprocessing.extract_date_from_filename(kus_file)
-            extracted_date_ = pd.to_datetime(extracted_date)
-        except ValueError as e:
-            print('Дата не найдена.')
-        return KUS_koeff_cleaned, extracted_date_
+            KUS_koeff = pd.read_excel(kus_file, sheet_name = 'коэф.внедом', skiprows = 2)
+            KUS_koeff = KUS_koeff[['Канал', 'январь.2', 'февраль.2', 'март.2', 'апрель.2', 'май.2',
+                'июнь.2', 'июль.2', 'август.2', 'сентябрь.2', 'октябрь.2', 'ноябрь.2',
+                'декабрь.2']]
+            KUS_koeff_cleaned = KUS_koeff.dropna() 
+            
+            KUS_koeff_cleaned.rename(columns = {
+                'январь.2': 'Январь.2',
+                'февраль.2': 'Февраль.2',
+                'март.2': 'Март.2',
+                'апрель.2': 'Апрель.2',
+                'май.2': 'Май.2',
+                'июнь.2': 'Июнь.2',
+                'июль.2': 'Июль.2',
+                'август.2': 'Август.2',
+                'сентябрь.2': 'Сентябрь.2',
+                'октябрь.2': 'Октябрь.2',
+                'ноябрь.2': 'Ноябрь.2',
+                'декабрь.2': 'Декабрь.2'
+                },
+                inplace = True)
+            
+            #KUS_koeff_cleaned = Federal_Comments.change_channels_name(channel_names_init, KUS_koeff_cleaned, 'Канал')
+            KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].str.upper()
+            
+            #Изменение столбца с каналами
+            channels_need_replace = {
+                        '2Х2': '2X2',
+                        '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ',
+                        'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ',
+                        'СТС ЛАВ': 'СТС LOVE',
+                        'ТВ3': 'ТВ-3',
+                        'ТНТ4': 'ТНТ 4'
+                    }
+            channels_old = list(KUS_koeff_cleaned['Канал'])
+            channels_new = []
+            for i in range(len(channels_old)):
+                channels_new.append(channels_old[i].upper())
+            KUS_koeff_cleaned['Канал'] = KUS_koeff_cleaned['Канал'].replace(channels_old, channels_new)
+            KUS_koeff_cleaned['Канал'].replace(channels_need_replace, inplace = True)
+
+            try:
+                extracted_date = Federal_Preprocessing.extract_date_from_filename(kus_file)
+                extracted_date_ = pd.to_datetime(extracted_date)
+            except ValueError as e:
+                print('Дата не найдена.')
+            return KUS_koeff_cleaned, extracted_date_
+        except FileNotFoundError:
+            print('Файл с прогнозом КУСа не найден! Пожалуйста, добавьте его в соответствующую папку!')

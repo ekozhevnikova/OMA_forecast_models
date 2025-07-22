@@ -119,52 +119,55 @@ class SMI_info:
             'ТНТ4': 'ТНТ 4'
         }
         channel_not_found = ''
-        data = pd.read_excel(self.smi_filepath, skiprows = 1, sheet_name = 'Итоги')
-        data = data.loc[(data['Статус'] == 'реализовано') & (data['Год'] == year)]
-        volume_transfer = data[[ 
-                     'Канал', 
-                     'Месяц', 
-                     'Год', 
-                     'GRP сокращено', 
-                     'GRP открыто', 
-                     'Итог GRP в регионы -', 
-                     'Итог GRP из регионов +', 
-                     'Дата осуществления переброски', 
-                     'Комментарий']]
-        volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска') & (volume_transfer['Комментарий'] != 'кросс-промо')]
-        #volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска')]
-        
-        #Изменение столбца с каналами
-        channels_old = list(volume_transfer['Канал'])
-        channels_new = []
-        for i in range(len(channels_old)):
-            channels_new.append(channels_old[i].upper())
-        volume_transfer['Канал'] = volume_transfer['Канал'].replace(channels_old, channels_new)
-        volume_transfer['Канал'].replace(channels_need_replace, inplace = True)
-        
-        #Изменение столбца с месяцем
-        months_old = list(volume_transfer['Месяц'])
-        months_new = []
-        for i in range(len(months_old)):
-            months_new.append(months_old[i].title())
-        volume_transfer['Месяц'] = volume_transfer['Месяц'].replace(months_old, months_new)
-        volume_transfer['Год'] = volume_transfer['Год'].astype(int)
-        
-        old_dates = list(volume_transfer['Дата осуществления переброски'])
-        new_dates = []
-        for i in range(len(old_dates)):
-            new_date = old_dates[i].strftime('%Y-%m-%d')
-            new_dates.append(new_date)
-        volume_transfer['Дата осуществления переброски'] = volume_transfer['Дата осуществления переброски'].replace(old_dates, new_dates)
-        volume_transfer_ = volume_transfer.loc[(volume_transfer['Месяц'] == month) & (volume_transfer['Канал'] == channel)].reset_index(drop = True)
+        try:
+            data = pd.read_excel(self.smi_filepath, skiprows = 1, sheet_name = 'Итоги')
+            data = data.loc[(data['Статус'] == 'реализовано') & (data['Год'] == year)]
+            volume_transfer = data[[ 
+                        'Канал', 
+                        'Месяц', 
+                        'Год', 
+                        'GRP сокращено', 
+                        'GRP открыто', 
+                        'Итог GRP в регионы -', 
+                        'Итог GRP из регионов +', 
+                        'Дата осуществления переброски', 
+                        'Комментарий']]
+            volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска') & (volume_transfer['Комментарий'] != 'кросс-промо')]
+            #volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска')]
+            
+            #Изменение столбца с каналами
+            channels_old = list(volume_transfer['Канал'])
+            channels_new = []
+            for i in range(len(channels_old)):
+                channels_new.append(channels_old[i].upper())
+            volume_transfer['Канал'] = volume_transfer['Канал'].replace(channels_old, channels_new)
+            volume_transfer['Канал'].replace(channels_need_replace, inplace = True)
+            
+            #Изменение столбца с месяцем
+            months_old = list(volume_transfer['Месяц'])
+            months_new = []
+            for i in range(len(months_old)):
+                months_new.append(months_old[i].title())
+            volume_transfer['Месяц'] = volume_transfer['Месяц'].replace(months_old, months_new)
+            volume_transfer['Год'] = volume_transfer['Год'].astype(int)
+            
+            old_dates = list(volume_transfer['Дата осуществления переброски'])
+            new_dates = []
+            for i in range(len(old_dates)):
+                new_date = old_dates[i].strftime('%Y-%m-%d')
+                new_dates.append(new_date)
+            volume_transfer['Дата осуществления переброски'] = volume_transfer['Дата осуществления переброски'].replace(old_dates, new_dates)
+            volume_transfer_ = volume_transfer.loc[(volume_transfer['Месяц'] == month) & (volume_transfer['Канал'] == channel)].reset_index(drop = True)
 
-        if len(volume_transfer_) < 1:
-            channel_not_found = channel
-            #print(f'Не нашлось релевантных данных от СМИ в {month} по каналу {channel}', sep = '\n\n', end = '\n')
+            if len(volume_transfer_) < 1:
+                channel_not_found = channel
+                #print(f'Не нашлось релевантных данных от СМИ в {month} по каналу {channel}', sep = '\n\n', end = '\n')
 
-        volume_transfer_['Комментарий'] = volume_transfer_['Комментарий'].apply(str)
-        #volume_transfer_ = volume_transfer_[volume_transfer_['Комментарий'].notna()]
-        return volume_transfer_, channel_not_found
+            volume_transfer_['Комментарий'] = volume_transfer_['Комментарий'].apply(str)
+            #volume_transfer_ = volume_transfer_[volume_transfer_['Комментарий'].notna()]
+            return volume_transfer_, channel_not_found
+        except FileNotFoundError:
+            print('Файл с Перебросками-Сокращениями от СМИ не найден. Пожалуйста, добавьте его в соответствующую папку!')
 
     
     def get_volumes_comments(self, delta_df, channels_need_replace, year: int, df_limits, flag_by_days, smi_criteria = 0.1):

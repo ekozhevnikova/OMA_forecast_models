@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 import pymorphy3 as pmrph
+from pathlib import Path
 import datetime
 from OMA_tools.io_data.operations import Table, Dict_Operations
 from OMA_tools.federal.fed_comments.fed_preprocessing import Federal_Preprocessing
@@ -81,11 +82,15 @@ class Federal_Processing:
         """
             Функция для чтения файла с порогами
         """
-        df_limits = pd.read_excel(limits_file)
-        df_limits['Канал'] = df_limits['Канал'].str.upper()
-        df_limits.set_index('Канал', inplace = True)
-        df_limits = df_limits.T
-        return df_limits
+        try:
+            df_limits = pd.read_excel(limits_file)
+            df_limits['Канал'] = df_limits['Канал'].str.upper()
+            df_limits.set_index('Канал', inplace = True)
+            df_limits = df_limits.T
+            return df_limits
+        except FileNotFoundError:
+            print('Файл с Порогами не найден! Пожалуйста, вставьте его в соответствующую папку!')
+        
     
     
     def get_data_per_analys(self, start_date, flag = True):
@@ -105,22 +110,25 @@ class Federal_Processing:
                                                                                                 df_limits
                                                                                                 )
         if flag:
-            #Считывание файла со сравнением прогнозов
-            forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 2, sheet_name = 'Сводная')
+            try:
+                #Считывание файла со сравнением прогнозов
+                forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 2, sheet_name = 'Сводная')
 
-            #date_old_forecast = forecast_comparison.iloc[0]['Дата обновления']
-            date_new_forecast = forecast_comparison.iloc[0]['Unnamed: 23']
+                #date_old_forecast = forecast_comparison.iloc[0]['Дата обновления']
+                date_new_forecast = forecast_comparison.iloc[0]['Unnamed: 23']
 
-            forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 5, sheet_name = 'Сводная')
-            
-            columns = ['Канал', 'Значения', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май',
-                'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
-                'Январь.1', 'Февраль.1', 'Март.1', 'Апрель.1',
-                'Май.1', 'Июнь.1', 'Июль.1', 'Август.1', 'Сентябрь.1', 'Октябрь.1',
-                'Ноябрь.1', 'Декабрь.1', 'Январь.2', 'Февраль.2', 'Март.2', 'Апрель.2', 'Май.2', 'Июнь.2', 'Июль.2',
-                'Август.2', 'Сентябрь.2', 'Октябрь.2', 'Ноябрь.2', 'Декабрь.2']
-            forecast_comparison = forecast_comparison[columns]
-            return df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast
+                forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 5, sheet_name = 'Сводная')
+                
+                columns = ['Канал', 'Значения', 'Январь', 'Февраль', 'Март', 'Апрель', 'Май',
+                    'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+                    'Январь.1', 'Февраль.1', 'Март.1', 'Апрель.1',
+                    'Май.1', 'Июнь.1', 'Июль.1', 'Август.1', 'Сентябрь.1', 'Октябрь.1',
+                    'Ноябрь.1', 'Декабрь.1', 'Январь.2', 'Февраль.2', 'Март.2', 'Апрель.2', 'Май.2', 'Июнь.2', 'Июль.2',
+                    'Август.2', 'Сентябрь.2', 'Октябрь.2', 'Ноябрь.2', 'Декабрь.2']
+                forecast_comparison = forecast_comparison[columns]
+                return df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast
+            except FileNotFoundError:
+                print('Файл со сравнением прогнозов не найден! Пожалуйста, вставьте его в соответствующую папку!')
         
         else:
             return df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment
@@ -374,13 +382,16 @@ class Federal_Processing:
             Returns:
                 comments: DataFrame с ФУЛЛ-комментариями
         """
-        #Чтение исходного файла с Комментариями
-        comments = pd.read_excel(comments_filepath_init)
-        comments['Изменение GRP'] = comments['Изменение GRP'].astype(int)
-        comments['Порог'] = comments['Порог'].astype(int)
-        comments.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 
-        comments['Дата'] = pd.to_datetime(comments['Дата'])
-        return comments
+        try:
+            #Чтение исходного файла с Комментариями
+            comments = pd.read_excel(comments_filepath_init)
+            comments['Изменение GRP'] = comments['Изменение GRP'].astype(int)
+            comments['Порог'] = comments['Порог'].astype(int)
+            comments.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 
+            comments['Дата'] = pd.to_datetime(comments['Дата'])
+            return comments
+        except FileNotFoundError:
+            print('Файл с Комментариями не найден. Пожалуйста, вставьте его в соответствующую папку!')
 
 
     @staticmethod
@@ -410,10 +421,13 @@ class Federal_Processing:
         #start_date_modified = start_date_modified.strftime('%Y-%m-%d')
 
         #Чтение исходного файла с Комментариями
-        comments = pd.read_excel(comments_filepath_init)
-        comments['Дата'] = pd.to_datetime(comments['Дата'])
-        comments.sort_values(by = ['Дата'], inplace = True)
-        comments.set_index('Дата', inplace = True)
+        try:
+            comments = pd.read_excel(comments_filepath_init)
+            comments['Дата'] = pd.to_datetime(comments['Дата'])
+            comments.sort_values(by = ['Дата'], inplace = True)
+            comments.set_index('Дата', inplace = True)
+        except FileExistsError:
+            print('Файл с Комментариями не найден. Пожалуйста, вставьте его в соответствующую папку!')
 
         date_of_start = start_date_modified
         #Если в файле с Комментариями нет подходящей даты для начала отсчета изменений.
@@ -479,27 +493,30 @@ class Federal_Processing:
                 channel = res_updated.iloc[i]['Канал']
                 month = res_updated.iloc[i]['Месяц']
                 comments_per_week = res_updated.iloc[i]['Комментарий']
-                comment_per_week_splitted = comments_per_week.split('. ')
+                if not pd.isna(comments_per_week):
+                    comment_per_week_splitted = comments_per_week.split('. ')
 
-                filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
-                if len(filtered_df) != 0:
-                    comments = list(filtered_df['Комментарий'])
+                    filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
+                    if len(filtered_df) != 0:
+                        comments = list(filtered_df['Комментарий'])
 
-                    def check_comments():
-                        return all(map(lambda x: x is not None if isinstance(x, str) else not np.isnan(x), comments))
-                                
-                    if check_comments():
-                        list_of_comments = [item.split('. ') for item in comments]
+                        def check_comments():
+                            return all(map(lambda x: x is not None if isinstance(x, str) else not np.isnan(x), comments))
+                                    
+                        if check_comments():
+                            list_of_comments = [item.split('. ') for item in comments]
 
-                        #Получаем вложенный список
-                        nested_list = list_of_comments[0]
-                    
-                        #Удаляем элементы из первого списка, если они содержатся во втором
-                        result_list = [item for item in comment_per_week_splitted if item not in nested_list]
+                            #Получаем вложенный список
+                            nested_list = list_of_comments[0]
                         
-                        res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
+                            #Удаляем элементы из первого списка, если они содержатся во втором
+                            result_list = [item for item in comment_per_week_splitted if item not in nested_list]
+                            
+                            res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
+                    else:
+                        continue
                 else:
-                    continue
+                    res_updated.at[i, 'Комментарий'] = ''
             return res_updated
         
     

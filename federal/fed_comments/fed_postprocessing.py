@@ -243,8 +243,11 @@ class Federal_Postprocessing:
                 data_new: Новые комментарии
             
         """
-        comments = pd.read_excel(filepath)
-        comments_full = pd.concat([comments, data_new]).reset_index(drop = True)
-        Federal_Postprocessing.make_style_of_table(filepath = filepath, 
-                                           output_df = comments_full, 
-                                           sheet_name = 'Sheet1')
+        if len(data_new) != 0:
+            comments = pd.read_excel(filepath)
+            comments_full = pd.concat([comments, data_new]).reset_index(drop = True)
+            Federal_Postprocessing.make_style_of_table(filepath = filepath, 
+                                            output_df = comments_full, 
+                                            sheet_name = 'Sheet1')
+        else:
+            print('Ошибка! Вы пытаетесь сохранить пустой DataFrame!')
