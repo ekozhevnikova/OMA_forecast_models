@@ -43,7 +43,7 @@ class Federal_Postprocessing:
         b_indexed = self.df.set_index(cols)
         
         # Фильтруем строки, которых нет в B
-        result = comments[~df_indexed.index.isin(b_indexed.index)].reset_index()
+        result = comments[~df_indexed.index.isin(b_indexed.index)]
         return result
 
     

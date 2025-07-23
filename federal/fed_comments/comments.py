@@ -408,28 +408,29 @@ class Federal_Comments:
     
         GRP_NRA = 0
         GRP = 0
+        tvr = 0
         TVR = 0
         #Если поменялась Доля
         if changed_statistic == 'Share':
             TVR = old_data['TTV'] * new_data['Share'] / 100
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
+            #tvr = old_data['КУС'] * TVR
+            #GRP = (old_data['Т Общие'] * tvr) / 20
     
         #Если поменялся TTV
         elif changed_statistic == 'TTV':
             TVR = new_data['TTV'] * old_data['Share'] / 100
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
+            #tvr = old_data['КУС'] * TVR
+            #GRP = (old_data['Т Общие'] * tvr) / 20
             
         #Если поменялся КУС
         elif changed_statistic == 'КУС' or changed_statistic == 'КУС Внедом':
             TVR = old_data['TTV'] * old_data['Share'] / 100
             #Рассматриваем отдельно случай для ТВЦ
-            if channel == 'ТВ ЦЕНТР':
-                tvr = tvr = new_data['КУС КР'] * TVR
-            else:
-                tvr = new_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
+            #if channel == 'ТВ ЦЕНТР':
+            #    tvr = tvr = new_data['КУС КР'] * TVR
+            #else:
+            #    tvr = new_data['КУС'] * TVR
+            #GRP = (old_data['Т Общие'] * tvr) / 20
     
         #Если поменялись Объемы
         elif changed_statistic == 'Т Общие':
@@ -457,34 +458,54 @@ class Federal_Comments:
             delta_GRP = new_data['GRP СП'] - old_data['GRP СП']
             return round(delta_GRP)
     
-        #Расчет спонсорства с новым TVR
-        tvr_sp = old_data['КУС СП'] * TVR
-        GRP_SP = (old_data['Т СП'] * tvr_sp) / 20
             
         #Если есть ТП Канала
-        if channel in ['ТНТ 4', 'ТВ-3', 'ТВ ЦЕНТР',
-                    'СУББОТА', 'СТС LOVE', 'СТС', 'СОЛНЦЕ', 'РОССИЯ 24', 
+        if channel in ['ТНТ 4', 'ТВ-3',
+                    'СУББОТА', 'СТС LOVE', 'СТС', 'РОССИЯ 24', 
                     'РЕН ТВ', 'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
-                    'ЗВЕЗДА', 'ДОМАШНИЙ', '2X2', 'ТНТ', 'ЧЕ', 'Ю'
-                        ]:
-            GRP_NRA = GRP - GRP_SP - old_data['GRP ТП канала']
+                    'ЗВЕЗДА', 'ДОМАШНИЙ', '2X2', 'ТНТ', 'ЧЕ']:
+            tvr = new_data['КУС'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
+        
+        if channel == 'ТВ ЦЕНТР':
+            tvr  = new_data['КУС КР'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
+        
 
         elif channel in ['ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1']:
-            GRP_KR = GRP - old_data['GRP КРМ'] - GRP_SP
+            tvr = new_data['КУС'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            GRP_KR = GRP - old_data['GRP КРМ'] - old_data['GRP СП']
             GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+        
 
         elif channel == 'НТВ' or channel == 'ПЯТЫЙ КАНАЛ':
-            GRP_full_sp = old_data['GRP Телемагазины'] + GRP_SP
+            tvr = new_data['КУС'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
             GRP_KR = GRP - GRP_full_sp
             GRP_NRA = GRP_KR - old_data['GRP ТП канала']
-
-        elif channel == 'СПАС':
-            GRP_NRA = GRP - old_data['GRP Телемагазины'] - GRP_SP
+        
 
         elif channel in ['КАРУСЕЛЬ', 'МИР']:
+            tvr = old_data['КУС'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            #Расчет спонсорства с новым TVR
+            tvr_sp = old_data['КУС СП'] * TVR
+            GRP_SP = (old_data['Т СП'] * tvr_sp) / 20
             GRP_NRA = GRP - GRP_SP
+        
+        
+        elif channel == 'СПАС':
+            tvr = old_data['КУС'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            GRP_NRA = GRP - old_data['GRP Телемагазины'] - old_data['GRP СП']
+            
                 
         delta_GRP = GRP_NRA -  old_data['GRP ТП НРА']
+        #print(channel, month, changed_statistic, np.round(GRP_NRA, 2), np.round(tvr_sp, 3), np.round(GRP_SP, 2))
         return round(delta_GRP)
 
 
