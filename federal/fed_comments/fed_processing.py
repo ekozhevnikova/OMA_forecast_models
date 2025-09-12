@@ -134,7 +134,7 @@ class Federal_Processing:
             return df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment
 
     
-    def BY_DAYS(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str, comments_filename: str):
+    def BY_DAYS(self, start_date: str, year: str, smi_criteria, month_order: list, kus_file: str):
         """
             Функция для генерация комментариев по дням.
             Args:

@@ -91,6 +91,7 @@ class Federal_Comments:
             Args:
                 channel: Канал ('ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1')
                 month: Месяц ('Январь','Май')
+                cummulative_diff_flag: флаг для накопленных изменений за период. Если True, то смотрим накопленные, если False, то по дням.
             Returns:
                 reasons: список причин, согласно которым предположительно произошли изменения инвентаря.
         """
@@ -125,10 +126,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.001 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.001:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ', 'СТС']:
@@ -142,10 +144,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0015 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0015:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'ПЕРВЫЙ КАНАЛ']:
@@ -159,10 +162,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0017 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0017:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
             
 
             elif data.iloc[0]['Канал'] == 'МАТЧ ТВ':
@@ -176,10 +180,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.006 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.006:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
@@ -193,10 +198,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0024 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0024:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
 
             elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
@@ -210,10 +216,12 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.00265 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.00265:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    print(data.iloc[0]['Канал'], delta)
+                                    reasons.append('КУС Внедом')
 
 
             
@@ -228,10 +236,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.003 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.003:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
             
 
             elif data.iloc[0]['Канал'] == 'ТВ ЦЕНТР':
@@ -245,10 +254,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.003 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.003:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
             
             elif data.iloc[0]['Канал'] == 'СПАС':
@@ -262,10 +272,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.008 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.008:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
             
             elif data.iloc[0]['Канал'] == 'ТНТ 4':
@@ -279,10 +290,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0038 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0038:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
                         
             
@@ -297,10 +309,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0055 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0055:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
 
             
@@ -315,10 +328,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0067 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0067:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
             
             elif data.iloc[0]['Канал'] == 'СТС LOVE':
@@ -332,10 +346,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0055 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0055:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
 
             
@@ -350,10 +365,11 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0045 and outhouse < criteria * delta:
-                                reasons.append('КУС')
-                            else:
-                                reasons.append('КУС Внедом')
+                            if delta >= 0.0045:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
 
                 
             if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
@@ -505,7 +521,6 @@ class Federal_Comments:
             
                 
         delta_GRP = GRP_NRA -  old_data['GRP ТП НРА']
-        #print(channel, month, changed_statistic, np.round(GRP_NRA, 2), np.round(tvr_sp, 3), np.round(GRP_SP, 2))
         return round(delta_GRP)
 
 
@@ -553,6 +568,7 @@ class Federal_Comments:
             delta_grp = delta_df_.iloc[i]['Изменение GRP']
             for channel, contributions in reasons_channels_in_grp.items():
                 result_contributors = {}
+                #print(Channel, channel)
                 if Channel == channel and date == forecast_new:
                     for statistic, value in contributions.items():
                         #Рассматривается отдельно ситуация с СП. Если СП < 0 => КР растет; если СП > 0 => КР падает.
