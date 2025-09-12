@@ -148,7 +148,8 @@ class Federal_Postprocessing:
                                 elif smi_date_flag == True:
                                     comment_splitted = comment.split('. ')
                                     # Фильтруем комментарии
-                                    filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in possible_comments_smi)]
+                                    joined_possible_comments = possible_comments + possible_comments_smi
+                                    filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in joined_possible_comments)]
                                     result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
                             else:
                                 result_df.at[j, 'Комментарий'] = ''

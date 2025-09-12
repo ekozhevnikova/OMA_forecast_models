@@ -220,7 +220,6 @@ class Federal_Comments:
                                 if outhouse < criteria * delta:
                                     reasons.append('КУС')
                                 else:
-                                    print(data.iloc[0]['Канал'], delta)
                                     reasons.append('КУС Внедом')
 
 
@@ -479,12 +478,20 @@ class Federal_Comments:
         if channel in ['ТНТ 4', 'ТВ-3',
                     'СУББОТА', 'СТС LOVE', 'СТС', 'РОССИЯ 24', 
                     'РЕН ТВ', 'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
-                    'ЗВЕЗДА', 'ДОМАШНИЙ', '2X2', 'ТНТ', 'ЧЕ']:
+                    'ЗВЕЗДА', '2X2', 'ТНТ', 'ЧЕ']:
             tvr = new_data['КУС'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
             GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
         
-        if channel == 'ТВ ЦЕНТР':
+        elif channel == 'ДОМАШНИЙ':
+            tvr = old_data['КУС'] * TVR
+            GRP = (old_data['Т Общие'] * tvr) / 20
+            GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
+            GRP_KR = GRP - GRP_full_sp
+            GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+
+        
+        elif channel == 'ТВ ЦЕНТР':
             tvr  = new_data['КУС КР'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
             GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
@@ -497,7 +504,7 @@ class Federal_Comments:
             GRP_NRA = GRP_KR - old_data['GRP ТП канала']
         
 
-        elif channel == 'НТВ' or channel == 'ПЯТЫЙ КАНАЛ':
+        elif channel in ['НТВ', 'ПЯТЫЙ КАНАЛ']:
             tvr = new_data['КУС'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
             GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
@@ -568,7 +575,6 @@ class Federal_Comments:
             delta_grp = delta_df_.iloc[i]['Изменение GRP']
             for channel, contributions in reasons_channels_in_grp.items():
                 result_contributors = {}
-                #print(Channel, channel)
                 if Channel == channel and date == forecast_new:
                     for statistic, value in contributions.items():
                         #Рассматривается отдельно ситуация с СП. Если СП < 0 => КР растет; если СП > 0 => КР падает.
@@ -704,8 +710,7 @@ class Federal_Comments:
                         else:
                             comments[statistic] = f'Сокращение рекламных объемов {(-1) * val} GRP.'
                 comment_per_channel[channel] = comments
-                comments_per_month[month] = comment_per_channel
-                
+                comments_per_month[month] = comment_per_channel       
         #Генерация комментариев по шаблонам
         general_comments = {}
         for month, comment_per_channel in comments_per_month.items():
@@ -744,7 +749,7 @@ class Federal_Comments:
             
             #Добавление пустого столбца для комментариев руководителя
             df['Доп столбец'] = ''
-            
+
             #Join комментариев с кубиком
             df_res = pd.merge(df_from_cubik, df, on = ['Канал', 'Месяц'], how = 'left')
             
