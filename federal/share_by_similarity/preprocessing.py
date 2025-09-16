@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -26,10 +27,10 @@ class Preprocessing:
         # Предполагаем стандартный формат HH:MM:SS или H:MM:SS
         if time_str[1] == ':':  # Формат H:MM:SS (одна цифра)
             hours = int(time_str[0])
-            rest = time_str[1:]  # :MM:SS
+            rest = time_str[1: ]  # :MM:SS
         else:  # Формат HH:MM:SS (две цифры)
-            hours = int(time_str[:2])
-            rest = time_str[2:]  # :MM:SS
+            hours = int(time_str[: 2])
+            rest = time_str[2: ]  # :MM:SS
         
         # Применяем преобразование часов
         if hours >= 24:
@@ -55,13 +56,19 @@ class Preprocessing:
         columns_with_time = [column_1, column_2]
         
         #Конвертация в формат даты столбцов со слотами
-        for i in range(len(columns_with_time)):
-            plmrs[columns_with_time[i]] = plmrs[columns_with_time[i]].astype(str)
-            list_of_dates = list(plmrs[columns_with_time[i]])
-            converted = [Preprocessing.convert_time(t) for t in list_of_dates]
-            plmrs[columns_with_time[i]] = plmrs[columns_with_time[i]].replace(list_of_dates, converted)
-            plmrs[columns_with_time[i]] = pd.to_datetime(plmrs[columns_with_time[i]], format = '%H:%M:%S')
-    
+        def process_column(col):
+            series = plmrs[col].astype(str)
+            converted = series.apply(Preprocessing.convert_time)
+            return pd.to_datetime(converted, format='%H:%M:%S', errors='coerce')
+
+        # Обрабатываем колонки параллельно
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(process_column, columns_with_time))
+
+        # Обновляем DataFrame
+        for i, col in enumerate(columns_with_time):
+            plmrs[col] = results[i]
+
         #Вычисление длительности каждой программы. результат записывается в отдельный столбец
         plmrs['Длительность, мин'] = np.abs(np.round((plmrs[column_1] - plmrs[column_2]) / np.timedelta64(1, 'm')))
         plmrs['Длительность, мин'] = plmrs['Длительность, мин'].astype(int)
@@ -76,8 +83,7 @@ class Preprocessing:
         """
             Функция для парсинга файла с новой сеткой из VIMBа
             Args:
-                filename:
-                sheet_name:
+                sheet_name: имя листа, который будем считывать из файла.
             Returns:
                 VIMB: причёсанный DataFrame с сеткой VIMB.
         """
@@ -89,26 +95,26 @@ class Preprocessing:
     
         #Здесь идет разбивка по рекламным блокам. Из-за этого есть дубликаты. Избавимся от них
         vimb_cleaned = vimb.drop_duplicates(subset = [ 'Дата', 'День', 'Канал', 'Программа', 'Выпуск', 'Начало', 'Окончание'], 
-                                            keep='first')
+                                            keep = 'first')
         #Оставляем только нужные столбцы для дальйнешего анализа
         VIMB = vimb_cleaned[['Дата', 'Программа', 'Выпуск', 'Начало', 'Окончание', 'День']].reset_index(drop = True)
     
         #Переименование столбцов ВИМБА так, чтобы они стали совпадать с Паломарс
         VIMB = VIMB.rename(columns = {
-                                                    'Выпуск': 'Название программы',
-                                                    'Начало': 'Время выхода',
-                                                    'Окончание': 'Время окончания',
-                                                    'День': 'День недели'
-                                                })
+                                        'Выпуск': 'Название программы',
+                                        'Начало': 'Время выхода',
+                                        'Окончание': 'Время окончания',
+                                        'День': 'День недели'
+                                    })
         VIMB['День недели'] = VIMB['День недели'].replace({
-                                                                            'Пн': 'Понедельник',
-                                                                            'Вт': 'Вторник',
-                                                                            'Ср': 'Среда',
-                                                                            'Чт': 'Четверг',
-                                                                            'Пт': 'Пятница',
-                                                                            'Сб': 'Суббота',
-                                                                            'Вс': 'Воскресенье'
-                                                                        })
+                                                            'Пн': 'Понедельник',
+                                                            'Вт': 'Вторник',
+                                                            'Ср': 'Среда',
+                                                            'Чт': 'Четверг',
+                                                            'Пт': 'Пятница',
+                                                            'Сб': 'Суббота',
+                                                            'Вс': 'Воскресенье'
+                                                        })
         
         #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
         if 'Камеди клаб' in list(VIMB['Название программы']):

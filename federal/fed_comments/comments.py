@@ -189,6 +189,7 @@ class Federal_Comments:
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0024:
+                    print(_month, data.iloc[0]['Канал'])
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0024:
                     reasons.append('TTV')  
@@ -198,7 +199,7 @@ class Federal_Comments:
                         if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
                         (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
                         (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0024:
+                            if delta >= 0.0065:
                                 if outhouse < criteria * delta:
                                     reasons.append('КУС')
                                 else:
@@ -428,24 +429,14 @@ class Federal_Comments:
         #Если поменялась Доля
         if changed_statistic == 'Share':
             TVR = old_data['TTV'] * new_data['Share'] / 100
-            #tvr = old_data['КУС'] * TVR
-            #GRP = (old_data['Т Общие'] * tvr) / 20
     
         #Если поменялся TTV
         elif changed_statistic == 'TTV':
             TVR = new_data['TTV'] * old_data['Share'] / 100
-            #tvr = old_data['КУС'] * TVR
-            #GRP = (old_data['Т Общие'] * tvr) / 20
             
         #Если поменялся КУС
         elif changed_statistic == 'КУС' or changed_statistic == 'КУС Внедом':
             TVR = old_data['TTV'] * old_data['Share'] / 100
-            #Рассматриваем отдельно случай для ТВЦ
-            #if channel == 'ТВ ЦЕНТР':
-            #    tvr = tvr = new_data['КУС КР'] * TVR
-            #else:
-            #    tvr = new_data['КУС'] * TVR
-            #GRP = (old_data['Т Общие'] * tvr) / 20
     
         #Если поменялись Объемы
         elif changed_statistic == 'Т Общие':
@@ -475,11 +466,11 @@ class Federal_Comments:
     
             
         #Если есть ТП Канала
-        if channel in ['ТНТ 4', 'ТВ-3',
+        if channel in ['ТНТ 4', 'ТВ-3', 'СОЛНЦЕ',
                     'СУББОТА', 'СТС LOVE', 'СТС', 'РОССИЯ 24', 
                     'РЕН ТВ', 'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
                     'ЗВЕЗДА', '2X2', 'ТНТ', 'ЧЕ']:
-            tvr = new_data['КУС'] * TVR
+            tvr = old_data['КУС'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
             GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
         
@@ -498,7 +489,7 @@ class Federal_Comments:
         
 
         elif channel in ['ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1']:
-            tvr = new_data['КУС'] * TVR
+            tvr = old_data['КУС'] * TVR
             GRP = (old_data['Т Общие'] * tvr) / 20
             GRP_KR = GRP - old_data['GRP КРМ'] - old_data['GRP СП']
             GRP_NRA = GRP_KR - old_data['GRP ТП канала']
