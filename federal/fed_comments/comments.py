@@ -436,6 +436,7 @@ class Federal_Comments:
         #Если поменялся КУС
         elif changed_statistic == 'КУС' or changed_statistic == 'КУС Внедом':
             TVR = old_data['TTV'] * old_data['Share'] / 100
+            tvr = new_data['КУС'] * TVR
     
         #Если поменялись Объемы
         elif changed_statistic == 'Т Общие':
@@ -469,52 +470,87 @@ class Federal_Comments:
                     'СУББОТА', 'СТС LOVE', 'СТС', 'РОССИЯ 24', 
                     'РЕН ТВ', 'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
                     'ЗВЕЗДА', '2X2', 'ТНТ', 'ЧЕ']:
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
+            else:
+                tvr = old_data['КУС'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
         
         elif channel == 'ДОМАШНИЙ':
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
-            GRP_KR = GRP - GRP_full_sp
-            GRP_NRA = GRP_KR - old_data['GRP ТП канала']
-
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
+                GRP_KR = GRP - GRP_full_sp
+                GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+            else:
+                tvr = old_data['КУС'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
+                GRP_KR = GRP - GRP_full_sp
+                GRP_NRA = GRP_KR - old_data['GRP ТП канала']
         
         elif channel == 'ТВ ЦЕНТР':
-            tvr  = new_data['КУС КР'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
+            else:
+                tvr  = old_data['КУС КР'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
         
 
         elif channel in ['ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1']:
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            GRP_KR = GRP - old_data['GRP КРМ'] - old_data['GRP СП']
-            GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_KR = GRP - old_data['GRP КРМ'] - old_data['GRP СП']
+                GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+            else:
+                tvr = old_data['КУС'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_KR = GRP - old_data['GRP КРМ'] - old_data['GRP СП']
+                GRP_NRA = GRP_KR - old_data['GRP ТП канала']
         
 
         elif channel in ['НТВ', 'ПЯТЫЙ КАНАЛ']:
-            tvr = new_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
-            GRP_KR = GRP - GRP_full_sp
-            GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
+                GRP_KR = GRP - GRP_full_sp
+                GRP_NRA = GRP_KR - old_data['GRP ТП канала']
+            else:
+                tvr = new_data['КУС'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
+                GRP_KR = GRP - GRP_full_sp
+                GRP_NRA = GRP_KR - old_data['GRP ТП канала']
         
 
         elif channel in ['КАРУСЕЛЬ', 'МИР']:
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            #Расчет спонсорства с новым TVR
-            tvr_sp = old_data['КУС СП'] * TVR
-            GRP_SP = (old_data['Т СП'] * tvr_sp) / 20
-            GRP_NRA = GRP - GRP_SP
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                #Расчет спонсорства с новым TVR
+                tvr_sp = old_data['КУС СП'] * TVR
+                GRP_SP = (old_data['Т СП'] * tvr_sp) / 20
+                GRP_NRA = GRP - GRP_SP
+            else:
+                tvr = old_data['КУС'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                #Расчет спонсорства с новым TVR
+                tvr_sp = old_data['КУС СП'] * TVR
+                GRP_SP = (old_data['Т СП'] * tvr_sp) / 20
+                GRP_NRA = GRP - GRP_SP
         
         
         elif channel == 'СПАС':
-            tvr = old_data['КУС'] * TVR
-            GRP = (old_data['Т Общие'] * tvr) / 20
-            GRP_NRA = GRP - old_data['GRP Телемагазины'] - old_data['GRP СП']
+            if tvr != 0:
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_NRA = GRP - old_data['GRP Телемагазины'] - old_data['GRP СП']
+            else:
+                tvr = old_data['КУС'] * TVR
+                GRP = (old_data['Т Общие'] * tvr) / 20
+                GRP_NRA = GRP - old_data['GRP Телемагазины'] - old_data['GRP СП']
             
                 
         delta_GRP = GRP_NRA -  old_data['GRP ТП НРА']

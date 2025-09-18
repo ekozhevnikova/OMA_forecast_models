@@ -74,15 +74,12 @@ class Federal_Processing:
         month_name_start = str(start_date.strftime('%B'))
         parsed_word_start_month = morph.parse(month_name_start)[0]  # анализируем слово  
         result_1 = parsed_word_start_month.inflect({'gent'}).word
-        #print(result_1)
-        #month_name_start_gent = result_1.month_name_start
         
         stop_date = df.index[-1]
         stop = stop_date.day
         month_name_stop = str(stop_date.strftime('%B'))
         parsed_word_stop_month = morph.parse(month_name_stop)[0]  # анализируем слово  
         result_2 = parsed_word_stop_month.inflect({'gent'}).word
-        #month_name_stop_gent = result_2.month_name_stop
         return start, result_1, stop, result_2
     
 
