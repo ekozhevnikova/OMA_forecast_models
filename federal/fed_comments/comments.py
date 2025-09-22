@@ -131,6 +131,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.001:
+                                reasons.append('КУС')
             
 
             elif data.iloc[0]['Канал'] == 'СТС':
@@ -149,6 +152,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.002:
+                                reasons.append('КУС')
 
 
 
@@ -168,6 +174,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0015:
+                                reasons.append('КУС')
 
 
             elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'ПЕРВЫЙ КАНАЛ']:
@@ -186,6 +195,10 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0017:
+                                reasons.append('КУС')
+
             
 
             elif data.iloc[0]['Канал'] == 'МАТЧ ТВ':
@@ -204,6 +217,10 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.006:
+                                reasons.append('КУС')
+
 
 
             elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
@@ -222,6 +239,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0065:
+                                reasons.append('КУС')
 
 
             elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
@@ -240,6 +260,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.00265:
+                                reasons.append('КУС')
 
 
             
@@ -259,6 +282,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.003:
+                                reasons.append('КУС')
             
 
             elif data.iloc[0]['Канал'] == 'ТВ ЦЕНТР':
@@ -277,6 +303,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.003:
+                                reasons.append('КУС')
 
             
             elif data.iloc[0]['Канал'] == 'СПАС':
@@ -295,6 +324,10 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.008:
+                                reasons.append('КУС')
+                        
 
             
             elif data.iloc[0]['Канал'] == 'ТНТ 4':
@@ -313,6 +346,10 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0038:
+                                reasons.append('КУС')
+                            
 
                         
             
@@ -332,6 +369,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0055:
+                                reasons.append('КУС')
 
 
             
@@ -351,6 +391,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0067:
+                                reasons.append('КУС')
 
             
             elif data.iloc[0]['Канал'] == 'СТС LOVE':
@@ -369,6 +412,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0055:
+                                reasons.append('КУС')
 
 
             
@@ -388,6 +434,9 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+                        else:
+                            if delta >= 0.0045:
+                                reasons.append('КУС')
 
                 
             if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
@@ -539,7 +588,7 @@ class Federal_Comments:
                 GRP_KR = GRP - GRP_full_sp
                 GRP_NRA = GRP_KR - old_data['GRP ТП канала']
             else:
-                tvr = new_data['КУС'] * TVR
+                tvr = old_data['КУС'] * TVR
                 GRP = (old_data['Т Общие'] * tvr) / 20
                 GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']
                 GRP_KR = GRP - GRP_full_sp

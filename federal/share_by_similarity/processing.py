@@ -16,6 +16,7 @@ class FourierForecaster:
     def __repr__(self):
         return f'n_components: {self.n_components}'
     
+    
     def __init__(self, n_components = None, threshold = 0.1):
         """
             Инициализация модели
@@ -34,7 +35,7 @@ class FourierForecaster:
     @staticmethod
     def select_components_by_energy(amplitudes, energy_threshold = 0.95):
         """
-        Выбор гармоник по кумулятивной энергии
+            Выбор гармоник по кумулятивной энергии
         """
         # Сортируем амплитуды по убыванию
         sorted_indices = np.argsort(amplitudes)[:: -1]
@@ -48,6 +49,7 @@ class FourierForecaster:
         n_components = np.where(cumulative_energy >= energy_threshold)[0][0] + 1
         print(f"Нужно {n_components} гармоник для {energy_threshold * 100}% энергии")
         return n_components
+
 
     def fit(self, series):
         """
