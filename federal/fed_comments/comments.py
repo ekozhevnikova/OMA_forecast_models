@@ -131,6 +131,25 @@ class Federal_Comments:
                                     reasons.append('КУС')
                                 else:
                                     reasons.append('КУС Внедом')
+            
+
+            elif data.iloc[0]['Канал'] == 'СТС':
+                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.002:
+                    reasons.append('Share')
+                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.002:
+                    reasons.append('TTV')  
+                elif atributes[i] == 'КУС':
+                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+                    if delta != 0.0:
+                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+                            if delta >= 0.002:
+                                if outhouse < criteria * delta:
+                                    reasons.append('КУС')
+                                else:
+                                    reasons.append('КУС Внедом')
+
 
 
             elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ', 'СТС']:
@@ -397,7 +416,7 @@ class Federal_Comments:
                     elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
                         reasons.append('GRP Телемагазины')
             
-            elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-3:
+            elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2:
                 reasons.append('GRP СП')
         return reasons
 
