@@ -465,7 +465,14 @@ class Federal_Comments:
                     elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
                         reasons.append('GRP Телемагазины')
             
-            elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2:
+            #Отбор изменений по GRP СП для канала Звезда
+            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] == 'ЗВЕЗДА':
+                old_data, new_data = self.search_channel_and_info(month, data.iloc[0]['Канал'])
+                if new_data['GRP СП'] - old_data['GRP СП'] >= 20:
+                    reasons.append('GRP СП')
+
+            #Отбор изменений по GRP СП для остальных каналов
+            elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2 and data.iloc[0]['Канал'] != 'ЗВЕЗДА':
                 reasons.append('GRP СП')
         return reasons
 
