@@ -95,6 +95,14 @@ class Federal_Comments:
             Returns:
                 reasons: список причин, согласно которым предположительно произошли изменения инвентаря.
         """
+        def delta_SP(month, channel):
+            """
+                Вспомогательная функция для расчёта изменения GRP СП.
+            """
+            old_data, new_data = self.search_channel_and_info(month, channel)
+            delta = new_data['GRP СП'] - old_data['GRP СП']
+            return delta
+
         #Если изменения по коэффициентам внедома составляют больше 0.5 общего изменения КУСа, то это внедом
         criteria = 0.5
 
@@ -160,6 +168,7 @@ class Federal_Comments:
 
             elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ']:
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
+                    #print(data.iloc[0]['Канал'], _month)
                     reasons.append('Share')
                 elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0015:
                     reasons.append('TTV')  
@@ -351,7 +360,6 @@ class Federal_Comments:
                                 reasons.append('КУС')
                             
 
-                        
             
             elif data.iloc[0]['Канал'] == 'ЧЕ':
                 if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
@@ -465,15 +473,22 @@ class Federal_Comments:
                     elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
                         reasons.append('GRP Телемагазины')
             
-            #Отбор изменений по GRP СП для канала Звезда
-            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] == 'ЗВЕЗДА':
-                old_data, new_data = self.search_channel_and_info(month, data.iloc[0]['Канал'])
-                if new_data['GRP СП'] - old_data['GRP СП'] >= 20:
+            #Отбор изменений по GRP СП для канала Звезда, РЕН ТВ
+            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] in ['ЗВЕЗДА', 'РЕН ТВ']:
+                delta = delta_SP(month, data.iloc[0]['Канал'])
+                if delta >= 20:
+                    reasons.append('GRP СП')
+            
+            #Отбор изменений по GRP СП для канала Суббота
+            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] == 'СУББОТА':
+                delta = delta_SP(month, data.iloc[0]['Канал'])
+                if delta >= 15:
                     reasons.append('GRP СП')
 
             #Отбор изменений по GRP СП для остальных каналов
-            elif atributes[i] == 'GRP СП' and np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2 and data.iloc[0]['Канал'] != 'ЗВЕЗДА':
-                reasons.append('GRP СП')
+            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] not in ['ЗВЕЗДА', 'РЕН ТВ', 'СУББОТА']:
+                if np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2:
+                    reasons.append('GRP СП')
         return reasons
 
 
@@ -543,7 +558,7 @@ class Federal_Comments:
         #Если есть ТП Канала
         if channel in ['ТНТ 4', 'ТВ-3', 'СОЛНЦЕ',
                     'СУББОТА', 'СТС LOVE', 'СТС', 'РОССИЯ 24', 
-                    'РЕН ТВ', 'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
+                    'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
                     'ЗВЕЗДА', '2X2', 'ТНТ', 'ЧЕ']:
             if tvr != 0:
                 GRP = (old_data['Т Общие'] * tvr) / 20
@@ -553,7 +568,7 @@ class Federal_Comments:
                 GRP = (old_data['Т Общие'] * tvr) / 20
                 GRP_NRA = GRP - old_data['GRP СП'] - old_data['GRP ТП канала']
         
-        elif channel == 'ДОМАШНИЙ':
+        elif channel in ['ДОМАШНИЙ', 'РЕН ТВ']:
             if tvr != 0:
                 GRP = (old_data['Т Общие'] * tvr) / 20
                 GRP_full_sp = old_data['GRP Телемагазины'] + old_data['GRP СП']

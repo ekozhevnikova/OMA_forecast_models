@@ -179,7 +179,7 @@ class Federal_Processing:
             data_output_dates_ = data_output_dates[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
             #Форматирование столбца с Месяцем
             by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
-            by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц')
+            by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц', date_column = 'Дата')
             by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
             by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sorted_, 'Канал')
             problem_channels = {
@@ -198,7 +198,7 @@ class Federal_Processing:
 
             #Форматирование столбца с Месяцем
             general_by_days = Federal_Postprocessing(general_by_days).replace_name_of_months('Месяц', year)
-            general_by_days_sorted = Table(general_by_days).sort_in_specific_way(month_order, 'Месяц')
+            general_by_days_sorted = Table(general_by_days).sort_in_specific_way(month_order, 'Месяц', date_column = 'Дата')
             general_by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_by_days_sorted, date_new_forecast)
             general_by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, general_by_days_sorted_, 'Канал')
 
@@ -323,7 +323,7 @@ class Federal_Processing:
             Federal_Comments.change_channels_name(channel_names_init, data_output_summ, 'Канал')
             #Форматирование столбца с Месяцем
             data_output_summ = Federal_Postprocessing(data_output_summ).replace_name_of_months('Месяц', year)
-            data_output_summ_sorted = Table(data_output_summ).sort_in_specific_way(month_order, 'Месяц')
+            data_output_summ_sorted = Table(data_output_summ).sort_in_specific_way(month_order, 'Месяц', date_column = 'Дата')
             #data_output_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(data_output_summ_sorted, date_new_forecast)
         
             #Определение даты старта и даты конца
@@ -357,7 +357,7 @@ class Federal_Processing:
             
             #Форматирование столбца с Месяцем
             general_summ = Federal_Postprocessing(general_summ).replace_name_of_months('Месяц', year)
-            general_summ_sorted = Table(general_summ).sort_in_specific_way(month_order, 'Месяц')
+            general_summ_sorted = Table(general_summ).sort_in_specific_way(month_order, 'Месяц', date_column = 'Дата')
             #general_summ_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(general_summ_sorted, date_new_forecast)
             
             ##Определение даты старта и даты конца
