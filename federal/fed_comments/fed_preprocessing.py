@@ -59,7 +59,7 @@ class Federal_Preprocessing:
             
             #Замена формата значений на тип int
             for column in data_cubik.columns[1:]:
-                data_cubik[column] = data_cubik[column].astype(int)
+                data_cubik[column] = data_cubik[column].astype(float)
             
             #Конвертация названий столбцов в капс
             cols_transform = {}
@@ -155,6 +155,8 @@ class Federal_Preprocessing:
         #df_by_dates_need_comment = df_by_dates_need_comment.reset_index(drop = True)
         #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
         #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'])
+        def round_half_up(x):
+            return int(x + 0.5)
 
         data_full_by_days = {}
         for column in need_data.columns[2:]:
@@ -166,7 +168,7 @@ class Federal_Preprocessing:
                 current_date = pd.to_datetime(df.iloc[i]['Дата историрования'])
                 current_period = df.iloc[i]['ПЕРИОД']
                 current_grp = df.iloc[i][-1]
-                
+
                 # Ищем предыдущий день с тем же периодом
                 for j in range(i - 1, -1, -1):
                     prev_date = pd.to_datetime(df.iloc[j]['Дата историрования'])
@@ -175,7 +177,7 @@ class Federal_Preprocessing:
                     if (prev_period == current_period and 
                         (current_date - prev_date).days == 1):
                         
-                        diff = current_grp - df.iloc[j][-1]
+                        diff = int(round_half_up(current_grp) - round_half_up(df.iloc[j][-1]))
                         
                         # СОЗДАЕМ НОВЫЙ СЛОВАРЬ ДЛЯ КАЖДОЙ НАЙДЕННОЙ ПАРЫ
                         dict_difference = {
@@ -195,6 +197,7 @@ class Federal_Preprocessing:
             if not df_difference_per_day.empty:
                 df_difference_per_day.dropna(inplace=True)
                 df_difference_per_day.sort_values(by='Месяц', inplace=True)
+                #print(df_difference_per_day)
             
             data_full_by_days[column] = df_difference_per_day
 
