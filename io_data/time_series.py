@@ -218,6 +218,29 @@ class TimeSeriesTransformer:
                     gaps.append(current_gap_date.strftime('%Y-%m-%d'))
                     current_gap_date += timedelta(days = 1)
         return len(gaps)
+    
+
+    @staticmethod
+    def create_reverse_dates_from_target(df, date_column: str, target_column: str) -> pd.DataFrame:
+        """
+            Создает список дат от самой последней к самой старой
+            на основе длины целевого столбца.
+            Args:
+                df:
+                date_column: столбец с датой, который нуждается в реконструкции
+                target_column: столбец с целевой переменной, на который будем ориентироваться при генерации 
+                            новой последовательности дат.
+            Returns:
+                data__new: Новый DataFrame с новым порядком дат.
+        """
+        #Определение количества дней для генерации списка дат
+        n_days = len(df[target_column])
+        #Поиск максимальной даты в исходном DataFrame
+        end_date = df[date_column].max()
+        #Создаем даты от самой новой к самой старой
+        dates = list(reversed([end_date - pd.Timedelta(days = i) for i in range(n_days)]))
+        data_new = pd.DataFrame(list(zip(dates, list(df[target_column]))), columns = [date_column, target_column])
+        return data_new
 
 
     @staticmethod

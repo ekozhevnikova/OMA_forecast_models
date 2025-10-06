@@ -154,6 +154,7 @@ class Dates_Operations:
         elif case == 'Предложный':
             return [month.inflect({'loct'}).word, month.inflect({'loct'}).word.capitalize()]
         
+
     @staticmethod    
     def convert_dates_from_str_to_datetime_format(df, date_column_name: str, date_format_init: str, type_of_split: str, lang: str):
         """
@@ -177,7 +178,6 @@ class Dates_Operations:
             else:
                 dates_converted.append(datetime.strptime(i, date_format_init).strftime('%d.%m.%Y'))
 
-
             #dates_converted.append(datetime.strptime(i, date_format_init).strftime('%Y.%m.%d'))
         df[date_column_name] = df[date_column_name].replace(dates, dates_converted)
         df[date_column_name] = df[date_column_name].apply(lambda x: pd.to_datetime(x))
@@ -198,3 +198,17 @@ class Dates_Operations:
         stop_date = pd.to_datetime(stop_date, format = '%d.%m.%Y')
         n = np.abs((start_date.year - stop_date.year) * 12 + (start_date.month - stop_date.month))
         return int(n)
+
+    @staticmethod
+    def get_last_4_weeks(start_date, n: int = 4):
+        """
+            Функция ддля генерации последних n недель.
+            Args:
+                n: кол-во недель (7 * n), по дефолту последние 4 недели.
+                start_date: дата в формате timestamp
+            Returns:
+                dates: Список из дат за последние n недель
+        """
+        #start = start_date.date()
+        dates = [(start_date - timedelta(days = i)).strftime('%Y-%m-%d') for i in range(((7 * n) - 1), -1, -1)]
+        return dates

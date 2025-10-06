@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from scipy.fft import fft, rfft, rfftfreq, ifft, fftfreq
+from OMA_tools.io_data.dates import Dates_Operations
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 mpl.rc('font',family = 'Arial')
@@ -186,3 +187,37 @@ class FourierForecaster:
         plt.legend()
         plt.grid(True, alpha = 0.3)
         plt.show()
+
+
+class PipeLine:
+    def __init__():
+        pass
+
+    @staticmethod
+    def calculate_share_not_found_programs(new_df, df_hist):
+        """
+            Функция для расчета прогноза доли для программ, для которых не было найдено похожей программы.
+            Функция генерит последние 4 недели и ищет сначала делает поиск по слоту. Считается средняя доля программ для конкретного слота, 
+            в котором шла программа. Если не было найдено совпадение по слоту, то считается среднее за последние 4 недели.
+        """
+        new_df_ = new_df.reset_index(drop = True)
+        for i in range(len(new_df_)):
+            start_date = new_df_.iloc[i]['Дата']
+            slot = new_df_.iloc[i]['Время выхода']
+            
+            dates = Dates_Operations.get_last_4_weeks(start_date)
+            timestamp_dates = [pd.Timestamp(d) for d in dates]
+            df_dates = pd.DataFrame(timestamp_dates, columns = ['Дата'])
+            #Join дат и исторического DataFrame
+            merged = pd.merge(df_dates, df_hist, on = 'Дата', how = 'left')
+            #Отбор по слоту
+            slot_df = merged[merged['Время выхода'] == slot]
+            #Если нашлась какая-то программа по тому же слоту
+            if len(slot_df) != 0:
+                share_mean = np.mean(list(slot_df['Share']))
+                new_df_.at[i, 'Forecast'] = share_mean
+            #Если НЕ нашлась какая-то программа по тому же слоту
+            elif len(slot_df) == 0:
+                share_mean = np.mean(list(merged['Share']))
+                new_df_.at[i, 'Forecast'] = share_mean
+        return new_df_

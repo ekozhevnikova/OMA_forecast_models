@@ -5,6 +5,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import re
 import nltk
 from nltk.corpus import stopwords
+from OMA_tools.io_data.time_series import TimeSeriesTransformer
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -249,6 +250,8 @@ class Find_Similarity:
             palomars = plmrs_analysis.loc[plmrs_analysis['Название программы'] == program_plrms]
             full_data = pd.concat([palomars, vimb_df]).reset_index(drop = True)
             full_data['Дата'] = pd.to_datetime(full_data['Дата'])
+            #print(TimeSeriesTransformer.find_missing_dates(list(full_data['Дата'])))
+            #full_data_new = TimeSeriesTransformer.create_reverse_dates_from_target(full_data, 'Дата', 'Share')
             dict_analysis[program_plrms] = full_data
 
         if print_df:
