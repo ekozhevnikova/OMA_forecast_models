@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import re
 import pymorphy3 as pmrph
+from datetime import datetime, timedelta
 
 
 class Federal_Postprocessing:
@@ -52,7 +53,7 @@ class Federal_Postprocessing:
     def filter_comments_channel_overtime(by_days, df_summ):
         """
             Функция, которая удаляет комментарии в накопленных изменениях, если данный канал по данному месяцу встретился выше в изменениях по дням.
-            Удаляется канад, месяц, комментарий. А доп комментарий из столбца "Доп столбец" переносится выше в блок с изменениями по дням.
+            Удаляется канал, месяц, комментарий. А доп комментарий из столбца "Доп столбец" переносится выше в блок с изменениями по дням.
             Args:
                 by_days: DataFrame по дням
                 df_summ: DataFrame с накопленными изменениями за период
@@ -62,15 +63,20 @@ class Federal_Postprocessing:
         for i in range(len(by_days)):
             channel_i = by_days.iloc[i]['Канал']
             month_i = by_days.iloc[i]['Месяц']
+            date_i = by_days.iloc[i]['Дата']
             #цикл по накопленным изменениям за период
             for j in range(len(df_summ)):
                 channel_j = df_summ.iloc[j]['Канал']
                 month_j = df_summ.iloc[j]['Месяц']
+                date_j = by_days.iloc[j]['Дата']
                 additional_comment = df_summ.iloc[j]['Доп столбец']
 
                 if channel_i == channel_j and month_i == month_j:
-                    by_days.at[i, 'Доп столбец'] = additional_comment
-                    idx_to_delete.append(j)
+                    if date_i != date_j:
+                        by_days.at[i, 'Доп столбец'] = additional_comment
+                        idx_to_delete.append(j)
+                    else:
+                        by_days.at[i, 'Дата'] = date_i - timedelta(days = 1)
                 else:
                     continue
         df_summ.drop(idx_to_delete, inplace = True)

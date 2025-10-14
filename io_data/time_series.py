@@ -7,8 +7,6 @@ from scipy.stats import kendalltau
 from sklearn.preprocessing import MinMaxScaler
 
 
-
-
 class TimeSeriesTransformer:
     """
         Класс для предобработки Временных Рядов.
@@ -304,6 +302,7 @@ class TimeSeriesTransformer:
         return df
     
 
+    @staticmethod
     def check_scale_and_modify_scale_if_need(data, target_column: str = 'Share', date_column: str = 'Date'):
         """
             Проверяет на одинаковость масштаба данных.
