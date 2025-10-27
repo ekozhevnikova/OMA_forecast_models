@@ -6,6 +6,15 @@
 
 import pandas as pd
 from prophet import Prophet
+import warnings
+warnings.filterwarnings('ignore')
+import logging
+logging.getLogger("prophet").setLevel(logging.ERROR)
+logging.getLogger("cmdstanpy").setLevel(logging.WARNING)
+logging.getLogger('log').setLevel(logging.INFO)
+logging.getLogger("cmdstanpy").propagate = False
+logging.getLogger("log").propagate = False
+logging.getLogger("cmdstanpy").disabled = True
 import datetime as dt
 from datetime import datetime, timedelta
 from OMA_tools.regions.ttv_forecast.constants import Holidays, Prophet_Constants, Constants__Columns
@@ -150,7 +159,7 @@ class TTV_Regions_Forecast:
         return results_df
 
     
-    def get_result(self, filename_fact_data):
+    def get_result(self, filename_fact_data, columns_list):
         """
         The sum function that concludes API calculation and forecast process using Prophet.
         
@@ -160,7 +169,7 @@ class TTV_Regions_Forecast:
         Returns:
             The result of forecast procedure goes to the file with Forecast Results.
         """
-        data_api = self.calculation.get__data_through_API()
+        data_api = self.calculation.get__data_through_API(columns_list)
         total = File(filename_fact_data).update_file(data_api, 'date', ['All 4-45', 
                                                                         'All 6-54', 
                                                                         'All 14-54', 

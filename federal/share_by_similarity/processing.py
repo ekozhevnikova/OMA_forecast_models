@@ -3,6 +3,7 @@ import numpy as np
 from scipy.fft import fft, rfft, rfftfreq, ifft, fftfreq
 from sklearn.preprocessing import StandardScaler
 from OMA_tools.io_data.dates import Dates_Operations
+from OMA_tools.io_data.time_series import TimeSeriesTransformer
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 mpl.rc('font',family = 'Arial')
@@ -180,7 +181,7 @@ class FourierForecaster:
 
 
 
-class STFFT(FourierForecaster):
+class STFT(FourierForecaster):
     """
         Оконное преобразование Фурье - дочерний класс от FourierForecaster
         Сохраняет все методы родителя + добавляет оконный анализ
@@ -237,98 +238,85 @@ class STFFT(FourierForecaster):
         return normalized
 
 
-    @staticmethod
-    def build_window_size(series):
+    def stft_params(self, date_start, date_stop):
         """
-            Функция для выбора размера окна, основываясь на длине сигнала.
-            Args:
-            Returns:
+            Метод для генерации входных параметров для оконного преобразования Фурье.
         """
-        #Вспомогательная функция для округления
-        def round_half_up(x):
-                return int(x + 0.5)
-            
+        # Длина ВР
+        self.signal_length = len(self.series)
+
+        # Генерация размера окна
         #Для коротких ВР
-        if len(series) < 500:
-            window_size_lower = round_half_up(float(0.25 * len(series)))
-            window_size_upper = round_half_up(float(0.5 * len(series)))
+        if len(self.series) < 500:
+            window_size_lower = float(0.25 * len(self.series))
+            window_size_upper = float(0.5 * len(self.series))
             #Среднее между верхним и нижним пределом
-            window_size = 0.5 * (window_size_lower + window_size_upper)
+            self.window_size = STFT.round_half_up(float(0.5 * (window_size_lower + window_size_upper)))
             print(f'Сигнал короткий! Оптимальный размер окна в промежутке {window_size_lower} - {window_size_upper}.')
-            print(f'Выбираю среднее: {window_size}.')
-            return int(window_size)
+            print(f'Выбираю среднее: {self.window_size}.')
+
         #Для средних ВР
-        elif len(series) >= 500 and len(series) < 5000:
-            window_size_lower = round_half_up(float(0.1 * len(series)))
-            window_size_upper = round_half_up(float(0.2 * len(series)))
+        elif len(self.series) >= 500 and len(self.series) < 5000:
+            window_size_lower = float(0.1 * len(self.series))
+            window_size_upper = float(0.2 * len(self.series))
             #Среднее между верхним и нижним пределом
-            window_size = 0.5 * (window_size_lower + window_size_upper)
+            self.window_size = STFT.round_half_up(float(0.5 * (window_size_lower + window_size_upper)))
             print(f'Сигнал средний! Оптимальный размер окна в промежутке {window_size_lower} - {window_size_upper}.')
-            print(f'Выбираю среднее: {window_size}.')
-            return int(window_size)
+            print(f'Выбираю среднее: {self.window_size}.')
+
         #Для больших ВР
-        elif len(series) >= 5000:
-            window_size = round_half_up(float(0.1 * len(series)))
-            print(f'Сигнал длинный! Оптимальный размер окна {window_size}.')
-            return int(window_size)
+        elif len(self.series) >= 5000:
+            self.window_size = STFT.round_half_up(float(0.1 * len(self.series)))
+            print(f'Сигнал длинный! Оптимальный размер окна {self.window_size}.')
 
-
-    @staticmethod
-    def overlap_selections(window_size):
-        """
-            Функция для генерации процента перекрытия окон
-        """
+        # Генерация процента перекрытия
         #Маленькие окна (С окном < 64 нельзя различить частоты ближе, чем ~15 Гц при типичных sampling_rate)
-        if window_size < 64:
-            return 0.75
+        if self.window_size < 64:
+            self.overlap = 0.75
         #Большие окна
-        elif window_size > 512:
-            return 0.6
+        elif self.window_size > 512:
+            self.overlap = 0.6
         #Средние окна
         else:
-            return 0.75
-        
+            self.overlap = 0.75
 
-    @staticmethod
-    def calculate_step_size(window_size, overlap):
-        """
-            Функция для расчёта шага перемещения окна
-        """
+        # Генерация шага перемещения окна
         #Если overlap указан в процентах (например, 75)
-        if overlap > 1.0:
-            overlap_ = overlap / 100
-            step_size = int(window_size * (1.0 - overlap_))
-            return int(step_size)
+        if self.overlap > 1.0:
+            overlap_ = self.overlap / 100
+            self.step_size = STFT.round_half_up(float(self.window_size * (1.0 - overlap_)))
         #Если overlap указан в долях (например, 0.75)
         else:
-            step_size = int(window_size * (1.0 - overlap))
-            return int(step_size)
+            self.step_size = STFT.round_half_up(float(self.window_size * (1.0 - self.overlap)))
 
 
-    @staticmethod
-    def calculate_sampling_rate(total_samples, date_start, date_stop):
-        """
-            Функция для расчета частоты дискретизации (sampling_rate), исходя из общего количества измерений и длительности.
-            Для измерений раз в день sampling_rate может быть около нуля.
-            Args:
-                total_samples: общее количество измерений
-                date_start: дата старта в формате Timestamp
-                date_stop: дата конца в формате Timestamp
-                durations_seconds: общая длительность измерения в секундах
-            Returns:
-                sampling_rate: частота дискретизации в Гц
-        """
+        # Генерация частоты дискретизации
+        # Если временные метки доступны, используем их для точного расчета
+        if hasattr(self.series, 'index') and isinstance(self.series.index, pd.DatetimeIndex):
+            time_diffs = np.diff(self.series.index.astype(np.int64) // 10**9)  # разница в секундах
+            if len(time_diffs) > 0:
+                avg_interval = np.median(time_diffs)
+                self.sampling_rate = 1.0 / avg_interval if avg_interval > 0 else 1.0
+            else:
+                total_days = (date_stop - date_start).days
+                self.sampling_rate = self.signal_length / max(total_days, 1)
+        else:
+            total_days = (date_stop - date_start).days
+            self.sampling_rate = self.signal_length / max(total_days, 1)
+
+        '''
         # Для дневных данных используем дни как основную единицу
         total_days = (date_stop - date_start).days
         if total_days > 0:
-            sampling_rate = total_samples / total_days  # измерений в день
+            self.sampling_rate = STFT.round_half_up(float(self.signal_length / total_days))  # измерений в день
         else:
-            sampling_rate = 1.0  # fallback
+            self.sampling_rate = 1.0  # fallback
         # Если sampling_rate слишком мал, используем нормализованные частоты
-        if sampling_rate < 0.001:
-            print(f"Внимание: низкий sampling_rate ({sampling_rate:.6f}), используются нормализованные частоты")
+        if self.sampling_rate < 0.001:
+            print(f"Внимание: низкий sampling_rate ({self.sampling_rate:.6f}), используются нормализованные частоты")
+        '''
         
-        return sampling_rate
+        return self.signal_length, self.window_size, self.overlap, self.step_size, self.sampling_rate
 
 
     def _select_components_by_energy(amplitudes, energy_threshold = 0.95):
@@ -410,7 +398,6 @@ class STFFT(FourierForecaster):
                 date_stop: дата конца в формате Timestamp, нужно для расчета sampling_rate
         """
         n = len(self.series)
-        self.signal_length_ = len(self.series)
 
         # 1. НОРМАЛИЗАЦИЯ ДАННЫХ - ДОБАВЛЯЕМ ЭТОТ ШАГ
         normalized_series = self._normalize_data()
@@ -426,10 +413,12 @@ class STFFT(FourierForecaster):
             print("Анализ без выделения тренда")
 
         # 2. Параметры оконного анализа (используем детрендированный ряд)
-        self.window_size = STFFT.build_window_size(analysis_series)
-        self.overlap = STFFT.overlap_selections(self.window_size)
-        self.step_size = STFFT.calculate_step_size(self.window_size, self.overlap)
-        self.sampling_rate = STFFT.calculate_sampling_rate(n, date_start, date_stop)
+        self.signal_length_, self.window_size, self.overlap, self.step_size, self.sampling_rate = self.stft_params(date_start, date_stop)
+
+        #self.window_size = STFFT.build_window_size(analysis_series)
+        #self.overlap = STFFT.overlap_selections(self.window_size)
+        #self.step_size = STFFT.calculate_step_size(self.window_size, self.overlap)
+        #self.sampling_rate = STFFT.calculate_sampling_rate(n, date_start, date_stop)
 
         # 3. Оконный анализ (остальной код без изменений, но используем analysis_series)
         n_windows = int((n - self.window_size) // self.step_size + 1)
@@ -939,10 +928,10 @@ class PipeLine:
         pass
 
     @staticmethod
-    def calculate_share_not_found_programs(new_df, df_hist):
+    def forecast_share_not_found_programs(new_df, df_hist):
         """
             Функция для расчета прогноза доли для программ, для которых не было найдено похожей программы.
-            Функция генерит последние 4 недели и ищет сначала делает поиск по слоту. Считается средняя доля программ для конкретного слота, 
+            Функция генерит последние 4 недели и делает поиск по слоту. Считается средняя доля программ для конкретного слота, 
             в котором шла программа. Если не было найдено совпадение по слоту, то считается среднее за последние 4 недели.
         """
         new_df_ = new_df.reset_index(drop = True)
@@ -959,10 +948,12 @@ class PipeLine:
             slot_df = merged[merged['Время выхода'] == slot]
             #Если нашлась какая-то программа по тому же слоту
             if len(slot_df) != 0:
-                share_mean = np.mean(list(slot_df['Share']))
+                drop_outlinear = TimeSeriesTransformer(slot_df['Share']).replace_outliers_with_median()
+                share_mean = np.mean(drop_outlinear)
                 new_df_.at[i, 'Forecast'] = share_mean
             #Если НЕ нашлась какая-то программа по тому же слоту
             elif len(slot_df) == 0:
-                share_mean = np.mean(list(merged['Share']))
+                drop_outlinear = TimeSeriesTransformer(merged['Share']).replace_outliers_with_median()
+                share_mean = np.mean(drop_outlinear)
                 new_df_.at[i, 'Forecast'] = share_mean
         return new_df_

@@ -316,9 +316,13 @@ class TimeSeriesTransformer:
         """
 
         target_values = list(data[target_column])
-
-        #Разброс значений
-        range_ratio = max(target_values) / min(target_values)
+        if min(target_values) == 0.0:
+            epsilon = 1e-8
+            target_values_adj = [x + epsilon for x in target_values]
+            range_ratio = max(target_values_adj) / min(target_values_adj)
+        else:
+            #Разброс значений
+            range_ratio = max(target_values) / min(target_values)
         #Стандартное отклонение
         std = np.std(target_values)
         #Среднее значение
@@ -379,6 +383,31 @@ class TimeSeriesTransformer:
         #Замена выбросов
         data[target].replace(list(data[target]), values_init, inplace = True)
         return data
+    
+
+    def replace_outliers_with_median(self, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> list:
+        """
+            Функция для замены выбросов на значения медианы.
+            Выбросы определяются как значения за пределами [lower_quantile, upper_quantile].
+            Args:
+                data (list): Входной список числовых данных.
+                lower_quantile (float): Нижний квантиль (по умолчанию 0.05).
+                upper_quantile (float): Верхний квантиль (по умолчанию 0.95).
+
+            Returns:
+                list: Список с обработанными данными.
+        """
+        data_array = np.array(self.series.tolist())
+        lower_bound = np.quantile(data_array, lower_quantile)
+        upper_bound = np.quantile(data_array, upper_quantile)
+
+        median_val = np.median(data_array)
+
+        # Создаем копию, чтобы не менять исходные данные
+        processed_data = data_array.copy()
+        processed_data[(data_array < lower_bound) | (data_array > upper_bound)] = median_val
+
+        return processed_data.tolist()
 
 
 class TimeSeriesTrendAnalyze:
