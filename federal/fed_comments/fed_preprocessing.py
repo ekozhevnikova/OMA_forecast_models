@@ -114,47 +114,6 @@ class Federal_Preprocessing:
                 general_df_by_dates: DataFrame с изменениями по дням для каждого канала   
                 df_by_dates_need_comment: DataFrame с изменениями по дням для каждого канала, приведенный к определенному виду
         """
-        #data_full_by_days = {}
-        #for column in need_data.columns[2:]:
-        #    df = need_data[['Дата историрования', 'ПЕРИОД', column]]
-        #    
-        #    data_with_difference_by_dates = {}
-        #    dict_differences = {}
-        #    #Расчет изменений GRP по дням для каждого канала
-        #    for i in range(len(df)):
-        #        if i > 0:
-        #            for j in range(i - 1, -1, -1):
-        #                if df.iloc[i]['ПЕРИОД'] == df.iloc[j]['ПЕРИОД'] and \
-        #                (pd.to_datetime(df.iloc[i][0]) - pd.to_datetime(df.iloc[j][0])).days == 1:
-        #                    diff = df.iloc[i][-1] - df.iloc[j][-1]
-        #                    #Добавить условие на порог
-        #                    period = df.iloc[i]['ПЕРИОД']
-        #                    dict_differences = {
-        #                        'Канал': column,
-        #                        'Месяц': f'{period}', 
-        #                        'Дата': df.iloc[i][0],
-        #                        'Изменение GRP': diff,
-        #                        'Flag': np.abs(diff) > int(df_limits[column])
-        #                    }
-        #            data_with_difference_by_dates[i] = dict_differences
-        #            
-        #    df_difference_per_day = pd.DataFrame(data_with_difference_by_dates).T
-        #    df_difference_per_day.dropna(inplace = True)
-        #    df_difference_per_day.sort_values(by = 'Месяц', inplace = True)
-        #    #Запись в словарь изменений по дням
-        #    data_full_by_days[column] = df_difference_per_day
-        #print(data_full_by_days['ДОМАШНИЙ'])
-        #    
-        ##Сбор изменений за каждую дату в единый DataFrame
-        #results_by_dates = []
-        #for channel, accumulated_summs in data_full_by_days.items():
-        #    results_by_dates.append(data_full_by_days[channel])
-        #general_df_by_dates = pd.concat(results_by_dates).reset_index(drop = True)
-        ##Отбор каналов и дат, которые вылетели за порог
-        #df_by_dates_need_comment = general_df_by_dates.loc[(general_df_by_dates['Flag'] == True)]
-        #df_by_dates_need_comment = df_by_dates_need_comment.reset_index(drop = True)
-        #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
-        #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'])
         def round_half_up(x):
             return int(x + 0.5)
 

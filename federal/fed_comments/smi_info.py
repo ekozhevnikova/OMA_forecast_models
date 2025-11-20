@@ -161,10 +161,8 @@ class SMI_info:
 
             if len(volume_transfer_) < 1:
                 channel_not_found = channel
-                #print(f'Не нашлось релевантных данных от СМИ в {month} по каналу {channel}', sep = '\n\n', end = '\n')
-
+        
             volume_transfer_['Комментарий'] = volume_transfer_['Комментарий'].apply(str)
-            #volume_transfer_ = volume_transfer_[volume_transfer_['Комментарий'].notna()]
             return volume_transfer_, channel_not_found
         except FileNotFoundError:
             print('Файл с Перебросками-Сокращениями от СМИ не найден. Пожалуйста, добавьте его в соответствующую папку!')

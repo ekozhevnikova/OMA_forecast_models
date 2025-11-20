@@ -58,30 +58,44 @@ class Federal_Postprocessing:
                 by_days: DataFrame по дням
                 df_summ: DataFrame с накопленными изменениями за период
         """
+        by_days_ = by_days.copy()
         idx_to_delete = []
         #цикл по изменениям по дням
-        for i in range(len(by_days)):
-            channel_i = by_days.iloc[i]['Канал']
-            month_i = by_days.iloc[i]['Месяц']
-            date_i = by_days.iloc[i]['Дата']
+        for i in range(len(by_days_)):
+            channel_i = by_days_.iloc[i]['Канал']
+            month_i = by_days_.iloc[i]['Месяц']
+            date_i = by_days_.iloc[i]['Дата']
+            delta_grp_i = int(by_days_.iloc[i]['Изменение GRP'])
             #цикл по накопленным изменениям за период
             for j in range(len(df_summ)):
                 channel_j = df_summ.iloc[j]['Канал']
                 month_j = df_summ.iloc[j]['Месяц']
                 date_j = df_summ.iloc[j]['Дата']
-                #print(date_i, date_j, channel_i, channel_j)
+                # Если данные уже в DataFrame df
+                # Исправленное извлечение числа из GRP
                 additional_comment = df_summ.iloc[j]['Доп столбец']
-
+                grp_match = re.search(r'(-?\d+)\s*GRP', str(additional_comment))
+                if grp_match:
+                    delta_grp_j = int(grp_match.group(1))
+                else:
+                    # Если не найдено число перед GRP, пропускаем эту строку
+                    continue
+                
+                # Если встретилось изменение по дням и накопленное в один день для какого-то канала
                 if channel_i == channel_j and month_i == month_j:
                     if date_i != date_j:
-                        by_days.at[i, 'Доп столбец'] = additional_comment
+                        by_days_.at[i, 'Доп столбец'] = additional_comment
                         idx_to_delete.append(j)
                     else:
-                        by_days.at[i, 'Дата'] = date_i - timedelta(days = 1)
+                        if delta_grp_i * delta_grp_j < 0:
+                            by_days_.at[i, 'Дата'] = date_i - timedelta(days = 1)
+                        else:
+                            by_days_.at[i, 'Доп столбец'] = additional_comment
+                            idx_to_delete.append(j)
                 else:
                     continue
         df_summ.drop(idx_to_delete, inplace = True)
-        return by_days, df_summ
+        return by_days_, df_summ
     
 
     def comments_dublicates_actualize(self):
