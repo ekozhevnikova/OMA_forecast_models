@@ -179,12 +179,12 @@ class TimeSeriesTransformer:
             else:
                 stationary_series = self.series.diff(optimal_diff).dropna()
             print('Ряд приведен к стационарному виду.')
-            return stationary_series, optimal_diff, p_value, log_transform
+            return stationary_series, log_transform
         else:
             optimal_diff = 0
             p_value = 0
             log_transform = False
-            return self.series, optimal_diff, p_value, log_transform
+            return self.series, log_transform
     
 
     @staticmethod
@@ -221,13 +221,12 @@ class TimeSeriesTransformer:
     @staticmethod
     def create_reverse_dates_from_target(df, date_column: str, target_column: str) -> pd.DataFrame:
         """
-            Создает список дат от самой последней к самой старой
-            на основе длины целевого столбца.
+            Создает список дат от самой последней к самой старой на основе длины целевого столбца.
             Args:
                 df:
                 date_column: столбец с датой, который нуждается в реконструкции
                 target_column: столбец с целевой переменной, на который будем ориентироваться при генерации 
-                            новой последовательности дат.
+                               новой последовательности дат.
             Returns:
                 data__new: Новый DataFrame с новым порядком дат.
         """
@@ -302,8 +301,7 @@ class TimeSeriesTransformer:
         return df
     
 
-    @staticmethod
-    def check_scale_and_modify_scale_if_need(data, target_column: str = 'Share', date_column: str = 'Date'):
+    def check_scale_and_modify_scale_if_need(self):
         """
             Проверяет на одинаковость масштаба данных.
             Args:
@@ -314,19 +312,19 @@ class TimeSeriesTransformer:
                 data: если масштаб одинаковый
                 df: отмасштабированный data
         """
+        scaler = False
 
-        target_values = list(data[target_column])
-        if min(target_values) == 0.0:
+        if min(self.series) == 0.0:
             epsilon = 1e-8
-            target_values_adj = [x + epsilon for x in target_values]
+            target_values_adj = [x + epsilon for x in self.series]
             range_ratio = max(target_values_adj) / min(target_values_adj)
         else:
             #Разброс значений
-            range_ratio = max(target_values) / min(target_values)
+            range_ratio = max(self.series) / min(self.series)
         #Стандартное отклонение
-        std = np.std(target_values)
+        std = np.std(self.series)
         #Среднее значение
-        mean = np.mean(target_values)
+        mean = np.mean(self.series)
         #коэффициент ковариации в %
         covariation = (std / mean) * 100
 
@@ -336,21 +334,21 @@ class TimeSeriesTransformer:
                 print('-' * 20)
                 print('Нормализую ...')
                 scaler = MinMaxScaler()
-                X = data[target_column].values.reshape(-1, 1)
+                X = np.array(self.series).reshape(-1, 1)
                 scaler.fit(X)
                 X_scaled = scaler.transform(X)
                 scaled_values_list = [i[0] for i in X_scaled]
-                data['target'] = scaled_values_list
-                df = data[[date_column, 'target']]
-                df.rename(columns = {'target': target_column}, inplace = True)
-                return df, scaler
+                #data['target'] = scaled_values_list
+                #df = data[[date_column, 'target']]
+                #df.rename(columns = {'target': target_column}, inplace = True)
+                return scaled_values_list, scaler
         else:
             print("Признаки имеют ОДИНАКОВЫЙ масштаб.")
-            scaler = None
-            return data, scaler
+            scaler = False
+            return self.series, scaler
     
 
-    def detect_outliers(data, target: str = 'Share'):
+    def detect_outliers(self):
         """
             Функция для замены выбросов на значения медианы.
             Args:
@@ -359,11 +357,20 @@ class TimeSeriesTransformer:
             Retuns:
                 data: измененный/не измененный data
         """
+        # Если self.series это np.ndarray, то делаем конвертацию в pd.Series
+        if isinstance(self.series, np.ndarray):
+            series_pd = pd.Series(self.series)
+        # Если self.series это list, то делаем конвертацию в pd.Series
+        elif isinstance(self.series, list):
+            series_pd = pd.Series(self.series)
+        else:
+            series_pd = self.series
         #Замена выбросов на значения медианы
-        med = np.quantile(data[target], 0.5)
-        values_init = list(data[target])
+        #series_array = np.array(my_list)
+        med = series_pd.quantile(0.5)
+        values_init = series_pd.copy()
         
-        Q1, Q3 = data[target].quantile([0.25, 0.75])
+        Q1, Q3 = series_pd.quantile([0.25, 0.75])
         IQR = Q3 - Q1
         lower_limit = Q1 - 1.5 * IQR
         upper_limit = Q3 + 1.5 * IQR  
@@ -371,18 +378,16 @@ class TimeSeriesTransformer:
         num_of_outlier_lower = sum(i > lower_limit for i in values_init)
         num_of_outlier_upper = sum(i > upper_limit for i in values_init)
         number = num_of_outlier_lower + num_of_outlier_upper
+
         if number > 0:
             print('В выборке присутствуют выбросы! Заменяю их на значения медианы.')
-        
-        for i in range(len(values_init)):
-            if values_init[i] < lower_limit:
-                values_init[i] = med
-            elif values_init[i] > upper_limit:
-                values_init[i] = med
+    
+        # Векторизованная замена (быстрее чем цикл)
+        values_init = np.where((values_init < lower_limit) | (values_init > upper_limit), med, values_init)
         
         #Замена выбросов
-        data[target].replace(list(data[target]), values_init, inplace = True)
-        return data
+        #data[target].replace(list(data[target]), values_init, inplace = True)
+        return values_init
     
 
     def replace_outliers_with_median(self, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> list:
@@ -459,22 +464,35 @@ class TimeSeriesTrendAnalyze:
         return mean_abs_diff, diff_ratio
     
 
-    def extract_trend_with_ma(self, window_size, target_column: str = 'Share', center = True, min_periods = None):
+    def extract_trend_with_ma(self, window_size, target_column: str = 'Share', center=True, min_periods=None):
         """
-            Выделяет тренд с помощью скользящего среднего.
-            Args:
-                data: Временной ряд
-                window_size: размер окна
-                center: центрирование окна
-                min_periods: минимальное количество точек для вычисления
-            Returns:
-                Series с выдеделенным трендом
+        Выделяет тренд с помощью скользящего среднего.
+        Args:
+            window_size: размер окна (должен быть целым числом ≥ 0)
+            target_column: название колонки с данными
+            center: центрирование окна
+            min_periods: минимальное количество точек для вычисления
+        Returns:
+            tuple: (детрендированный ряд, тренд)
         """
-        values_init = list(self.data[target_column])
-        if min_periods is not None:
+        # Проверка window_size
+        if not isinstance(window_size, int) or window_size <= 0:
+            raise ValueError("window_size must be an integer greater than 0")
+        
+        # Установка min_periods по умолчанию
+        if min_periods is None:
             min_periods = window_size // 2
-        trend = self.data[target_column].rolling(window = window_size, center = center, min_periods = min_periods).mean()
-        detrend_series = values_init - trend
+        
+        # Вычисление тренда
+        trend = self.data[target_column].rolling(
+            window=window_size, 
+            center=center, 
+            min_periods=min_periods
+        ).mean()
+        
+        # Детрендирование (вычитание тренда из исходных данных)
+        detrend_series = self.data[target_column] - trend
+        
         return detrend_series, trend
     
 

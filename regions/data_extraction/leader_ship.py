@@ -5,50 +5,80 @@ from datetime import datetime, timedelta
 import pymorphy3 as pmrph
 import time
 import threading
+from threading import Lock
 import concurrent.futures
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import reduce
+import copy
+from typing import Union, List, Dict, Any
 
-
-import sys
-sys.path.append('C:/')
-import OMA_tools
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
 from OMA_tools.io_data.dates import Dates_Operations
+from OMA_tools.regions.data_extraction.task_builder import *
 
-import os
-import re
-import json
-import time
-import openpyxl
-from IPython.display import JSON
+import warnings
+warnings.filterwarnings('ignore')
 
 
-from mediascope_api.core import net as mscore
-from mediascope_api.mediavortex import tasks as cwt
-from mediascope_api.mediavortex import catalogs as cwc
+class DataConfig:
+    """
+        Конфигурационные параметры
+    """
+    STATISTICS = ['Share']
+    COMMON_TIME_FILTER = 'timeBand1 >= 50000 AND timeBand1 < 290000'
+    COMMON_OPTIONS = {
+        "kitId": 3,
+        "totalType": "TotalChannels"
+    }
+    DEFAULT_SORTINGS = {'tvCompanyName': 'ASC'}
 
-# Настраиваем отображение
+    LOCATION_FILTER = None #Если None, то Дом и Дача
+    WEEKDAY_FILTER = None #Задаем дни недели
+    DAYTYPE_FILTER = None #Задаем тип дня
+    TARGETDEMO_FILTER = None #Дополнительный фильтр на ЦА для расчета Affinity
+    ADD_CITY_TO_BASEDEMO_FROM_REGION = True
+    ADD_CITY_TO_TARGETDEMO_FROM_REGION = True
+    # Список БЦА
+    BCA_LIST = ['All 18+', 'All 14-59', 'All 10-45', 'All 14-44', 
+                'All 14-54', 'All 25-49', 'All 25-54', 'All 4-45', 
+                'All 6-54', 'W 14-44', 'W 25-59']
+    
+    # Конфигурация специальных каналов
+    RUSSIA_1_CITIES = [
+        'БАРНАУЛ', 'ВЛАДИВОСТОК', 'ВОЛГОГРАД', 'ВОРОНЕЖ', 
+        'ЕКАТЕРИНБУРГ', 'ИРКУТСК', 'КАЗАНЬ', 'КЕМЕРОВО', 
+        'КРАСНОДАР', 'КРАСНОЯРСК', 'НИЖНИЙ НОВГОРОД', 'НОВОСИБИРСК', 
+        'ОМСК', 'ПЕРМЬ', 'РОСТОВ-НА-ДОНУ', 'САМАРА', 
+        'САНКТ-ПЕТЕРБУРГ', 'САРАТОВ', 'ТЮМЕНЬ', 'УФА', 
+        'ХАБАРОВСК', 'ЧЕЛЯБИНСК', 'ЯРОСЛАВЛЬ', 'СТАВРОПОЛЬ', 
+        'ТВЕРЬ', 'ТОМСК'
+                      ]
+    
+    # Список колонок России 1
+    RUSSIA_COLUMNS = [
+        'Date', 'РОССИЯ 1 (БАРНАУЛ)', 'РОССИЯ 1 (ВЛАДИВОСТОК)', 'РОССИЯ 1 (ВОЛГОГРАД)',  'РОССИЯ 1 (ВОРОНЕЖ)',
+        'РОССИЯ 1 (ЕКАТЕРИНБУРГ)',  'РОССИЯ 1 (ИРКУТСК)',  'РОССИЯ 1 (КАЗАНЬ)',  'РОССИЯ 1 (КЕМЕРОВО)',
+        'РОССИЯ 1 (КРАСНОДАР)',  'РОССИЯ 1 (КРАСНОЯРСК)',  'РОССИЯ 1 (НИЖНИЙ НОВГОРОД)',  'РОССИЯ 1 (НОВОСИБИРСК)',
+        'РОССИЯ 1 (ОМСК)',  'РОССИЯ 1 (ПЕРМЬ)',  'РОССИЯ 1 (РОСТОВ-НА-ДОНУ)',  'РОССИЯ 1 (САМАРА)',
+        'РОССИЯ 1 (САНКТ-ПЕТЕРБУРГ)',  'РОССИЯ 1 (САРАТОВ)',  'РОССИЯ 1 (ТЮМЕНЬ)',  'РОССИЯ 1 (УФА)',
+        'РОССИЯ 1 (ХАБАРОВСК)',  'РОССИЯ 1 (ЧЕЛЯБИНСК)',  'РОССИЯ 1 (ЯРОСЛАВЛЬ)',  'РОССИЯ 1 (СТАВРОПОЛЬ)',
+        'РОССИЯ 1 (ТВЕРЬ)', 'РОССИЯ 1 (ТОМСК)'
+    ]
+    
+    # Список колонок ГТРК
+    GTRK_COLUMNS = [
+        'Date', 'ГТРК БАРНАУЛ   ВСЕ 18+', 'ГТРК ВЛАДИВОСТОК   ВСЕ 18+',
+        'ГТРК ВОЛГОГРАД   ВСЕ 18+', 'ГТРК ВОРОНЕЖ   ВСЕ 18+', 'ГТРК ЕКАТЕРИНБУРГ   ВСЕ 18+',
+        'ГТРК ИРКУТСК   ВСЕ 18+', 'ГТРК КАЗАНЬ   ВСЕ 18+', 'ГТРК КЕМЕРОВО   ВСЕ 18+',
+        'ГТРК КРАСНОДАР   ВСЕ 18+', 'ГТРК КРАСНОЯРСК   ВСЕ 18+', 'ГТРК НИЖНИЙ НОВГОРОД   ВСЕ 18+',
+        'ГТРК НОВОСИБИРСК   ВСЕ 18+', 'ГТРК ОМСК   ВСЕ 18+', 'ГТРК ПЕРМЬ   ВСЕ 18+',
+        'ГТРК РОСТОВ-НА-ДОНУ   ВСЕ 18+', 'ГТРК САМАРА   ВСЕ 18+', 'ГТРК САНКТ-ПЕТЕРБУРГ   ВСЕ 18+',
+        'ГТРК САРАТОВ   ВСЕ 18+', 'ГТРК ТЮМЕНЬ   ВСЕ 18+', 'ГТРК УФА   ВСЕ 18+',
+        'ГТРК ХАБАРОВСК   ВСЕ 18+', 'ГТРК ЧЕЛЯБИНСК  ВСЕ 18+', 'ГТРК ЯРОСЛАВЛЬ   ВСЕ 18+',
+        'ГТРК СТАВРОПОЛЬ   ВСЕ 18+', 'ГТРК ТВЕРЬ   ВСЕ 18+', 'ГТРК ТОМСК   ВСЕ 18+'
+                ]
 
-# Включаем отображение всех колонокv
-pd.set_option('display.max_columns', None)
 
-# Cоздаем объекты для работы с TVI API
-mnet = mscore.MediascopeApiNetwork()
-mtask = cwt.MediaVortexTask()
-cats = cwc.MediaVortexCats()
-
-
-
-#Класс, который мьютит все принты в консоли
-class WrapperNoPrints:
-    def __enter__(self):
-        self._original_stdout = sys.stdout
-        sys.stdout = None
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        sys.stdout = self._original_stdout
-
-        
 
 class LeaderShipDataExtractor:
     """
@@ -120,193 +150,299 @@ class LeaderShipDataExtractor:
         output_data = pd.merge(example_share, data_updated, on = ['Телеканал', 'Город', 'БЦА'], how = 'left')
         return output_data
     
-    
+
     @staticmethod
-    def get_data(date_filter, company_filter, basedemo_filter, regions_id,
-            time_filter = 'timeBand1 >= 50000 AND timeBand1 < 290000',
-            statistics = ['Share'],
-            slices = ['regionName', #регион
-                      'tvCompanyName' #телесеть
-                     ],
-            sortings = {'tvCompanyName':'ASC'}, #Указываем сортировки'''
-            options = {
-                        "kitId": 3, #TV Index Cities  
-                        "totalType": "TotalChannels" #база расчета Share: Total Channels. Возможны опции: TotalTVSet, TotalChannelsThem
-                      },
-             location_filter = None, #Если None, то Дом и Дача
-             weekday_filter = None, #Задаем дни недели
-             daytype_filter = None, #Задаем тип дня
-             targetdemo_filter = None, #Дополнительный фильтр на ЦА для расчета Affinity
-             add_city_to_basedemo_from_region = True,
-             add_city_to_targetdemo_from_region = True):
-        tasks = []
+    def build_json_tasks(
+        date_filter, regions_params, slices, sortings,
+        time_filter = DataConfig.COMMON_TIME_FILTER,
+        statistics = DataConfig.STATISTICS,
+        options = DataConfig.COMMON_OPTIONS,
+        location_filter = DataConfig.LOCATION_FILTER,
+        weekday_filter = DataConfig.WEEKDAY_FILTER,
+        daytype_filter = DataConfig.DAYTYPE_FILTER,
+        targetdemo_filter = DataConfig.TARGETDEMO_FILTER,
+        add_city_to_basedemo_from_region = DataConfig.ADD_CITY_TO_BASEDEMO_FROM_REGION,
+        add_city_to_targetdemo_from_region = DataConfig.ADD_CITY_TO_TARGETDEMO_FROM_REGION
+    ):
+        json_tasks = {}
+        
+        for group_name, config in regions_params.items():
 
-        # Для каждого региона формируем задание и отправляем на расчет
-        for reg_id, reg_name in regions_id.items():
+            group_tasks = {}
 
-            project_name = reg_name
+            for i, company in enumerate(config['companies']):
+                task = BaseDataService._build_common_params(
+                    date_filter = date_filter,
+                    company_filter = company,
+                    basedemo_filter = config['basedemos'][i],
+                    regions_id = config['regions'][i],
+                    targets = config['targets'][i],  # Берем targets из конфига
+                    time_filter = time_filter,
+                    statistics = statistics,
+                    slices = slices,
+                    sortings = sortings,
+                    options = options,
+                    location_filter = location_filter,
+                    weekday_filter = weekday_filter,
+                    daytype_filter = daytype_filter,
+                    targetdemo_filter = targetdemo_filter,
+                    add_city_to_basedemo_from_region = add_city_to_basedemo_from_region,
+                    add_city_to_targetdemo_from_region = add_city_to_targetdemo_from_region
+                )
+                
+                if config['names'] and i < len(config['names']):
+                    key = config['names'][i]
+                elif config['key_template']:
+                    key = config['key_template'].format(i)
+                else:
+                    key = f"{group_name}_{i}"
+                    
+                # Добавляем задачу в группу
+                group_tasks[key] = task
 
-            #Передаем id региона в company_filter:
-            init_company_filter = company_filter
+            # Добавляем всю группу в основной результат
+            json_tasks[group_name] = group_tasks
+        
+        return json_tasks
 
-            if company_filter is not None:
-                company_filter = company_filter + f' AND regionId IN ({reg_id})'
 
-            else:
-                company_filter = f'regionId IN ({reg_id})'
+    @staticmethod
+    def build_json_tasks_parallel(
+        date_filter, regions_params, slices, sortings,
+        time_filter = DataConfig.COMMON_TIME_FILTER,
+        statistics = DataConfig.STATISTICS,
+        options = DataConfig.COMMON_OPTIONS,
+        location_filter = DataConfig.LOCATION_FILTER,
+        weekday_filter = DataConfig.WEEKDAY_FILTER,
+        daytype_filter = DataConfig.DAYTYPE_FILTER,
+        targetdemo_filter = DataConfig.TARGETDEMO_FILTER,
+        add_city_to_basedemo_from_region = DataConfig.ADD_CITY_TO_BASEDEMO_FROM_REGION,
+        add_city_to_targetdemo_from_region = DataConfig.ADD_CITY_TO_TARGETDEMO_FROM_REGION
+    ):
+        from concurrent.futures import ThreadPoolExecutor
+        import multiprocessing
+        
+        def process_group(group_data):
+            group_name, config = group_data
+            group_tasks = {}
+            
+            for i, company in enumerate(config['companies']):
+                task = BaseDataService._build_common_params(
+                    date_filter=date_filter,
+                    company_filter=company,
+                    basedemo_filter=config['basedemos'][i],
+                    regions_id=config['regions'][i],
+                    targets=config['targets'][i],
+                    time_filter=time_filter,
+                    statistics=statistics,
+                    slices=slices,
+                    sortings=sortings,
+                    options=options,
+                    location_filter=location_filter,
+                    weekday_filter=weekday_filter,
+                    daytype_filter=daytype_filter,
+                    targetdemo_filter=targetdemo_filter,
+                    add_city_to_basedemo_from_region=add_city_to_basedemo_from_region,
+                    add_city_to_targetdemo_from_region=add_city_to_targetdemo_from_region
+                )
+                
+                if config['names'] and i < len(config['names']):
+                    key = config['names'][i]
+                elif config['key_template']:
+                    key = config['key_template'].format(i)
+                else:
+                    key = f"{group_name}_{i}"
+                    
+                group_tasks[key] = task
+            
+            return group_name, group_tasks
+        
+        # Параллельная обработка групп
+        json_tasks = {}
+        with ThreadPoolExecutor(max_workers = 10) as executor:
+            results = executor.map(process_group, regions_params.items())
+            
+            for group_name, group_tasks in results:
+                json_tasks[group_name] = group_tasks
+        
+        return json_tasks
+     
 
-            # Формируем задание для API TV Index в формате JSON
-            task_json = mtask.build_timeband_task(date_filter=date_filter, 
-                                         weekday_filter=weekday_filter, daytype_filter=daytype_filter, 
-                                         company_filter=company_filter, time_filter=time_filter, 
-                                         basedemo_filter=basedemo_filter, targetdemo_filter=targetdemo_filter,
-                                         location_filter=location_filter, slices=slices, sortings=sortings,
-                                         statistics=statistics, options=options, 
-                                         add_city_to_basedemo_from_region=True,
-                                         add_city_to_targetdemo_from_region=True
-                                        )
-
-            # Для каждого этапа цикла формируем словарь с параметрами и отправленным заданием на расчет
-            tsk = {}
-            tsk['project_name'] = project_name
-            tsk['task'] = mtask.send_timeband_task(task_json)
-            tasks.append(tsk)
-            time.sleep(3)
-            company_filter = init_company_filter
-
-        tsks = mtask.wait_task(tasks)
-
-        # Получаем результат
-        results = []
-        for t in tasks:
-            tsk = t['task'] 
-            df_result = mtask.result2table(mtask.get_result(tsk), project_name = t['project_name'])        
-            results.append(df_result)
-        df = pd.concat(results)
-
+    @staticmethod
+    def get_data(
+                tasks,
+                statistics = DataConfig.STATISTICS,
+                slices = ['regionName', #регион
+                            'tvCompanyName' #телесеть
+                            ]
+                     ):
+        """
+            Метод для генерации задания API для руководителей групп
+        """
+        with WrapperNoPrints():
+            df = BaseDataService._execute_tasks(tasks)    
         # Приводим порядок столбцов в соответствие с условиями расчета
         df = df[['prj_name'] + slices + statistics]
         df['prj_name'] = df['prj_name'].str.upper()
         return df
-    
-    
+
+
     @staticmethod
-    def by_months_parallel_main_part(date_filter, company_name_list, basedemo_filter_list, regions_dict_list, bca_list_names):
+    def validate_dataframe(df):
         """
-        Функция для расчета долей для руководителей групп. ПАРАЛЛЕЛЬНАЯ ВЕРСИЯ
+            Проверяет DataFrame на валидность
         """
-        def get_data_wrapper(args):
-            """
-            Вспомогательная функция, принимающая кортеж аргументов
-            """
-            date_filt, company, basedemo, regions, name = args
-            try:
-                df = LeaderShipDataExtractor.get_data(date_filt, company, basedemo, regions)
-                return name, df
-            except Exception as e:
-                print(f"Ошибка при получении данных для {name}: {e}")
-                return name, pd.DataFrame()  # возвращаем пустой DataFrame в случае ошибки
-
-        # Подготавливаем список аргументов
-        args_list = [
-            (date_filter, company_name_list[j], basedemo_filter_list[j], regions_dict_list[j], bca_list_names[j])
-            for j in range(len(bca_list_names))
-        ]
-
-        # Используем ThreadPoolExecutor для параллельного выполнения
-        with ThreadPoolExecutor(max_workers=min(10, len(args_list))) as executor:
-            # Вариант 1: Используем map для простоты и безопасности
-            results = list(executor.map(get_data_wrapper, args_list))
-
-        # Обрабатываем результаты
-        res = {}
-        for name, df in results:
-            if not df.empty:  # добавляем только непустые DataFrame
-                res[name] = df
-
-        # Объединяем все DataFrame
-        if res:
-            result_dfs = list(res.values())
-            data = pd.concat(result_dfs, ignore_index=True)
-        else:
-            data = pd.DataFrame()
-
-        return data
+        if df is None:
+            return False
+        if not isinstance(df, pd.DataFrame):
+            return False
+        if df.empty:
+            return False
+        if df.isna().all().all():
+            return False
+        return True
 
 
-        
-        
     @staticmethod
-    def get_data_through_api_per_team_lead(date_filter,
-                             share_table,
-                             bca_list_names,
-                             company_name_list,
-                             company_filter_list_local_channels,
-                             basedemo_filter_list, 
-                             regions_dict_list,
-                             company_gtrk,
-                             vgtrk 
-                                          ):
+    def process_tasks_with_validation(json_tasks, get_data_func = None, max_workers = 10):
         """
-            Функция для выгрузки данных через API.
+        Обрабатывает задачи и возвращает результат с отчетом
+        
+        Args:
+            json_tasks: словарь с задачами для обработки
+            get_data_func: функция для получения данных (по умолчанию LeaderShipDataExtractor.get_data)
+            max_workers: максимальное количество потоков
         """
-        ############################################################### Выгрузка основной массы каналов-городов ##################################################################################################
-        res_tasks = LeaderShipDataExtractor.by_months_parallel_main_part(date_filter, company_name_list, basedemo_filter_list, regions_dict_list, bca_list_names)
+        if get_data_func is None:
+            get_data_func = LeaderShipDataExtractor.get_data
         
-        ############################################################### Выгрузка для Телеканала 78 (Санкт-Петербург) и Санкт-Петербург(Санкт-Петербург) ###############################################################
-        tasks_local_channels = []
-        for i in range(len(company_filter_list_local_channels)):
-            t = LeaderShipDataExtractor.get_data(date_filter, company_filter_list_local_channels[i], 'age >= 18', {2: 'САНКТ-ПЕТЕРБУРГ   ВСЕ 18+'})
-            tasks_local_channels.append(t)   
-        res_local_channels = pd.concat(tasks_local_channels , ignore_index = True)
+        full_res = []
+        validation_report = {}
 
+        for group, tasks in json_tasks.items():
+            group_results = []
+            problematic_count = 0
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers = max_workers) as executor:
+                futures = {executor.submit(get_data_func, json_params): json_params 
+                        for json_params in tasks.values()}
+                
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if LeaderShipDataExtractor.validate_dataframe(result):
+                        group_results.append(result)
+                    else:
+                        problematic_count += 1
+            
+            validation_report[group] = {
+                'total': len(tasks),
+                'successful': len(group_results),
+                'problematic': problematic_count
+            }
+            
+            if group_results:
+                full_res.append(pd.concat(group_results, ignore_index = True))
 
-        #Переименовывание Локальных каналов
-        l = list(res_local_channels['tvCompanyName'])
-        l_converted = []
-        for i in range(len(l)):
-            if l[i] == 'ТЕЛЕКАНАЛ 78 (САНКТ-ПЕТЕРБУРГ)':
-                l_converted.append('ТЕЛЕКАНАЛ 78 САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)')
-            if l[i] == 'САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)':
-                l_converted.append('ТЕЛЕКАНАЛ САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)')
-        res_local_channels['tvCompanyName'] = res_local_channels['tvCompanyName'].replace(l, l_converted)
-
-
-        ############################################################### Выгрузка для Четвертый канал (Екатеринбург) ##################################################################################################
-        channel_4 = {12: 'ЕКАТЕРИНБУРГ   ВСЕ 14-44'}
-        task_4_channel = LeaderShipDataExtractor.get_data(date_filter, 'tvCompanyId = 4654', 'age >= 14 AND age <= 44', channel_4)
-
+        data_api = pd.concat(full_res, ignore_index=True) if full_res else pd.DataFrame()
         
-        ############################################################################ Выгрузка для ГТРК ################################################################################################################
-        from concurrent.futures import ThreadPoolExecutor
-
-        date_filter = date_filter
-        def process_item(i):
-            return LeaderShipDataExtractor.get_data(date_filter, company_gtrk[i], 'age >= 18', vgtrk[i])
-
-        # Параллельное выполнение
-        with ThreadPoolExecutor() as executor:
-            tasks_vgtrk = list(executor.map(process_item, range(len(vgtrk))))
-        res_vgtrk = pd.concat(tasks_vgtrk, ignore_index=True)
-
-        #Объединение результатов между собой    
-        df_fact_month = pd.concat([res_tasks, res_local_channels], ignore_index = True)
-        output_fact_month = LeaderShipDataExtractor.get_output(date_filter, df_fact_month, share_table)
-        #Название колонки с временным периодом
-        date_column = output_fact_month.columns[3]
+        # Вывод отчета
+        print("Отчет по обработке:")
+        for group, report in validation_report.items():
+            success_rate = report['successful'] / report['total'] * 100
+            print(f"Группа {group}: {report['successful']}/{report['total']} ({success_rate:.1f}%) успешно")
         
-        #Отбор России 1
-        filtered_df = output_fact_month[(output_fact_month['Телеканал'] == 'РОССИЯ 1')]
-        senza_russia_1 = output_fact_month[(output_fact_month['Телеканал'] != 'РОССИЯ 1')]
+        print(f"✅ Итоговый размер data_api: {data_api.shape}")
+        
+        return data_api
+    
 
-        #Суммирование значений долей по каналу Пятница Екатеринбург
-        output_fact_month_ = output_fact_month.copy()
-        output_fact_month_['Теканал+Город+БЦА']= output_fact_month_['Телеканал']+ ' ' + output_fact_month_['Город'] + ' '+ output_fact_month_['БЦА']
-        senza_pyatniza_ekb = output_fact_month_[(output_fact_month_['Теканал+Город+БЦА'] != 'ПЯТНИЦА ЕКАТЕРИНБУРГ ВСЕ 14-44')][list(output_fact_month_.columns)[:-1]]
-        filtered_pyatniza = output_fact_month_[(output_fact_month_['Теканал+Город+БЦА'] == 'ПЯТНИЦА ЕКАТЕРИНБУРГ ВСЕ 14-44')][list(output_fact_month_.columns)[:-1]]
+    @staticmethod
+    def make_api_calculation(date_filter, json_tasks: dict, share_table: pd.DataFrame):
+        """
+            Метод реализует выгрузку данных для руководителей групп для конкретного временного периода данных.
+        """
+        # 1. Выгрузка данных для всевозможных групп
+        data_api = LeaderShipDataExtractor.process_tasks_with_validation(json_tasks)
 
-        filtered_full = output_fact_month_[(output_fact_month_['Теканал+Город+БЦА'] != 'ПЯТНИЦА ЕКАТЕРИНБУРГ ВСЕ 14-44') & (output_fact_month_['Телеканал'] != 'РОССИЯ 1')][list(output_fact_month_.columns)[:-1]]
-        Russia_1 = LeaderShipDataExtractor.sum_2_channels(res_vgtrk, filtered_df, date_column)
-        Channel_4 = LeaderShipDataExtractor.sum_2_channels(task_4_channel, filtered_pyatniza, date_column)
-        output_data = LeaderShipDataExtractor.make_output(Russia_1, Channel_4, filtered_full, share_table)
+        # 2. Изменение названий локальных каналов (оптимизированная версия)
+        mask_78 = data_api['tvCompanyName'] == 'ТЕЛЕКАНАЛ 78 (САНКТ-ПЕТЕРБУРГ)'
+        mask_spb = data_api['tvCompanyName'] == 'САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)'
+        
+        data_api.loc[mask_78, 'tvCompanyName'] = 'ТЕЛЕКАНАЛ 78 САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)'
+        data_api.loc[mask_spb, 'tvCompanyName'] = 'ТЕЛЕКАНАЛ САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)'
+        
+        # 3. Отбор каналов ГТРК (оптимизированная версия)
+        gtrk_mask = data_api['tvCompanyName'].str.contains('ГТРК', case = False, na = False, regex = False)
+        gtrk = data_api[gtrk_mask].copy()
+        
+        # 4. Отбор каналов Четвертый канал (Екатеринбург)
+        channel_4_mask = data_api['tvCompanyName'] == 'ЧЕТВЕРТЫЙ КАНАЛ (ЕКАТЕРИНБУРГ)'
+        channel_4 = data_api[channel_4_mask].copy()
+        
+        # 5. Формирование выходной таблицы
+        output_df = LeaderShipDataExtractor.get_output(date_filter, data_api, share_table)
+        
+        # Выделяем название колонки с временным периодом в отдельную переменную
+        date_column = output_df.columns[3]
+        
+        # 6. Отбор России 1 (оптимизированные маски)
+        russia_1_mask = output_df['Телеканал'] == 'РОССИЯ 1'
+        russia_1_only = output_df[russia_1_mask].copy()
+        senza_russia_1 = output_df[~russia_1_mask].copy()
+        
+        # 7. Преобразования с выходным ДатаФреймом
+        output = output_df.copy()
+        # Оптимизированное создание колонки (избегаем + для строк)
+        output['Теканал+Город+БЦА'] = output['Телеканал'].str.cat([output['Город'], output['БЦА']], sep = ' ')
+        
+        # 8. Отбор Пятницы (Екатеринбург) все 14-44
+        pyatniza_mask = output['Теканал+Город+БЦА'] == 'ПЯТНИЦА ЕКАТЕРИНБУРГ ВСЕ 14-44'
+        senza_pyatniza_ekb = output[~pyatniza_mask][output.columns[:-1]].copy()
+        pyatniza_only = output[pyatniza_mask][output.columns[:-1]].copy()
+        
+        # 9. Формируем датафрейм без России 1 и Пятницы (Екатеринбург)
+        filtered_full_mask = ~pyatniza_mask & ~russia_1_mask
+        filtered_full = output[filtered_full_mask][output.columns[:-1]].copy()
+        
+        # 10. Вычисления
+        Russia_1_with_gtrk = LeaderShipDataExtractor.sum_2_channels(gtrk, russia_1_only, date_column)
+        Pyatniza_with_channel_4 = LeaderShipDataExtractor.sum_2_channels(channel_4, pyatniza_only, date_column)
+        
+        output_data = LeaderShipDataExtractor.make_output(Russia_1_with_gtrk, Pyatniza_with_channel_4, filtered_full, share_table)
         return output_data
+
+    
+
+    @staticmethod
+    def export_leadership_data(
+                selected_periods: list, 
+                date_periods: dict, 
+                calculation_params: dict, 
+                share_table: pd.DataFrame,
+                slices = [
+                    'regionName', #регион
+                    'tvCompanyName' #телесеть
+                                ],
+                sortings = {'tvCompanyName':'ASC'}
+                ):
+        """
+            Метод реализует выгрузку данных для руководителей групп для серии временных периодов
+        """
+        results = {}
+        for period in selected_periods:
+            date_filter = date_periods[period]
+            
+            # Формирование задач в формате json
+            #json_tasks = LeaderShipDataExtractor.build_tasks_threaded(calculation_params, date_filter)
+            json_tasks = LeaderShipDataExtractor.build_json_tasks(date_filter, calculation_params, slices, sortings)
+            
+            ##################### ПОСЛЕДОВАТЕЛЬНАЯ ВЕРСИЯ СОЗДАНИЯ ЗАДАЧ. ОСТАВИТЬ!!!!!!!!! #####################
+            #json_tasks = {}
+            #for key, params in regions_params.items():
+            #    json_tasks[key] = LeaderShipDataExtractor.build_json_tasks(date_filter, *params)
+            #####################################################################################################
+            results[period] = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
+    
+        return results
+        
+    

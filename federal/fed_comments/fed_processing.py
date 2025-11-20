@@ -163,6 +163,7 @@ class Federal_Processing:
         ################# Генерация комментариев, исходя из файла со сравнением прогнозов #################
         data_output_dates, channels_not_exist, channels_not_enough_reasons = Federal_Comments(forecast_comparison, 
                                             df_by_dates_need_comment).get_result(df_limits,  date_new_forecast, kus_file, cummulative_diff_flag = False, flag = True)
+        
         smi = SMI_info(self.smi_file)
         smi_by_days, channels_not_found_smi = smi.get_volumes_comments(delta_df = df_by_dates_need_comment, 
                                                 channels_need_replace = channels_need_replace,

@@ -1,6 +1,8 @@
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+import locale
+locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -116,6 +118,65 @@ class Preprocessing:
                                                             'Вс': 'Воскресенье'
                                                         })
         
+        #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
+        #if 'Камеди клаб' in list(VIMB['Название программы']):
+        #    VIMB['Название программы'].replace('Камеди клаб', 'Комеди Клаб', inplace = True)
+        return VIMB
+    
+    
+    def parse_VIMB_un_altro(self, sheet_name: str = 'ГРАФИК', skiprows = 1):
+        """
+            Ещё один метод для парсинга файла с сеткой VIMB из отчета Размещение -> Сводная таблица
+            Args:
+                sheet_name: имя листа, который будем считывать из файла. По умолчанию ГРАФИК.
+                skiprows: количество строк, которые будем пропускать в файле. По умолчанию 1.
+            Returns:
+                VIMB: причёсанный DataFrame с сеткой VIMB.
+        """
+        # Чтение файла
+        df = pd.read_excel(self.filename, sheet_name = sheet_name, skiprows = skiprows)
+
+        # Оставляем только нужные столбцы
+        data = df[['Дата', 'Время выхода', 'Прод-ть', 'Название программы']]
+
+        # Преобразование столбца в datetime
+        data['Дата'] = pd.to_datetime(data['Дата'], format = '%d.%m.%Y')
+        
+        # Вычленяем день недели
+        data['День недели'] = data['Дата'].dt.strftime('%A').str.capitalize()
+
+
+        data['Время выхода_'] = pd.to_timedelta(data['Время выхода'].astype(str))
+        data['Время выхода'] = data['Время выхода_'].apply(
+            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+        )
+
+        data['Прод-ть_'] = pd.to_timedelta(data['Прод-ть'].astype(str))
+        data['Прод-ть'] = data['Прод-ть_'].apply(
+            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+        )
+
+        # Считаем время окончания
+        data['Время окончания _'] = data['Время выхода_'] + data['Прод-ть_']
+
+        # Если время окончания превышает 24 часа, корректируем отображение
+        data['Время окончания'] = data['Время окончания _'].apply(
+            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+        )
+
+        # Оставляем только нужные столбцы
+        VIMB = data[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели']]
+
+        # Преобразуем столбец 'Дата' в datetime
+        VIMB['Дата'] = pd.to_datetime(VIMB['Дата'])
+
+        # Создаем маску и увеличиваем дату
+        mask = VIMB['Время выхода'] == '05:00:00'
+        VIMB.loc[mask, 'Дата'] = VIMB.loc[mask, 'Дата'] + pd.Timedelta(days = 1)
+
+        # Если нужно вернуть в строковый формат
+        VIMB['Дата'] = VIMB['Дата'].dt.strftime('%Y-%m-%d')
+
         #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
         if 'Камеди клаб' in list(VIMB['Название программы']):
             VIMB['Название программы'].replace('Камеди клаб', 'Комеди Клаб', inplace = True)

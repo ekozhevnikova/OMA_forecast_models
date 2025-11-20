@@ -68,7 +68,8 @@ class Federal_Postprocessing:
             for j in range(len(df_summ)):
                 channel_j = df_summ.iloc[j]['Канал']
                 month_j = df_summ.iloc[j]['Месяц']
-                date_j = by_days.iloc[j]['Дата']
+                date_j = df_summ.iloc[j]['Дата']
+                #print(date_i, date_j, channel_i, channel_j)
                 additional_comment = df_summ.iloc[j]['Доп столбец']
 
                 if channel_i == channel_j and month_i == month_j:

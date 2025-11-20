@@ -544,19 +544,19 @@ class Federal_Comments:
             delta_GRP = new_data['GRP ТП канала'] - old_data['GRP ТП канала']
             return round(delta_GRP)
     
-        #Если поменялись ТП Канал
+        #Если поменялись КСР
         elif changed_statistic == 'GRP КСР':
             delta_GRP = new_data['GRP КСР'] - old_data['GRP КСР']
             return round(delta_GRP)
         
-         #Если поменялись ТП Канал
+         #Если поменялись GRP СП
         elif changed_statistic == 'GRP СП':
             delta_GRP = new_data['GRP СП'] - old_data['GRP СП']
             return round(delta_GRP)
     
             
         #Если есть ТП Канала
-        if channel in ['ТНТ 4', 'ТВ-3', 'СОЛНЦЕ',
+        if channel in ['ТНТ 4', 'ТВ-3', 'СОЛНЦЕ', 'Ю',
                     'СУББОТА', 'СТС LOVE', 'СТС', 'РОССИЯ 24', 
                     'ПЯТНИЦА', 'МАТЧ ТВ', 'МУЗ ТВ', 
                     'ЗВЕЗДА', '2X2', 'ТНТ', 'ЧЕ']:
@@ -696,6 +696,7 @@ class Federal_Comments:
                         #Рассматривается отдельно ситуация с СП. Если СП < 0 => КР растет; если СП > 0 => КР падает.
                         if statistic == 'GRP СП' or statistic == 'GRP ТП канала' or statistic == 'GRP Телемагазины':
                             if value * delta_grp < 0:
+                                #print(Channel, value, delta_grp, date, forecast_new)
                                 result_contributors[statistic] = value
                         else:
                             if value * delta_grp > 0:

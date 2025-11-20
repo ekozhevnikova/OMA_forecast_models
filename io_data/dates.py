@@ -209,6 +209,25 @@ class Dates_Operations:
             Returns:
                 dates: Список из дат за последние n недель
         """
-        #start = start_date.date()
-        dates = [(start_date - timedelta(days = i)).strftime('%Y-%m-%d') for i in range(((7 * n) - 1), -1, -1)]
-        return dates
+        try:
+            # Пытаемся преобразовать в единичный Timestamp
+            if hasattr(start_date, 'iloc'):
+                start_date = start_date.iloc[0]
+            elif hasattr(start_date, '__len__') and len(start_date) > 0:
+                start_date = start_date[0] if hasattr(start_date, '__getitem__') else start_date
+            
+            start_date = pd.Timestamp(start_date)
+            
+            # Генерируем даты
+            dates = []
+            for i in range(7 * n, 0, -1):
+                date = start_date - pd.Timedelta(days=i)
+                dates.append(date.strftime('%Y-%m-%d'))
+            
+            return dates
+            
+        except Exception as e:
+            print(f"Ошибка в get_last_4_weeks: {e}")
+            print(f"Тип start_date: {type(start_date)}")
+            print(f"Значение start_date: {start_date}")
+            return []
