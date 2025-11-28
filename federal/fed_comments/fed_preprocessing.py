@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import os
 import re
 from datetime import datetime
 
@@ -111,8 +112,9 @@ class Federal_Preprocessing:
                 need_data: обрезанные данные из Федерального кубика
                 df_limits: DataFrame с порогами
             Return:
-                general_df_by_dates: DataFrame с изменениями по дням для каждого канала   
-                df_by_dates_need_comment: DataFrame с изменениями по дням для каждого канала, приведенный к определенному виду
+                general_df_by_dates: dict of DataFrames с изменениями по дням для каждого канала.
+                df_by_dates_need_comment: dict of DataFrames с изменениями по дням для каждого канала, приведенный к определенному виду.
+                Ключ: год, по которому обнаружены изменения по каналам; Значение: датафрейм с изменениями.
         """
         def round_half_up(x):
             return int(x + 0.5)
@@ -154,9 +156,8 @@ class Federal_Preprocessing:
             
             df_difference_per_day = pd.DataFrame(data_with_difference_by_dates).T
             if not df_difference_per_day.empty:
-                df_difference_per_day.dropna(inplace=True)
-                df_difference_per_day.sort_values(by='Месяц', inplace=True)
-                #print(df_difference_per_day)
+                df_difference_per_day.dropna(inplace = True)
+                df_difference_per_day.sort_values(by = 'Месяц', inplace = True)
             
             data_full_by_days[column] = df_difference_per_day
 
@@ -166,13 +167,38 @@ class Federal_Preprocessing:
             if not data_full_by_days[channel].empty:
                 results_by_dates.append(data_full_by_days[channel])
 
-        general_df_by_dates = pd.concat(results_by_dates).reset_index(drop=True) if results_by_dates else pd.DataFrame()
-        #Отбор каналов и дат, которые вылетели за порог
-        df_by_dates_need_comment = general_df_by_dates.loc[(general_df_by_dates['Flag'] == True)]
-        df_by_dates_need_comment = df_by_dates_need_comment.reset_index(drop = True)
-        df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
-        df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'])
-        return general_df_by_dates, df_by_dates_need_comment
+        general_df_by_dates = pd.concat(results_by_dates).reset_index(drop = True) if results_by_dates else pd.DataFrame()
+        ##Отбор каналов и дат, которые вылетели за порог
+        #df_by_dates_need_comment = general_df_by_dates.loc[(general_df_by_dates['Flag'] == True)]
+        #df_by_dates_need_comment = df_by_dates_need_comment.reset_index(drop = True)
+        #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
+        #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'])
+        #return general_df_by_dates, df_by_dates_need_comment
+    
+        ### НОВЫЙ КУСОК ###
+        # Поиск уникальных лет в таблице
+        unique_years = Federal_Preprocessing.get_years_from_table(general_df_by_dates)
+
+        # Создаем словарь, в котором ключ: уникальный год, значение: датафрейм с изменениями по дням
+        general_dict_by_dates = {
+                year: general_df_by_dates[general_df_by_dates['Месяц'].str.endswith(f"'{(str(year))[-2:]}")].copy()
+                for year in unique_years
+            }
+
+        # Создаем словарь для хранения изменений по дням каналов, которые вылетели за порог
+        by_dates_need_comment_dict = {}
+
+        for year, by_dates in general_dict_by_dates.items():
+            
+            #Отбор каналов и дат, которые вылетели за порог
+            by_dates_need_comment = by_dates.loc[(by_dates['Flag'] == True)]
+            by_dates_need_comment = by_dates_need_comment.reset_index(drop = True)
+            by_dates_need_comment['Дата'] = pd.to_datetime(by_dates_need_comment['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
+            by_dates_need_comment['Дата'] = pd.to_datetime(by_dates_need_comment['Дата'])
+            
+            by_dates_need_comment_dict[year] = by_dates_need_comment
+
+        return general_dict_by_dates, by_dates_need_comment_dict
     
     
     def calculate_accumulated_diff(self, general_df_by_dates, df_limits):
@@ -206,7 +232,7 @@ class Federal_Preprocessing:
 
 
     @staticmethod
-    def influence_out_house(kus_file):
+    def influence_out_house(kus_file: str):
         """
             Функция для чтения файла с коэффициентами внедома
             Args:
@@ -264,3 +290,93 @@ class Federal_Preprocessing:
             return KUS_koeff_cleaned, extracted_date_
         except FileNotFoundError:
             print('Файл с прогнозом КУСа не найден! Пожалуйста, добавьте его в соответствующую папку!')
+    
+    
+    @staticmethod
+    def find_data_file(folder_path: str, start_date: str, desired_year: int, param: str) -> str:
+        """
+            Метод для поиска нужного файла со сравнением прогнозов а также с прогнозом КУС.
+            - Для метода "КУС" поиск производится по году, на который строится прогноз.
+            - Для метода "Сравнение прогнозов" поиск производится по файлам исключительно формата .xlsm.
+              Поиск файла производится, исходя из желаемого года и даты старта.
+        """
+        if param not in ['Сравнение прогнозов', 'КУС']:
+            raise ValueError("Метод должен быть 'Сравнение прогнозов' или 'КУС'.")
+        
+        start_date_copy = start_date
+                             
+        if param == 'Сравнение прогнозов':
+            start_date_copy = pd.to_datetime(start_date_copy)
+
+            for file in os.listdir(folder_path):
+                
+                if 'Сравнение прогнозов' in file and file.endswith('.xlsm'):
+                    
+                    #try:
+                    file_path = os.path.join(folder_path, file)
+                    df = pd.read_excel(file_path, skiprows = 2, sheet_name = 'Сводная')
+                    y_comp = int(df.iloc[1]['Год'])
+                    s_comp = df.iloc[0]['Год']
+                    start_comp = pd.to_datetime(s_comp)
+                    
+                    # Исправлено: используем параметры функции
+                    if desired_year == y_comp and start_date_copy == start_comp:
+                        print(f'Найден подходящий файл: {file}')
+                        return file_path
+                            
+                    #except Exception as e:
+                    #    print(f'Ошибка при чтении файла {file}: {e}')
+            
+            #print('Подходящий файл не найден')
+            return None
+
+        elif param == 'КУС':
+            for file in os.listdir(folder_path):
+                # Ищем файлы, которые содержат KUS и имеют расширение .xlsx
+                if 'KUS' in file and file.endswith('.xlsx'):
+                    #try:
+                    file_path = os.path.join(folder_path, file)
+                    KUS_forecast = pd.read_excel(file_path, sheet_name = 'было-стало', skiprows = 5, nrows = 3)
+                    
+                    # Вычленяем год из файла
+                    forecast_year = int(re.findall(r'\d+', KUS_forecast['Unnamed: 13'].loc[0])[0])
+                    
+                    if desired_year == forecast_year:
+                        print(f"Найден подходящий файл KUS: {file}")
+                        return file_path
+                            
+                    #except Exception as e:
+                    #    print(f"Ошибка при чтении файла {file}: {e}")
+            
+            #print("Подходящий файл KUS не найден")
+            return None
+    
+
+    @staticmethod
+    def get_years_from_table(df, column: str = 'Месяц', century: int = 2000) -> list:
+        """
+            Извлекает уникальные годы из столбца "Месяц". На выходе формирует список из всевозможных лет.
+            Args:
+                df: датафрейм, в котором собираемся производить поиск уникальных лет
+                century: текущий век. По умолчанию предполагается, что 21 век.
+                column: название столбца, в котором будем производить поиск. По умолчанию столбец с названием "Месяц".
+                        Месяц записан в виде "Январь'25".
+            Returns: list: список из уникальных лет, отсортированных в порядке увеличения.
+        """        
+        years = set()
+        
+        for month_str in df[column]:
+            
+            try:
+                # Разделяем строку на месяц и год
+                year_part = month_str.split("'")[1]
+                
+                # Преобразуем в полный год (предполагаем 21 век)
+                full_year = century + int(year_part)
+                years.add(full_year)
+                
+            except (IndexError, ValueError):
+                continue
+
+        print(f'Найдено {len(years)} уникальных года: {sorted(list(years))}')
+        return sorted(list(years))
