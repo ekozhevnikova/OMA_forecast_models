@@ -198,7 +198,7 @@ class Federal_Processing:
     
 
     ### НОВАЯ ВЕРСИЯ МЕТОДА BY_DAYS ###
-    def BY_DAYS_NEW(self, folder_path: str, start_date: str, smi_criteria):
+    def BY_DAYS(self, folder_path: str, start_date: str, smi_criteria):
         """
             Функция для генерация комментариев по дням.
             Args:
@@ -369,7 +369,7 @@ class Federal_Processing:
     
 
     ### НОВАЯ ВЕРСИЯ МЕТОДА SUMM ###
-    def SUMM_NEW(self, folder_path, start_date: str, smi_criteria):
+    def SUMM(self, folder_path, start_date: str, smi_criteria):
         """
             Функция для генерация накопленных комментариев за период.
             Args:
