@@ -83,7 +83,7 @@ class Federal_Comments:
         for changed_atribute, new_values in new_data.items():
             new_data[changed_atribute] = float(data_dict[changed_atribute][data_dict[changed_atribute]['Канал'].isin([channel])][f'{month}.1'])
         return old_data, new_data
-
+    
 
     def get_reasons(self, month: str, channel: str, kus_df, date_of_forecast, kus_date, cummulative_diff_flag):
         """
@@ -100,396 +100,548 @@ class Federal_Comments:
                 Вспомогательная функция для расчёта изменения GRP СП.
             """
             old_data, new_data = self.search_channel_and_info(month, channel)
-            delta = new_data['GRP СП'] - old_data['GRP СП']
-            return delta
+            return new_data['GRP СП'] - old_data['GRP СП']
 
-        #Если изменения по коэффициентам внедома составляют больше 0.5 общего изменения КУСа, то это внедом
+        # Конфигурация пороговых значений по каналам
+        CHANNEL_THRESHOLDS = {
+            'НТВ': {'share': 0.001, 'ttv': 0.001, 'kus': 0.001},
+            'РОССИЯ 1': {'share': 0.001, 'ttv': 0.001, 'kus': 0.001},
+            'СТС': {'share': 0.002, 'ttv': 0.002, 'kus': 0.002},
+            'ПЯТЫЙ КАНАЛ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015},
+            'РЕН ТВ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015},
+            'ТНТ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015},
+            'ДОМАШНИЙ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017},
+            'ПЕРВЫЙ КАНАЛ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017},
+            'МАТЧ ТВ': {'share': 0.006, 'ttv': 0.005, 'kus': 0.006},
+            'СУББОТА': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
+            'МУЗ ТВ': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
+            'ПЯТНИЦА': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
+            'РОССИЯ 24': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
+            'КАРУСЕЛЬ': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
+            'СОЛНЦЕ': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
+            'ЗВЕЗДА': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
+            'Ю': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003},
+            'ТВ-3': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003},
+            'ТВ ЦЕНТР': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003},
+            'СПАС': {'share': 0.008, 'ttv': 0.008, 'kus': 0.008},
+            'ТНТ 4': {'share': 0.0038, 'ttv': 0.0038, 'kus': 0.0038},
+            'ЧЕ': {'share': 0.0055, 'ttv': 0.0055, 'kus': 0.0055},
+            '2X2': {'share': 0.0067, 'ttv': 0.0067, 'kus': 0.0067},
+            'СТС LOVE': {'share': 0.0055, 'ttv': 0.0055, 'kus': 0.0055},
+            'МИР': {'share': 0.0045, 'ttv': 0.0045, 'kus': 0.0045}
+        }
+
+        # Общие пороговые значения
+        COMMON_THRESHOLDS = {
+            'Т Общие': 0.011,
+            'GRP ТП канала': 0.025,
+            'GRP КСР': 0.01,
+            'GRP Телемагазины': 1e-3,
+            'GRP СП': 1e-2
+        }
+
+        # Специальные пороги для GRP СП
+        SPECIAL_GRP_SP_THRESHOLDS = {
+            'ЗВЕЗДА': 20,
+            'РЕН ТВ': 20,
+            'СУББОТА': 15
+        }
+
         criteria = 0.5
-
         reasons = []
         _month = f'{month}.2'
+
+        # Получение данных
         df_channel = self.df[self.df['Канал'] == channel]
         data = df_channel[['Канал', 'Значения', _month]].dropna()
         data_copy = df_channel[['Канал', 'Значения', _month]]
-
-        date_of_forecast = pd.to_datetime(date_of_forecast)
         
+        date_of_forecast = pd.to_datetime(date_of_forecast)
 
-        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-           (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-           (date_of_forecast != kus_date and cummulative_diff_flag == True):
+        # Получение значения outhouse при выполнении условий
+        should_check_outhouse = ((date_of_forecast == kus_date) or 
+                            (date_of_forecast != kus_date and cummulative_diff_flag))
+        
+        if should_check_outhouse:
             outhouse = float(kus_df.loc[kus_df['Канал'] == channel, _month])
 
+        # Получение порогов для текущего канала
+        channel_thresholds = CHANNEL_THRESHOLDS.get(channel, {})
         
-        atributes = list(data['Значения'])
-        for i in range(len(atributes)):
-            if data.iloc[0]['Канал'] in ['НТВ', 'РОССИЯ 1']:
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.001:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.001:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.001:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.001:
-                                reasons.append('КУС')
-            
+        # Вспомогательная функция для проверки значений
+        def check_value(attribute, value, threshold):
+            if abs(value) >= threshold:
+                return True
+            return False
 
-            elif data.iloc[0]['Канал'] == 'СТС':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.002:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.002:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.002:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.002:
-                                reasons.append('КУС')
+        # Вспомогательная функция для проверки NaN случаев
+        def check_nan_case(attribute, month_base, month_alt):
+            base_val = float(data_copy.loc[data_copy['Значения'] == attribute, month_base])
+            alt_val = float(data_copy.loc[data_copy['Значения'] == attribute, month_alt])
+            return (abs(base_val) == 0.0 and abs(alt_val) != 0.0) or (abs(base_val) != 0.0 and abs(alt_val) == 0.0)
 
+        # Основной цикл проверки атрибутов
+        attributes = list(data['Значения'])
+        for attribute in attributes:
+            try:
+                value = float(data.loc[data['Значения'] == attribute, _month])
+            except (ValueError, TypeError):
+                continue
 
-
-            elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ']:
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
-                    #print(data.iloc[0]['Канал'], _month)
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0015:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0015:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0015:
-                                reasons.append('КУС')
-
-
-            elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'ПЕРВЫЙ КАНАЛ']:
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0017:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0017:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0017:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0017:
-                                reasons.append('КУС')
-
-            
-
-            elif data.iloc[0]['Канал'] == 'МАТЧ ТВ':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.006:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.005:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.006:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.006:
-                                reasons.append('КУС')
-
-
-
-            elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0024:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0024:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0065:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0065:
-                                reasons.append('КУС')
-
-
-            elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.00265:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.00265:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.00265:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.00265:
-                                reasons.append('КУС')
-
-
-            
-            elif data.iloc[0]['Канал'] in ['Ю', 'ТВ-3']:
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.003:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.003:
-                                reasons.append('КУС')
-            
-
-            elif data.iloc[0]['Канал'] == 'ТВ ЦЕНТР':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС КР', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.003:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.003:
-                                reasons.append('КУС')
-
-            
-            elif data.iloc[0]['Канал'] == 'СПАС':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.008:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.008:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.008:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.008:
-                                reasons.append('КУС')
-                        
-
-            
-            elif data.iloc[0]['Канал'] == 'ТНТ 4':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0038:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0038:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0038:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0038:
-                                reasons.append('КУС')
-                            
-
-            
-            elif data.iloc[0]['Канал'] == 'ЧЕ':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0055:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0055:
-                                reasons.append('КУС')
-
-
-            
-            elif data.iloc[0]['Канал'] == '2X2':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0067:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0067:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0067:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0067:
-                                reasons.append('КУС')
-
-            
-            elif data.iloc[0]['Канал'] == 'СТС LOVE':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0055:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0055:
-                                reasons.append('КУС')
-
-
-            
-            elif data.iloc[0]['Канал'] == 'МИР':
-                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0045:
-                    reasons.append('Share')
-                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0045:
-                    reasons.append('TTV')  
-                elif atributes[i] == 'КУС':
-                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
-                    if delta != 0.0:
-                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
-                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
-                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
-                            if delta >= 0.0045:
-                                if outhouse < criteria * delta:
-                                    reasons.append('КУС')
-                                else:
-                                    reasons.append('КУС Внедом')
-                        else:
-                            if delta >= 0.0045:
-                                reasons.append('КУС')
-
+            # Проверка Share, TTV, КУС для текущего канала
+            if attribute == 'Share' and check_value(attribute, value, channel_thresholds.get('share', 0)):
+                reasons.append('Share')
                 
-            if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
+            elif attribute == 'TTV' and check_value(attribute, value, channel_thresholds.get('ttv', 0)):
+                reasons.append('TTV')
+                
+            elif attribute == 'КУС':
+                if value != 0.0:
+                    kus_threshold = channel_thresholds.get('kus', 0)
+                    if check_value(attribute, value, kus_threshold):
+                        if should_check_outhouse:
+                            if outhouse < criteria * abs(value):
+                                reasons.append('КУС')
+                            else:
+                                reasons.append('КУС Внедом')
+                        else:
+                            reasons.append('КУС')
+
+            # Проверка общих атрибутов
+            elif attribute == 'Т Общие' and check_value(attribute, value, COMMON_THRESHOLDS['Т Общие']):
                 reasons.append('Т Общие')
-            
-            elif atributes[i] == 'GRP ТП канала':
-                if np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])) > 0.025:
-                    reasons.append('GRP ТП канала')
-                elif np.isnan(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])):
-                    #month_2 = f'{month}.1'
-                    if np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', month])) == 0.0 and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', f'{month}.1'])) != 0.0:
-                        reasons.append('GRP ТП канала')
-                    elif np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', month])) != 0.0 and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', f'{month}.1'])) == 0.0:
-                        reasons.append('GRP ТП канала')
                 
-            elif atributes[i] == 'GRP КСР' and np.abs(float(data.loc[data['Значения'] == 'GRP КСР', _month])) >= 0.01:
+            elif attribute == 'GRP ТП канала':
+                if check_value(attribute, value, COMMON_THRESHOLDS['GRP ТП канала']):
+                    reasons.append('GRP ТП канала')
+                elif pd.isna(value) and check_nan_case(attribute, month, f'{month}.1'):
+                    reasons.append('GRP ТП канала')
+                    
+            elif attribute == 'GRP КСР' and check_value(attribute, value, COMMON_THRESHOLDS['GRP КСР']):
                 reasons.append('GRP КСР')
                 
-            elif atributes[i] == 'GRP Телемагазины':
-
-                if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])) >= 1e-3:
+            elif attribute == 'GRP Телемагазины':
+                if check_value(attribute, value, COMMON_THRESHOLDS['GRP Телемагазины']):
                     reasons.append('GRP Телемагазины')
-                elif np.isnan(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])):
-                    if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) == 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) != 0.0:
-                        reasons.append('GRP Телемагазины')
-                    elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
-                        reasons.append('GRP Телемагазины')
-            
-            #Отбор изменений по GRP СП для канала Звезда, РЕН ТВ
-            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] in ['ЗВЕЗДА', 'РЕН ТВ']:
-                delta = delta_SP(month, data.iloc[0]['Канал'])
-                if delta >= 20:
-                    reasons.append('GRP СП')
-            
-            #Отбор изменений по GRP СП для канала Суббота
-            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] == 'СУББОТА':
-                delta = delta_SP(month, data.iloc[0]['Канал'])
-                if delta >= 15:
+                elif pd.isna(value) and check_nan_case(attribute, month, f'{month}.1'):
+                    reasons.append('GRP Телемагазины')
+                    
+            elif attribute == 'GRP СП':
+                if channel in SPECIAL_GRP_SP_THRESHOLDS:
+                    delta = delta_SP(month, channel)
+                    if delta >= SPECIAL_GRP_SP_THRESHOLDS[channel]:
+                        reasons.append('GRP СП')
+                elif check_value(attribute, value, COMMON_THRESHOLDS['GRP СП']):
                     reasons.append('GRP СП')
 
-            #Отбор изменений по GRP СП для остальных каналов
-            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] not in ['ЗВЕЗДА', 'РЕН ТВ', 'СУББОТА']:
-                if np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2:
-                    reasons.append('GRP СП')
-        return reasons
+        return list(set(reasons))
+
+
+#    def get_reasons(self, month: str, channel: str, kus_df, date_of_forecast, kus_date, cummulative_diff_flag):
+#        """
+#            Функция для поиска причин, которые повлекли за собой изменение GRP, основываясь на таблице со сравнением прогнозов.
+#            Args:
+#                channel: Канал ('ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1')
+#                month: Месяц ('Январь','Май')
+#                cummulative_diff_flag: флаг для накопленных изменений за период. Если True, то смотрим накопленные, если False, то по дням.
+#            Returns:
+#                reasons: список причин, согласно которым предположительно произошли изменения инвентаря.
+#        """
+#        def delta_SP(month, channel):
+#            """
+#                Вспомогательная функция для расчёта изменения GRP СП.
+#            """
+#            old_data, new_data = self.search_channel_and_info(month, channel)
+#            delta = new_data['GRP СП'] - old_data['GRP СП']
+#            return delta
+#
+#        #Если изменения по коэффициентам внедома составляют больше 0.5 общего изменения КУСа, то это внедом
+#        criteria = 0.5
+#
+#        reasons = []
+#        _month = f'{month}.2'
+#        df_channel = self.df[self.df['Канал'] == channel]
+#        data = df_channel[['Канал', 'Значения', _month]].dropna()
+#        data_copy = df_channel[['Канал', 'Значения', _month]]
+#
+#        date_of_forecast = pd.to_datetime(date_of_forecast)
+#        
+#
+#        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#           (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#           (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#            outhouse = float(kus_df.loc[kus_df['Канал'] == channel, _month])
+#
+#        
+#        atributes = list(data['Значения'])
+#        for i in range(len(atributes)):
+#            if data.iloc[0]['Канал'] in ['НТВ', 'РОССИЯ 1']:
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.001:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.001:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.001:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.001:
+#                                reasons.append('КУС')
+#            
+#
+#            elif data.iloc[0]['Канал'] == 'СТС':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.002:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.002:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.002:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.002:
+#                                reasons.append('КУС')
+#
+#
+#
+#            elif data.iloc[0]['Канал'] in ['ПЯТЫЙ КАНАЛ', 'РЕН ТВ', 'ТНТ']:
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0015:
+#                    #print(data.iloc[0]['Канал'], _month)
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0015:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0015:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0015:
+#                                reasons.append('КУС')
+#
+#
+#            elif data.iloc[0]['Канал'] in ['ДОМАШНИЙ', 'ПЕРВЫЙ КАНАЛ']:
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0017:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0017:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0017:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0017:
+#                                reasons.append('КУС')
+#
+#            
+#
+#            elif data.iloc[0]['Канал'] == 'МАТЧ ТВ':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.006:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.005:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.006:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.006:
+#                                reasons.append('КУС')
+#
+#
+#
+#            elif data.iloc[0]['Канал'] in ['СУББОТА', 'МУЗ ТВ', 'ПЯТНИЦА']:
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0024:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0024:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0065:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0065:
+#                                reasons.append('КУС')
+#
+#
+#            elif data.iloc[0]['Канал'] in ['РОССИЯ 24', 'КАРУСЕЛЬ', 'СОЛНЦЕ', 'ЗВЕЗДА']:
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.00265:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.00265:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.00265:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.00265:
+#                                reasons.append('КУС')
+#
+#
+#            
+#            elif data.iloc[0]['Канал'] in ['Ю', 'ТВ-3']:
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.003:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.003:
+#                                reasons.append('КУС')
+#            
+#
+#            elif data.iloc[0]['Канал'] == 'ТВ ЦЕНТР':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.003:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.003:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС КР', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.003:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.003:
+#                                reasons.append('КУС')
+#
+#            
+#            elif data.iloc[0]['Канал'] == 'СПАС':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.008:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.008:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.008:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.008:
+#                                reasons.append('КУС')
+#                        
+#
+#            
+#            elif data.iloc[0]['Канал'] == 'ТНТ 4':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0038:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0038:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0038:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0038:
+#                                reasons.append('КУС')
+#                            
+#
+#            
+#            elif data.iloc[0]['Канал'] == 'ЧЕ':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0055:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0055:
+#                                reasons.append('КУС')
+#
+#
+#            
+#            elif data.iloc[0]['Канал'] == '2X2':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0067:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0067:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0067:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0067:
+#                                reasons.append('КУС')
+#
+#            
+#            elif data.iloc[0]['Канал'] == 'СТС LOVE':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0055:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0055:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0055:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0055:
+#                                reasons.append('КУС')
+#
+#
+#            
+#            elif data.iloc[0]['Канал'] == 'МИР':
+#                if atributes[i] == 'Share' and np.abs(float(data.loc[data['Значения'] == 'Share', _month])) >= 0.0045:
+#                    reasons.append('Share')
+#                elif atributes[i] == 'TTV' and np.abs(float(data.loc[data['Значения'] == 'TTV', _month])) >= 0.0045:
+#                    reasons.append('TTV')  
+#                elif atributes[i] == 'КУС':
+#                    delta = np.abs(float(data.loc[data['Значения'] == 'КУС', _month]))
+#                    if delta != 0.0:
+#                        if (date_of_forecast == kus_date and cummulative_diff_flag == False) or \
+#                        (date_of_forecast == kus_date and cummulative_diff_flag == True) or \
+#                        (date_of_forecast != kus_date and cummulative_diff_flag == True):
+#                            if delta >= 0.0045:
+#                                if outhouse < criteria * delta:
+#                                    reasons.append('КУС')
+#                                else:
+#                                    reasons.append('КУС Внедом')
+#                        else:
+#                            if delta >= 0.0045:
+#                                reasons.append('КУС')
+#
+#                
+#            if atributes[i] == 'Т Общие' and np.abs(float(data.loc[data['Значения'] == 'Т Общие', _month])) >= 0.011:
+#                reasons.append('Т Общие')
+#            
+#            elif atributes[i] == 'GRP ТП канала':
+#                if np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])) > 0.025:
+#                    reasons.append('GRP ТП канала')
+#                elif np.isnan(float(data.loc[data['Значения'] == 'GRP ТП канала', _month])):
+#                    #month_2 = f'{month}.1'
+#                    if np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', month])) == 0.0 and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', f'{month}.1'])) != 0.0:
+#                        reasons.append('GRP ТП канала')
+#                    elif np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', month])) != 0.0 and np.abs(float(data.loc[data['Значения'] == 'GRP ТП канала', f'{month}.1'])) == 0.0:
+#                        reasons.append('GRP ТП канала')
+#                
+#            elif atributes[i] == 'GRP КСР' and np.abs(float(data.loc[data['Значения'] == 'GRP КСР', _month])) >= 0.01:
+#                reasons.append('GRP КСР')
+#                
+#            elif atributes[i] == 'GRP Телемагазины':
+#
+#                if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])) >= 1e-3:
+#                    reasons.append('GRP Телемагазины')
+#                elif np.isnan(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', _month])):
+#                    if np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) == 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) != 0.0:
+#                        reasons.append('GRP Телемагазины')
+#                    elif np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', month])) != 0.0 and np.abs(float(data_copy.loc[data_copy['Значения'] == 'GRP Телемагазины', f'{month}.1'])) == 0.0:
+#                        reasons.append('GRP Телемагазины')
+#            
+#            #Отбор изменений по GRP СП для канала Звезда, РЕН ТВ
+#            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] in ['ЗВЕЗДА', 'РЕН ТВ']:
+#                delta = delta_SP(month, data.iloc[0]['Канал'])
+#                if delta >= 20:
+#                    reasons.append('GRP СП')
+#            
+#            #Отбор изменений по GRP СП для канала Суббота
+#            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] == 'СУББОТА':
+#                delta = delta_SP(month, data.iloc[0]['Канал'])
+#                if delta >= 15:
+#                    reasons.append('GRP СП')
+#
+#            #Отбор изменений по GRP СП для остальных каналов
+#            elif atributes[i] == 'GRP СП' and data.iloc[0]['Канал'] not in ['ЗВЕЗДА', 'РЕН ТВ', 'СУББОТА']:
+#                if np.abs(float(data.loc[data['Значения'] == 'GRP СП', _month])) >= 1e-2:
+#                    reasons.append('GRP СП')
+#        return reasons
 
 
     def calculate_delta_GRP(self, month :str, channel: str, changed_statistic: str):
