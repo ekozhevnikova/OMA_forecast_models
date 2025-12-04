@@ -471,24 +471,41 @@ class KUS_Forecast:
         return table
     
     
-    def predict(self, data_api, first_date, last_date, filepath_vimb_curr_month):
+    def predict(self, data_api: pd.DataFrame, first_date, last_date, filepath_vimb_curr_month: str):
+        """
+            Метод для непосредственного прогнозирования КУС
+            Args:
+                data_api: pd.DataFrame: Выгрузка с TVR из БД Mediascope
+                first_date: Дата начала вывода данных
+                last_date: Дата окончания вывода данных
+                filepath_vimb_curr_month: str: путь к файлу с выгрузкой из VIMB по текущему месяцу
+            Returns:
+                df_result_all: pd.DataFrame: Датафрейм с прогнозом
+        """
         
         today = date.today()
         # дата начала и окончания исторических данных для предсказания куса (база прогноза)
         first_fact_date = today - pd.offsets.MonthBegin()- DateOffset(months = 6) #1 число пол года назад
         last_fact_date = today - pd.offsets.MonthBegin()    
         table = self.table
+
         ################################### ОБЩАЯ ПОДГОТОВКА #############################################################
         table['Month'] = table['Month'].apply(KUS_Forecast.sdate)
         table['PredWeight'] = table['TVR'] / table['TVR Total']
         table['PredKM'] = table.apply(KUS_Forecast.div('tvr_adv', 'TVR'), axis = 1)
         table = table.astype({"PredKM": "float64"})
 
+
         ############################# ПОДСЧЕТ ЗАКРЫТЫХ МЕСЯЦЕВ ВСЕ КАНАЛЫ СРАЗУ #####################################################
         zakr_piv = table[(table['Month'] >= first_date) & (table['Month'] < last_fact_date)]
         zakr_piv = zakr_piv.pivot_table(index = 'Channel', columns = ['Month'], values = ['TVR Total', 'Volume', 'GRP'],
                          aggfunc = {'TVR Total': 'mean', 'Volume': 'sum','GRP': 'sum'})
-        df_zakrytye = zakr_piv['GRP'] * 20 / (zakr_piv['Volume'] * zakr_piv['TVR Total'])
+        if zakr_piv.empty!=True:
+            df_zakrytye = zakr_piv['GRP'] * 20 / (zakr_piv['Volume'] * zakr_piv['TVR Total'])
+            print(zakr_piv)
+        else:
+            df_zakrytye=pd.DataFrame(index=pd.Index(table['Channel'].unique(),name='Channel'))
+            print('Нет месяцев в факте!')
 
 
         ############################# ПРОГНОЗ МЕСЯЦЕВ ВСЕ КАНАЛЫ СРАЗУ #####################################################
@@ -499,62 +516,76 @@ class KUS_Forecast:
                                              aggfunc = {'PredWeight': 'mean', 'PredKM': 'median'})
 
         ans = pd.merge(short_pred[['Channel', 'Month', 'time', 'BCA', 'Volume']], tab_for_fill, how = "left", on = ['Channel', "time"])
-        ans['PredKM'] = ans.groupby('Channel')['PredKM'].transform(lambda x: x.fillna(x.median()))
-        ans['PredWeight'] = ans.groupby('Channel')['PredWeight'].transform(lambda x: x.fillna(x.quantile(q = 0.25)))
+        
+        ans['PredKM']=ans.groupby('Channel')['PredKM'].transform(lambda x: x.fillna(x.rolling(2, min_periods=1).mean().ffill().bfill()))
+        
         df_prognoz = ans.pivot_table(index = ['Channel'], columns = 'Month', values = ['PredWeight'], aggfunc = lambda x: 
                         (ans.loc[x.index, 'PredWeight'] * ans.loc[x.index,'PredKM'] * ans.loc[x.index, 'Volume']).sum()/
                         ans.loc[x.index, 'Volume'].sum()).droplevel(0, axis = 1)
 
-        ############################# ПОДСЧЕТ ТЕКУЩЕГО МЕСЯЦА #####################################################    
-        if today.day > 10:
-            print('Реализуем обновление в середине месяца')
-            if today.day < 21:
-                fact_w = 0.5
-                prognoz_w = 0.5
+        ############################# ПОДСЧЕТ ТЕКУЩЕГО МЕСЯЦА #####################################################
+        # Если текущий месяц январь
+        if today.month == 1:
+            if today.day > 15:
+                print('Реализуем обновление в середине месяца')
+                if today.day < 21:
+                    fact_w = 0.5
+                    prognoz_w = 0.5
+                else:
+                    fact_w = 0.7
+                    prognoz_w = 0.3     
+
+                # Загрузка данных вимб и апи
+                adv_tec = pd.read_excel(filepath_vimb_curr_month,
+                                    skiprows = 19,
+                                    usecols = [0, 5, 6, 7, 12, 13])
+                adv_tec = KUS_Forecast.parse_VIMB(adv_tec)
+                tvr_prog_tec = data_api
+                tec_main = pd.merge(tvr_prog_tec, adv_tec, how = "right", on = ['Channel', 'BCA', "Month"])
+
+                # Подсчет факта
+                tec_main['kus_f'] = tec_main['tvr_adv'] / tec_main['TVR']
+                results_prognoz = pd.merge(df_prognoz, tec_main[['kus_f','Channel']], how = "left", on = ['Channel'])
+                results_prognoz['tec_m_progn'] = results_prognoz.iloc[:,1]
+
+                results_prognoz.iloc[:, 1] = results_prognoz['kus_f'] * fact_w + (results_prognoz.iloc[:, 1]) * prognoz_w
+
+                df_result_all = df_zakrytye.merge(results_prognoz,on = 'Channel', how = 'left')
+
             else:
-                fact_w = 0.7
-                prognoz_w = 0.3     
+                print('Закрытие месяца!')
+                df_result_all = df_zakrytye.merge(df_prognoz, on = 'Channel', how = 'left')
 
-            #Загрузка данных вимб и апи
-            adv_tec = pd.read_excel(filepath_vimb_curr_month,
-                                   skiprows = 18,
-                                   usecols = [0, 5, 6, 7, 12, 13])
-            adv_tec = KUS_Forecast.parse_VIMB(adv_tec)
-            tvr_prog_tec = data_api
-            tec_main = pd.merge(tvr_prog_tec, adv_tec, how = 'left', on = ['Channel', 'BCA', "Month"])
-
-            #Подсчет факта
-            tec_main['kus_f'] = tec_main['tvr_adv'] / tec_main['TVR']
-            results_prognoz = pd.merge(df_prognoz, tec_main[['kus_f','Channel']], how = "left", on = ['Channel'])
-            results_prognoz['tec_m_progn'] = results_prognoz.iloc[:,1]
-
-            results_prognoz.iloc[:, 1] = results_prognoz['kus_f'] * fact_w + (results_prognoz.iloc[:, 1]) * prognoz_w
-
-            df_result_all = df_zakrytye.merge(results_prognoz,on = 'Channel', how = 'left')
-
+        # Если текущий месяц не январь
         else:
-            print('Закрытие месяца!')
-            df_result_all = df_zakrytye.merge(df_prognoz, on = 'Channel', how = 'left')
+            if today.day > 10:
+                print('Реализуем обновление в середине месяца')
+                if today.day < 21:
+                    fact_w = 0.5
+                    prognoz_w = 0.5
+                else:
+                    fact_w = 0.7
+                    prognoz_w = 0.3     
+
+                    #Загрузка данных вимб и апи
+                adv_tec = pd.read_excel(filepath_vimb_curr_month,
+                                    skiprows = 19,
+                                    usecols = [0, 5, 6, 7, 12, 13])
+                adv_tec = KUS_Forecast.parse_VIMB(adv_tec)
+                tvr_prog_tec = data_api
+                tec_main = pd.merge(tvr_prog_tec, adv_tec, how = "right", on = ['Channel', 'BCA', "Month"])
+
+                        #Подсчет факта
+                tec_main['kus_f'] = tec_main['tvr_adv'] / tec_main['TVR']
+                results_prognoz = pd.merge(df_prognoz, tec_main[['kus_f','Channel']], how = "left", on = ['Channel'])
+                results_prognoz['tec_m_progn'] = results_prognoz.iloc[:,1]
+
+                results_prognoz.iloc[:, 1] = results_prognoz['kus_f'] * fact_w + (results_prognoz.iloc[:, 1]) * prognoz_w
+
+                df_result_all = df_zakrytye.merge(results_prognoz,on = 'Channel', how = 'left')
+
+            else:
+                print('Закрытие месяца!')
+                df_result_all = df_zakrytye.merge(df_prognoz, on = 'Channel', how = 'left')
 
         return df_result_all
-    
-    
-    def kus_forecast(self, path, first_date, last_date, filepath_vimb_curr_month, data_api):
-        """
-            Метод для прогнозировани КУСа
-        """
-        tvr_adv = KUS_Forecast.from_file(path + 'Вимб\\', 18, [0, 2, 7, 8, 9, 14, 15])
-        if today.day > 10:
-            tvr_adv = KUS_Forecast.parse_VIMB(tvr_adv)
-        else:
-            tvr_adv = KUS_Forecast.parse_VIMB(tvr_adv, True)
-            
-        tvr_prog = KUS_Forecast.from_file(path + 'TVR\\', col_list = [1, 2, 3, 4, 5, 6], is_vimb = False)
-        
-        tmp_adv = tvr_adv.copy()
-        tmp_prog = tvr_prog.copy()
-        self.table = pd.merge(tmp_prog, tmp_adv, how = "right", on = ['Channel', 'BCA', 'Month', 'time'])
-        
-        forecast = self.predict(data_api, first_date, last_date, filepath_vimb_curr_month)
-        return forecast
-    

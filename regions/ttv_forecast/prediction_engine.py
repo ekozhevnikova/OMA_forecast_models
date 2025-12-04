@@ -41,8 +41,8 @@ class TTV_Calculation:
         """
             Метод для выгрузки данных из API.
         """
-        with WrapperNoPrints():
-            df = BaseDataService._execute_tasks(self.tasks_json)
+        #with WrapperNoPrints():
+        df = BaseDataService._execute_tasks(self.tasks_json)
         return df
     
 

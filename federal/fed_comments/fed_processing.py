@@ -221,6 +221,7 @@ class Federal_Processing:
 
         # Формирование словарей с изменениями 
         general_dict, by_dates_dict = Federal_Preprocessing.calculate_differencies(need_data, df_limits)
+        print(by_dates_dict[2026])
 
         # Создание словаря для хранения результатов по годам
         year_results = {}

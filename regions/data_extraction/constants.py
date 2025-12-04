@@ -176,26 +176,51 @@ class Constants:
 
 
         # Для генерации периодов: последний месяц: факт текущего месяца, 1ое число предыдущего месяца до факта текущего
-        if today.day <= 10:
-            ################## ГЕНЕРАЦИЯ ПЕРИОДА: ПРОШЛЫЙ МЕСЯЦ FULL ##################
-            year, month = get_previous_month_date(1)
+        if today.day <= 15:
 
-            # Генерация начала прошлого месяца
-            start_of_prev_month = f'{year}-{month:02d}-01'
+            # Если текущий месяц Январь, то предыдущий месяц (Декабрь) закрывается позже из-за праздников
+            if today.month == 1:
+                ################## ГЕНЕРАЦИЯ ПЕРИОДА: ПРОШЛЫЙ МЕСЯЦ FULL ##################
+                year, month = get_previous_month_date(1)
 
-            last_day_prev_month = calendar.monthrange(year, month)[1]
-            stop_of_prev_month = f'{year}-{month:02d}-{last_day_prev_month}'
+                # Генерация начала прошлого месяца
+                start_of_prev_month = f'{year}-{month:02d}-01'
 
-            # ПЕРИОД ДЛЯ ВЫГРУЗКИ ВСЕГО ПРОШЛОГО МЕСЯЦА
-            DATE_FILTER_FULL_MONTH = [(start_of_prev_month, stop_of_prev_month)]
+                last_day_prev_month = calendar.monthrange(year, month)[1]
+                stop_of_prev_month = f'{year}-{month:02d}-{last_day_prev_month}'
 
-            ################## ГЕНЕРАЦИЯ ПЕРИОДА: ФАКТ ТЕКУЩЕГО МЕСЯЦА ##################
-            DATE_FILTER_FACT_MONTH = [(start_of_prev_month, stop_of_prev_month)]
+                # ПЕРИОД ДЛЯ ВЫГРУЗКИ ВСЕГО ПРОШЛОГО МЕСЯЦА
+                DATE_FILTER_FULL_MONTH = [(start_of_prev_month, stop_of_prev_month)]
 
-            ################## ГЕНЕРАЦИЯ ПЕРИОДА: от 1го числа прошлого месяца до факта текущего месяца ##################
-            two_months_ago_year, two_months_ago_month = get_previous_month_date(2)
-            start_of_2_months_ago = f'{two_months_ago_year}-{two_months_ago_month:02d}-01'
-            DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_2_months_ago, stop_of_prev_month)]
+                ################## ГЕНЕРАЦИЯ ПЕРИОДА: ФАКТ ТЕКУЩЕГО МЕСЯЦА ##################
+                DATE_FILTER_FACT_MONTH = [(start_of_prev_month, stop_of_prev_month)]
+
+                ################## ГЕНЕРАЦИЯ ПЕРИОДА: от 1го числа прошлого месяца до факта текущего месяца ##################
+                two_months_ago_year, two_months_ago_month = get_previous_month_date(2)
+                start_of_2_months_ago = f'{two_months_ago_year}-{two_months_ago_month:02d}-01'
+                DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_2_months_ago, stop_of_prev_month)]
+
+            # Если текущий месяц НЕ Январь
+            elif today.month != 1 and today.day <= 10:
+                ################## ГЕНЕРАЦИЯ ПЕРИОДА: ПРОШЛЫЙ МЕСЯЦ FULL ##################
+                year, month = get_previous_month_date(1)
+
+                # Генерация начала прошлого месяца
+                start_of_prev_month = f'{year}-{month:02d}-01'
+
+                last_day_prev_month = calendar.monthrange(year, month)[1]
+                stop_of_prev_month = f'{year}-{month:02d}-{last_day_prev_month}'
+
+                # ПЕРИОД ДЛЯ ВЫГРУЗКИ ВСЕГО ПРОШЛОГО МЕСЯЦА
+                DATE_FILTER_FULL_MONTH = [(start_of_prev_month, stop_of_prev_month)]
+
+                ################## ГЕНЕРАЦИЯ ПЕРИОДА: ФАКТ ТЕКУЩЕГО МЕСЯЦА ##################
+                DATE_FILTER_FACT_MONTH = [(start_of_prev_month, stop_of_prev_month)]
+
+                ################## ГЕНЕРАЦИЯ ПЕРИОДА: от 1го числа прошлого месяца до факта текущего месяца ##################
+                two_months_ago_year, two_months_ago_month = get_previous_month_date(2)
+                start_of_2_months_ago = f'{two_months_ago_year}-{two_months_ago_month:02d}-01'
+                DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_2_months_ago, stop_of_prev_month)]
 
         else:
             ################## ГЕНЕРАЦИЯ ПЕРИОДА: ПРОШЛЫЙ МЕСЯЦ FULL ##################

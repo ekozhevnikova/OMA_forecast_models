@@ -14,7 +14,6 @@ from functools import reduce
 import OMA_tools
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
 from OMA_tools.io_data.dates import Dates_Operations
-#from OMA_tools.regions.data_extraction.leader_ship import WrapperNoPrints
 import os
 import re
 import json

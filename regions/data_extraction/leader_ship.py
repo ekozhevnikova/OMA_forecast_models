@@ -205,67 +205,6 @@ class LeaderShipDataExtractor:
         
         return json_tasks
 
-
-    @staticmethod
-    def build_json_tasks_parallel(
-        date_filter, regions_params, slices, sortings,
-        time_filter = DataConfig.COMMON_TIME_FILTER,
-        statistics = DataConfig.STATISTICS,
-        options = DataConfig.COMMON_OPTIONS,
-        location_filter = DataConfig.LOCATION_FILTER,
-        weekday_filter = DataConfig.WEEKDAY_FILTER,
-        daytype_filter = DataConfig.DAYTYPE_FILTER,
-        targetdemo_filter = DataConfig.TARGETDEMO_FILTER,
-        add_city_to_basedemo_from_region = DataConfig.ADD_CITY_TO_BASEDEMO_FROM_REGION,
-        add_city_to_targetdemo_from_region = DataConfig.ADD_CITY_TO_TARGETDEMO_FROM_REGION
-    ):
-        from concurrent.futures import ThreadPoolExecutor
-        import multiprocessing
-        
-        def process_group(group_data):
-            group_name, config = group_data
-            group_tasks = {}
-            
-            for i, company in enumerate(config['companies']):
-                task = BaseDataService._build_common_params(
-                    date_filter=date_filter,
-                    company_filter=company,
-                    basedemo_filter=config['basedemos'][i],
-                    regions_id=config['regions'][i],
-                    targets=config['targets'][i],
-                    time_filter=time_filter,
-                    statistics=statistics,
-                    slices=slices,
-                    sortings=sortings,
-                    options=options,
-                    location_filter=location_filter,
-                    weekday_filter=weekday_filter,
-                    daytype_filter=daytype_filter,
-                    targetdemo_filter=targetdemo_filter,
-                    add_city_to_basedemo_from_region=add_city_to_basedemo_from_region,
-                    add_city_to_targetdemo_from_region=add_city_to_targetdemo_from_region
-                )
-                
-                if config['names'] and i < len(config['names']):
-                    key = config['names'][i]
-                elif config['key_template']:
-                    key = config['key_template'].format(i)
-                else:
-                    key = f"{group_name}_{i}"
-                    
-                group_tasks[key] = task
-            
-            return group_name, group_tasks
-        
-        # Параллельная обработка групп
-        json_tasks = {}
-        with ThreadPoolExecutor(max_workers = 10) as executor:
-            results = executor.map(process_group, regions_params.items())
-            
-            for group_name, group_tasks in results:
-                json_tasks[group_name] = group_tasks
-        
-        return json_tasks
      
 
     @staticmethod
@@ -279,8 +218,8 @@ class LeaderShipDataExtractor:
         """
             Метод для генерации задания API для руководителей групп
         """
-        with WrapperNoPrints():
-            df = BaseDataService._execute_tasks(tasks)    
+        #with WrapperNoPrints():
+        df = BaseDataService._execute_tasks(tasks)    
         # Приводим порядок столбцов в соответствие с условиями расчета
         df = df[['prj_name'] + slices + statistics]
         df['prj_name'] = df['prj_name'].str.upper()

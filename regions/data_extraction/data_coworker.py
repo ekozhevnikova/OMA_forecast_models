@@ -90,8 +90,8 @@ class EmployeeExportService:
         """
             Метод для генерации задания API для руководителей групп
         """
-        with WrapperNoPrints():
-            df = BaseDataService._execute_tasks(self.tasks_json)    
+        #with WrapperNoPrints():
+        df = BaseDataService._execute_tasks(self.tasks_json)    
 
         # Приводим порядок столбцов в соответствие с условиями расчета
         df = df[slices + statistics]
@@ -112,8 +112,8 @@ class EmployeeExportService:
         """
             Метод для генерации задания API для руководителей групп
         """
-        with WrapperNoPrints():
-            df = BaseDataService._execute_tasks(self.tasks_json)    
+        #with WrapperNoPrints():
+        df = BaseDataService._execute_tasks(self.tasks_json)    
 
         return df
     
@@ -129,8 +129,8 @@ class EmployeeExportService:
         """
             Метод для генерации задания API для руководителей групп
         """
-        with WrapperNoPrints():
-            df = BaseDataService._execute_tasks(self.tasks_json)    
+        #with WrapperNoPrints():
+        df = BaseDataService._execute_tasks(self.tasks_json)    
 
         # Приводим порядок столбцов в соответствие с условиями расчета
         df = df[slices + statistics]
