@@ -221,7 +221,6 @@ class Federal_Processing:
 
         # Формирование словарей с изменениями 
         general_dict, by_dates_dict = Federal_Preprocessing.calculate_differencies(need_data, df_limits)
-        print(by_dates_dict[2026])
 
         # Создание словаря для хранения результатов по годам
         year_results = {}
@@ -283,7 +282,7 @@ class Federal_Processing:
                 elif len(smi_by_days) == 0:
                     data_output_dates_ = data_output_dates[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
                     #Форматирование столбца с Месяцем
-                    by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', year)
+                    by_days = Federal_Postprocessing(data_output_dates_).replace_name_of_months('Месяц', str(year))
                     by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц', date_column = 'Дата')
                     by_days_sorted_ = Federal_Postprocessing(df_by_dates_need_comment).clean_comments(by_days_sorted, date_new_forecast)
                     by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sorted_, 'Канал')

@@ -519,12 +519,26 @@ class TVShareCalculator:
     
 
     @staticmethod
-    def get_next_hour(dt):
+    def get_hour(dt, param: str):
         """
-            Вспомогательная функция для вычисления ближайшего следующего часа
+            Метод для генерации часа. 
+            Возможные опции: начало текущего часа, конец текущего часа, начало следующего часа, начало предыдущего часа
         """
-        next_hour = dt.replace(minute = 0, second = 0, microsecond = 0) + timedelta(hours = 1)
-        return next_hour
+        # Вариант 1: Начало текущего часа
+        if param == 'start_of_current_hour':
+            return dt.replace(minute = 0, second = 0, microsecond = 0)
+
+        # Вариант 2: Конец текущего часа
+        elif param == 'end_of_current_hour':
+            return dt.replace(minute = 59, second = 59, microsecond = 0)
+        
+        # Вариант 3: Старт следующего часа
+        elif param == 'start_next_hour':
+            return dt.replace(minute = 0, second = 0, microsecond = 0) + timedelta(hours = 1)
+        
+        # Вариант 4: Старт прошлого часа
+        elif param == 'start_previous_hour':
+            return dt.replace(minute = 0, second = 0, microsecond = 0) + timedelta(hours = -1)
     
         
     @staticmethod
@@ -564,7 +578,6 @@ class TVShareCalculator:
                 pd.DataFrame: DataFrame с весами слотов
         """
         self.auedience_forecast = self._total_tv_auedience_predict()
-        print(self.auedience_forecast)
         summ_audience = np.sum(list(self.auedience_forecast['TTVRtg000']))
         self.auedience_forecast['Slot_weight'] = self.auedience_forecast['TTVRtg000'] / summ_audience
         
@@ -573,11 +586,12 @@ class TVShareCalculator:
         return self.auedience_forecast[['TimeSlot', 'Slot_weight', 'hour_start']].reset_index(drop = True)
 
 
-    def calculate_weighted_share(self, data, slot_weights: dict) -> pd.DataFrame:
+    def calculate_weighted_share(self, data, auedience) -> pd.DataFrame:
         """
             Функция для расчета взвешенной доли. 
             Args:
-                df: pd.DataFrame: Датафрейм, в котором есть столбцы Долей (Share), Время выхода, Время окончания, Название программы. 
+                df: pd.DataFrame: Датафрейм, в котором есть столбцы Долей (Share), Время выхода, Время окончания, Название программы для какого одного дня.
+                auedience: pd.DataFrame: ДатаФрейм с весами слотов, посчитанными через TotalTVAuedience для конкретного дня.
             Returns:
                 data: pd.DataFrame: Датафрейм с новой рассчитанной долей
         """
@@ -587,12 +601,12 @@ class TVShareCalculator:
         self.df['Время окончания_dt'] = pd.to_datetime(self.df['Время окончания'].astype(str))
         self.df['hour_start'] = self.df['Время выхода_dt'].dt.hour
         self.df['hour_end'] = self.df['Время окончания_dt'].dt.hour
-        
+
         # Создаем новые столбцы для результатов
         self.df['Длительность 1'] = pd.Timedelta(0)   # если нет скачка через час
         self.df['Длительность 2'] = pd.Timedelta(0)   # если есть скачок через час
         self.df['Разделение часа'] = False
-        
+
         # Проходим по всем строкам
         for idx, row in self.df.iterrows():
             start_time = row['Время выхода_dt']
@@ -603,20 +617,22 @@ class TVShareCalculator:
                 # Если часы совпадают - простая разность
                 self.df.at[idx, 'Длительность 1'] = end_time - start_time
                 self.df.at[idx, 'Разделение часа'] = False
+                
             else:
                 # Если часы разные - разделяем на две длительности
-                next_hour = TVShareCalculator.get_next_hour(start_time)
-                prev_hour = TVShareCalculator.get_previous_hour(end_time)
+                end_hour = TVShareCalculator.get_hour(start_time, 'end_of_current_hour')
+                start_of_curr_hour = TVShareCalculator.get_hour(end_time, 'start_of_current_hour')
                 
                 # Длительность 1: от начала до следующего часа
-                duration1 = next_hour - start_time
+                duration1 = end_hour - start_time
+                
                 # Длительность 2: от предыдущего часа до окончания
-                duration2 = end_time - prev_hour
+                duration2 = end_time - start_of_curr_hour
                 
                 self.df.at[idx, 'Длительность 1'] = duration1
                 self.df.at[idx, 'Длительность 2'] = duration2
                 self.df.at[idx, 'Разделение часа'] = True
-        
+
         # Конвертируем в минуты для удобства
         self.df['Длительность 1, мин'] = self.df['Длительность 1'].dt.total_seconds() / 60.0
         self.df['Длительность 2, мин'] = self.df['Длительность 2'].dt.total_seconds() / 60.0
@@ -624,14 +640,16 @@ class TVShareCalculator:
         # Считаем % длительности программы в часе
         self.df['% duration 1'] = self.df['Длительность 1, мин'] / 60.0
         self.df['% duration 2'] = self.df['Длительность 2, мин'] / 60.0
-        
+
         res = self.df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 
                 'hour_start', 'hour_end', 'Share', 'Длительность 1, мин',
                 'Длительность 2, мин', '% duration 1', '% duration 2', 'Разделение часа']]
-        
-        # Создаём столбец с новой долей
-        res['Share_NEW'] = ''
 
+        # Создаём столбец с новой долей
+        res['Share_NEW'] = 0.0
+
+
+        ########################## Расчет новой доли ####################
         for i in range(len(res)):
             slot_weight_2 = 0.0
             
@@ -639,16 +657,21 @@ class TVShareCalculator:
             end_hour = res.iloc[i]['hour_end']
             share = res.iloc[i]['Share']
             duration_1 = res.iloc[i]['% duration 1']
+            
             # Если есть скачок через час
             duration_2 = res.iloc[i]['% duration 2']
-            slot_weight_1 = slot_weights[start_hour]
+            
+            slot_weight_1 = auedience.loc[auedience['hour_start'] == start_hour, 'Slot_weight'].iloc[0]
 
             # Если скачка через час нет, считаем долю в слоте как Share * вес слота * % длительности программы в часе
             res.at[i, 'Share_NEW'] = share * duration_1 * slot_weight_1
+            
             # Если есть скачок через час, считаем долю по-другому
             if duration_2 != 0.0:
-                slot_weight_2 = slot_weights[end_hour]
+                
+                slot_weight_2 = auedience.loc[auedience['hour_start'] == end_hour, 'Slot_weight'].iloc[0]
                 res.at[i, 'Share_NEW'] = share * (duration_1 * slot_weight_1 + duration_2 * slot_weight_2)
+                
         data = res[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share_NEW']]
         data.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
         # Расчёт суммарной доли по дню
