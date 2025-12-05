@@ -4,6 +4,7 @@ from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
 from OMA_tools.io_data.operations import Dates_Operations
 from OMA_tools.io_data.time_series import TimeSeriesTransformer
+
 from sklearn.preprocessing import LabelEncoder
 import json
 
@@ -502,20 +503,58 @@ class TVShareCalculator:
     """
         Класс для расчета долей в конкретных слотах через вес слота и процент длительности программы в часе
     """
-    def __init__(self, start_date: pd.Timestamp, total_tv_auedience: pd.DataFrame, n: int = 4):
+    def __init__(self, df):
         """
             Атрибуты класса
             Args:
-                start_date: pd.Timestamp: дата, начиная с которой будем строить прогноз
-                df: pd.DataFrame: таблица с посчитанной прогнозной долей, которая нуждается в дальнейшем пересчёте
-                auedience: pd.DataFrame: таблица с прогнозными значениями Total TV Auedience по слотам за последние n недель.
-                n: количество недель, которое берется для анализа. По умолчанию 4
+                df: pd.DataFrame: Датафрейм с исходной долей
         """
-        self.start_date = start_date
-        self.total_tv_auedience = total_tv_auedience
-        self.n = n
-        self.auedience_forecast = None
-        self.df = None
+        self.df = df
+        self._validate_data()
+    
+
+    def _validate_data(self) -> None:
+        """
+            Проверка обязательных колонок в данных.
+        """
+        required_columns = ['Дата', 'Время выхода', 'Время окончания', 'Share']
+        missing = [col for col in required_columns if col not in self.df.columns]
+        if missing:
+            raise ValueError(f'Отсутствуют обязательные колонки: {missing}')
+    
+
+    @staticmethod
+    def calculate_slot_weights(
+                    total_tv_audience: pd.DataFrame,
+                    rating_col: str = 'TTVRtg000',
+                    timeslot_col: str = 'TimeSlot',
+                    date_col: str = 'Date'
+                ) -> pd.DataFrame:
+        """
+            Рассчитывает веса слотов на основе данных о TotalTVAudience.
+        
+            Args:
+                total_tv_audience: Датафрейм с аудиторными данными
+                rating_col: Название колонки с рейтингом
+                timeslot_col: Название колонки с временным слотом
+                date_col: Название колонки с датой
+                
+            Returns:
+                Датафрейм с весами слотов
+        """
+        df = total_tv_audience.copy()
+        
+        df['TimeSlot_dt'] = pd.to_datetime(df[timeslot_col])
+        df['hour_start'] = df['TimeSlot_dt'].dt.hour
+        
+        # Группировка и расчет весов
+        df['daily_total'] = df.groupby(date_col)[rating_col].transform('sum')
+        df['Slot_weight'] = df[rating_col] / df['daily_total']
+        
+        # Замена бесконечно малых значений
+        df['Slot_weight'] = df['Slot_weight'].fillna(0)
+        
+        return df[[date_col, timeslot_col, rating_col, 'Slot_weight', 'hour_start']].reset_index(drop = True)
     
 
     @staticmethod
@@ -540,140 +579,288 @@ class TVShareCalculator:
         elif param == 'start_previous_hour':
             return dt.replace(minute = 0, second = 0, microsecond = 0) + timedelta(hours = -1)
     
-        
-    @staticmethod
-    def get_previous_hour(dt):
-        """
-            Вспомогательная функция для вычисления ближайшего предыдущего часа
-        """
-        prev_hour = dt.replace(minute = 0, second = 0, microsecond = 0)
-        return prev_hour
 
-
-    def _total_tv_auedience_predict(self) -> pd.DataFrame:
+    def round_time(self, time_column: str, minutes = 1, method = 'round'):
         """
-            Метод для прогнозирования Total TV Auedience по слотам на будущие периоды.
-            В качестве прогноза берется среднее за последние n недель для каждого слота.
+            Точное округление времени до минут без использования float.
+            
             Args:
-                start_date: дата, начиная с которой мы начинаем строить прогноз.
-                total_tv_auedience: pd.DataFrame с историческими данными по Auedience.
-                n: количество последних недель, которые мы берем с расчет. По умолчанию n = 4.
+
+                time_series : pd.Series: Серия со временем в формате 'HH:MM:SS'
+                minutes : int: Шаг округления в минутах (1, 5, 10, 15, 30, 60)
+                method : str: Метод округления: 'round', 'floor', 'ceil'
+            
             Returns:
-                forecast: DataFrame с прогнозными значениями Total TV Auedience
+                pd.Series: Округленное время
         """
-        dates = Dates_Operations.get_last_4_weeks(self.start_date, self.n)
-        # Выделение последних n недель
-        last_weeks_auedience = self.total_tv_auedience[(self.total_tv_auedience['Date'].astype(str).isin(dates))].reset_index(drop = True)
-        # Вычисляем средние значения по слотам за последние 4 недели
-        self.auedience_forecast = last_weeks_auedience.groupby('TimeSlot')['TTVRtg000'].mean().reset_index()
-        return self.auedience_forecast
+        time_series = self.df[time_column]
+
+        def round_single_time(time_str, minutes_step, method_type):
+            # Разбираем время
+            if isinstance(time_str, str):
+                h, m, s = map(int, time_str.split(':'))
+            elif hasattr(time_str, 'hour'):  # Если это datetime.time
+                h, m, s = time_str.hour, time_str.minute, time_str.second
+            else:
+                return time_str
+
+            # Если имеем начало часа, например, 05:00:00, то возвращаем в исходном виде
+            if m == 0.0 and s == 0.0:
+                return f'{h:02d}:00:00'
+
+            # Если время кривое
+            else:
+            
+                # Общее количество секунд
+                total_seconds = h * 3600 + m * 60 + s
+                step_seconds = minutes_step * 60
+                
+                if method_type == 'floor':
+                    # Округление вниз
+                    rounded_seconds = (total_seconds // step_seconds) * step_seconds
+                elif method_type == 'ceil':
+                    # Округление вверх
+                    if total_seconds % step_seconds == 0:
+                        rounded_seconds = total_seconds
+                    else:
+                        rounded_seconds = ((total_seconds // step_seconds) + 1) * step_seconds
+                else:  # 'round' - стандартное округление
+                    # Количество секунд от начала интервала
+                    remainder = total_seconds % step_seconds
+                    
+                    # Если остаток >= половины интервала, округляем вверх
+                    if remainder >= step_seconds / 2:
+                        rounded_seconds = ((total_seconds // step_seconds) + 1) * step_seconds
+                    else:
+                        rounded_seconds = (total_seconds // step_seconds) * step_seconds
+                
+                # Преобразуем обратно
+                new_h = (rounded_seconds // 3600) % 24
+                new_m = (rounded_seconds % 3600) // 60
+                
+                return f'{new_h:02d}:{new_m:02d}:00'
+        
+        # Применяем к каждой строке
+        return time_series.apply(lambda x: round_single_time(x, minutes, method))
     
 
-    def calculate_slot_weight(self) -> pd.DataFrame:
+    def adjust_hour_start(self, end_col = 'Время окончания', start_col = 'Время выхода'):
         """
-            Метод для расчета веса слотов для конкретного дня.
-            Args:
-                df: входной датафрейм с Total TV Auedience
-            Returns:
-                pd.DataFrame: DataFrame с весами слотов
+            Заменяет XX:00:00 на XX:59:59, только если это действительно 
+            начало нового часа в расписании (т.е. следующее время выхода начинается с этого часа).
         """
-        self.auedience_forecast = self._total_tv_auedience_predict()
-        summ_audience = np.sum(list(self.auedience_forecast['TTVRtg000']))
-        self.auedience_forecast['Slot_weight'] = self.auedience_forecast['TTVRtg000'] / summ_audience
+        df_adj = self.df.copy()
         
-        self.auedience_forecast['TimeSlot_dt'] = pd.to_datetime(self.auedience_forecast['TimeSlot'])
-        self.auedience_forecast['hour_start'] = self.auedience_forecast['TimeSlot_dt'].dt.hour
-        return self.auedience_forecast[['TimeSlot', 'Slot_weight', 'hour_start']].reset_index(drop = True)
+        for i in range(len(df_adj) - 1):
+            current_end = df_adj.loc[i, end_col]
+            next_start = df_adj.loc[i + 1, start_col]
+            
+            # Если текущее окончание - начало часа И следующее время выхода начинается с этого же часа
+            if current_end.endswith(':00:00') and next_start.startswith(current_end[:2]):
+                hours = int(current_end.split(':')[0])
+                
+                if hours == 0:
+                    new_time = '23:59:59'
+                else:
+                    new_hour = hours - 1
+                    new_time = f"{new_hour:02d}:59:59"
+                
+                df_adj.loc[i, end_col] = new_time
+        
+        # Обрабатываем последнюю строку отдельно
+        if df_adj.loc[df_adj.index[-1], end_col].endswith(':00:00'):
+            hours = int(df_adj.loc[df_adj.index[-1], end_col].split(':')[0])
+            if hours == 0:
+                new_time = '23:59:59'
+            else:
+                new_hour = hours - 1
+                new_time = f'{new_hour:02d}:59:59'
+            df_adj.loc[df_adj.index[-1], end_col] = new_time
+        
+        return df_adj
 
+    
 
-    def calculate_weighted_share(self, data, auedience) -> pd.DataFrame:
+    def calculate_hour_jump(self, start_col = 'Время выхода', end_col = 'Время окончания'):
         """
-            Функция для расчета взвешенной доли. 
+            Рассчитывает количество скачков через час для всех программ в DataFrame.
+            
             Args:
-                df: pd.DataFrame: Датафрейм, в котором есть столбцы Долей (Share), Время выхода, Время окончания, Название программы для какого одного дня.
+                df: DataFrame с колонками времени
+                start_col: название колонки с временем начала
+                end_col: название колонки с временем окончания
+            
+            Returns:
+                DataFrame с добавленной колонкой 'Скачки через час'
+        """
+        result_df = self.df.copy()
+
+        jumps_list = []
+        hours_list = []
+        durations_list = []
+        
+        for idx, row in result_df.iterrows():
+            try:
+                # Парсим время
+                start_time = datetime.strptime(str(row[start_col]), '%H:%M:%S')
+                end_time = datetime.strptime(str(row[end_col]), '%H:%M:%S')
+                
+                # Корректируем время окончания при переходе через полночь
+                if end_time <= start_time:
+                    end_time += timedelta(days=1)
+                
+                # Рассчитываем количество скачков
+                current_time = start_time
+                hour_jumps = 0
+                hours_covered = []
+                
+                while current_time < end_time:
+                    current_hour = current_time.hour
+                    hours_covered.append(current_hour)
+                    
+                    # Определяем начало следующего часа
+                    next_hour_start = current_time.replace(minute = 0, second = 0, microsecond = 0) + timedelta(hours = 1)
+                    
+                    # Если следующий час не превышает время окончания, это скачок
+                    if next_hour_start < end_time:
+                        hour_jumps += 1
+                    
+                    # Переходим к следующему часу
+                    current_time = next_hour_start
+                
+                # Длительность в минутах
+                duration = (end_time - start_time).total_seconds() / 60.0
+                
+                jumps_list.append(hour_jumps)
+                hours_list.append(hours_covered)
+                durations_list.append(duration)
+                
+            except Exception as e:
+                print(f'Ошибка в строке {idx}: {e}')
+                jumps_list.append(0)
+                hours_list.append([])
+                durations_list.append(0)
+        
+        # Добавляем результаты в DataFrame
+        result_df['Скачки через час'] = jumps_list
+        result_df['Пройдено часов'] = hours_list
+        result_df['Длительность (мин)'] = durations_list
+        
+        return result_df
+    
+
+    def calculate_weighted_share(self, auedience) -> pd.DataFrame:
+        """
+            Функция для расчета взвешенной доли для какого-то конкретного дня.
+            Args:
                 auedience: pd.DataFrame: ДатаФрейм с весами слотов, посчитанными через TotalTVAuedience для конкретного дня.
             Returns:
-                data: pd.DataFrame: Датафрейм с новой рассчитанной долей
+                res: pd.DataFrame: Датафрейм с новой рассчитанной долей для какого-то конкретного дня
+                share_sum: суммарная доля для какого-то конкретного дня
         """
-        self.df = data
-        # Если время уже в формате времени, преобразуем в строку и затем в datetime
-        self.df['Время выхода_dt'] = pd.to_datetime(self.df['Время выхода'].astype(str))
-        self.df['Время окончания_dt'] = pd.to_datetime(self.df['Время окончания'].astype(str))
-        self.df['hour_start'] = self.df['Время выхода_dt'].dt.hour
-        self.df['hour_end'] = self.df['Время окончания_dt'].dt.hour
+        # Определяем количество скачков через час в датафрейме
+        result_df = self.calculate_hour_jump()
 
-        # Создаем новые столбцы для результатов
-        self.df['Длительность 1'] = pd.Timedelta(0)   # если нет скачка через час
-        self.df['Длительность 2'] = pd.Timedelta(0)   # если есть скачок через час
-        self.df['Разделение часа'] = False
-
-        # Проходим по всем строкам
-        for idx, row in self.df.iterrows():
-            start_time = row['Время выхода_dt']
-            end_time = row['Время окончания_dt']
-            
-            # Проверяем, совпадают ли часы
-            if start_time.hour == end_time.hour:
-                # Если часы совпадают - простая разность
-                self.df.at[idx, 'Длительность 1'] = end_time - start_time
-                self.df.at[idx, 'Разделение часа'] = False
-                
-            else:
-                # Если часы разные - разделяем на две длительности
-                end_hour = TVShareCalculator.get_hour(start_time, 'end_of_current_hour')
-                start_of_curr_hour = TVShareCalculator.get_hour(end_time, 'start_of_current_hour')
-                
-                # Длительность 1: от начала до следующего часа
-                duration1 = end_hour - start_time
-                
-                # Длительность 2: от предыдущего часа до окончания
-                duration2 = end_time - start_of_curr_hour
-                
-                self.df.at[idx, 'Длительность 1'] = duration1
-                self.df.at[idx, 'Длительность 2'] = duration2
-                self.df.at[idx, 'Разделение часа'] = True
-
-        # Конвертируем в минуты для удобства
-        self.df['Длительность 1, мин'] = self.df['Длительность 1'].dt.total_seconds() / 60.0
-        self.df['Длительность 2, мин'] = self.df['Длительность 2'].dt.total_seconds() / 60.0
-
-        # Считаем % длительности программы в часе
-        self.df['% duration 1'] = self.df['Длительность 1, мин'] / 60.0
-        self.df['% duration 2'] = self.df['Длительность 2, мин'] / 60.0
-
-        res = self.df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 
-                'hour_start', 'hour_end', 'Share', 'Длительность 1, мин',
-                'Длительность 2, мин', '% duration 1', '% duration 2', 'Разделение часа']]
+        df = result_df.copy()
 
         # Создаём столбец с новой долей
-        res['Share_NEW'] = 0.0
+        df['Share_weighted'] = 0.0
 
+        # Создаем словарь весов для быстрого доступа
+        weight_dict = dict(zip(auedience['hour_start'], auedience['Slot_weight']))
+        
+        for i in range(len(df)):
+            num_of_jumps = df.iloc[i]['Пройдено часов']
+            program_start = df.iloc[i]['Время выхода']
+            program_finish = df.iloc[i]['Время окончания']
+            share = df.iloc[i]['Share']
 
-        ########################## Расчет новой доли ####################
-        for i in range(len(res)):
-            slot_weight_2 = 0.0
-            
-            start_hour = res.iloc[i]['hour_start']
-            end_hour = res.iloc[i]['hour_end']
-            share = res.iloc[i]['Share']
-            duration_1 = res.iloc[i]['% duration 1']
-            
-            # Если есть скачок через час
-            duration_2 = res.iloc[i]['% duration 2']
-            
-            slot_weight_1 = auedience.loc[auedience['hour_start'] == start_hour, 'Slot_weight'].iloc[0]
+            start_dt = datetime.strptime(program_start, '%H:%M:%S')
+            end_dt = datetime.strptime(program_finish, '%H:%M:%S')
 
-            # Если скачка через час нет, считаем долю в слоте как Share * вес слота * % длительности программы в часе
-            res.at[i, 'Share_NEW'] = share * duration_1 * slot_weight_1
-            
-            # Если есть скачок через час, считаем долю по-другому
-            if duration_2 != 0.0:
+            # Обрабатываем переход через полночь
+            if end_dt <= start_dt:
+                end_dt += timedelta(days = 1)
+
+            coeffs = []
+
+            # Если скачка нет (программа в пределах одного часа)
+            if len(num_of_jumps) == 1:
                 
-                slot_weight_2 = auedience.loc[auedience['hour_start'] == end_hour, 'Slot_weight'].iloc[0]
-                res.at[i, 'Share_NEW'] = share * (duration_1 * slot_weight_1 + duration_2 * slot_weight_2)
+                # Определение часа старта для подбора веса слота
+                hour = num_of_jumps[0]
+
+                # Длительность в минутах
+                duration_minutes = (end_dt - start_dt).total_seconds() / 60.0
+                # % длительности программы в часе
+                percent_duration = duration_minutes / 60.0
+
+                # Получаем вес слота
+                slot_weight = weight_dict.get(hour, 1.0)
+
+                # Если скачка через час нет, считаем долю в слоте как Share * вес слота * % длительности программы в часе
+                coeffs.append(percent_duration * slot_weight)
                 
-        data = res[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share_NEW']]
-        data.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
+            # Если есть скачки (он необязательно должен быть 1)
+            else:
+                for k in range(len(num_of_jumps)):
+                    # Первый скачок
+                    if k == 0:
+                        # Определяем конец первого часа
+                        end_hour = datetime.strptime(f'{num_of_jumps[k]:02d}:59:59', '%H:%M:%S')
+                        # Длительность в минутах
+                        duration_minutes = (end_hour - start_dt).total_seconds() / 60.0
+                        # % длительности программы в часе
+                        percent_duration = duration_minutes / 60.0
+
+
+                        # Получаем вес слота
+                        slot_weight = weight_dict.get(num_of_jumps[0], 1.0)
+
+                        coeffs.append(percent_duration * slot_weight)
+                    
+                    # Последний скачок
+                    elif k == len(num_of_jumps) - 1:
+                        # Определяем начало последнего часа
+                        start_hour = datetime.strptime(f'{num_of_jumps[k]:02d}:00:00', '%H:%M:%S')
+
+                        # Если start_hour меньше start_dt (переход через полночь), добавляем день
+                        if start_hour < start_dt:
+                            start_hour += timedelta(days = 1)
+
+                        # Длительность в минутах
+                        duration_minutes = (end_dt - start_hour).total_seconds() / 60.0
+                        # % длительности программы в часе
+                        percent_duration = duration_minutes / 60.0
+
+                        # Получаем вес слота
+                        slot_weight = weight_dict.get(num_of_jumps[-1], 1.0)
+
+                        coeffs.append(percent_duration * slot_weight)
+
+                    # Промежуточный скачок
+                    else:
+                        # Определяем начало часа
+                        start_hour = datetime.strptime(f'{num_of_jumps[k]:02d}:00:00', '%H:%M:%S')
+
+                        # Определяем конец часа
+                        end_hour = datetime.strptime(f'{num_of_jumps[k]:02d}:59:59', '%H:%M:%S')
+                        # Длительность в минутах
+                        duration_minutes = (end_hour - start_hour).total_seconds() / 60.0
+                        # % длительности программы в часе
+                        percent_duration = duration_minutes / 60.0
+
+                        # Получаем вес слота
+                        slot_weight = weight_dict.get(num_of_jumps[k], 1.0)
+
+                        coeffs.append(percent_duration * slot_weight)
+                    
+            if len(coeffs) != 0:
+                coefficient = np.sum(coeffs)
+                df.at[i, 'Share_weighted'] = share * coefficient
+
+        res = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted']]
+        #res.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
         # Расчёт суммарной доли по дню
-        share_sum = np.sum(list(data['Share']))
-        return data, share_sum
+        share_sum = np.sum(list(res['Share_weighted']))
+        return res, share_sum
