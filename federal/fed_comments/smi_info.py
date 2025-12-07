@@ -95,8 +95,8 @@ class SMI_info:
             result.append('. '.join(united_sentances) + '.')
         
         return result
-
     
+
     def read_smi_file(self, channel: str, month: str, channels_need_replace: dict, year: int):
         """
             Функция для чтения файла от отдела СМИ по переброскам.
@@ -119,8 +119,13 @@ class SMI_info:
             'ТНТ4': 'ТНТ 4'
         }
         channel_not_found = ''
+        
         try:
             data = pd.read_excel(self.smi_filepath, skiprows = 1, sheet_name = 'Итоги')
+
+            # Сохраняем исходные индексы из файла (+3 для перевода в Excel строки)
+            data['excel_row'] = data.index + 3
+
             data = data.loc[(data['Статус'] == 'реализовано') & (data['Год'] == year)]
             volume_transfer = data[[ 
                         'Канал', 
@@ -131,15 +136,22 @@ class SMI_info:
                         'Итог GRP в регионы -', 
                         'Итог GRP из регионов +', 
                         'Дата осуществления переброски', 
-                        'Комментарий']]
-            volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска') & (volume_transfer['Комментарий'] != 'кросс-промо')]
-            #volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска')]
+                        'Комментарий',
+                        'excel_row'  # Сохраняем номер строки
+                        ]]
+            volume_transfer = volume_transfer.loc[(volume_transfer['Комментарий'] != 'стратегическая переброска') & \
+                                                  (volume_transfer['Комментарий'] != 'кросс-промо')
+                                                  ]
+            
+            # Сохраняем исходные номера строк для фильтрованного DataFrame
+            excel_rows = volume_transfer['excel_row'].tolist()
             
             #Изменение столбца с каналами
             channels_old = list(volume_transfer['Канал'])
             channels_new = []
             for i in range(len(channels_old)):
                 channels_new.append(channels_old[i].upper())
+
             volume_transfer['Канал'] = volume_transfer['Канал'].replace(channels_old, channels_new)
             volume_transfer['Канал'].replace(channels_need_replace, inplace = True)
             
@@ -150,12 +162,27 @@ class SMI_info:
                 months_new.append(months_old[i].title())
             volume_transfer['Месяц'] = volume_transfer['Месяц'].replace(months_old, months_new)
             volume_transfer['Год'] = volume_transfer['Год'].astype(int)
-            
+
             old_dates = list(volume_transfer['Дата осуществления переброски'])
             new_dates = []
             for i in range(len(old_dates)):
-                new_date = old_dates[i].strftime('%Y-%m-%d')
-                new_dates.append(new_date)
+                try:
+                    
+                    new_date = old_dates[i].strftime('%Y-%m-%d')
+                    new_dates.append(new_date)
+
+                except (ValueError, pd.errors.ParserError) as e:
+                    excel_row = excel_rows[i]
+                    
+                    error_msg = (
+                                f'Отдел СМИ забыл заполнить ячейку "Дата осуществления переброски" в строке {excel_row}. '
+                                f'Пожалуйста, заполните самостоятельно. '
+                                f'Скопируйте дату из столбца "Дата запуска переброски" из строки {excel_row} и вставьте её в ячейку {excel_row} столбца "Дата осуществления переброски". '
+                                f'Сохраните изменения в файле и запустите код повторно.'
+                            )
+                    
+                    raise ValueError(error_msg)
+
             volume_transfer['Дата осуществления переброски'] = volume_transfer['Дата осуществления переброски'].replace(old_dates, new_dates)
             volume_transfer_ = volume_transfer.loc[(volume_transfer['Месяц'] == month) & (volume_transfer['Канал'] == channel)].reset_index(drop = True)
 
@@ -164,6 +191,7 @@ class SMI_info:
         
             volume_transfer_['Комментарий'] = volume_transfer_['Комментарий'].apply(str)
             return volume_transfer_, channel_not_found
+        
         except FileNotFoundError:
             print('Файл с Перебросками-Сокращениями от СМИ не найден. Пожалуйста, добавьте его в соответствующую папку!')
 
@@ -208,6 +236,7 @@ class SMI_info:
                 #Выделяем канал, месяц, дату из таблицы с изменениями Объемов
                 channel_2 = volume_transfer.iloc[j]['Канал']
                 month_2 = volume_transfer.iloc[j]['Месяц']
+
                 date_2 = pd.to_datetime(volume_transfer.iloc[j]['Дата осуществления переброски']).strftime('%Y-%m-%d')
                 #Выделяем номер месяца из даты осуществления переброски
                 month_smi_date = pd.to_datetime(volume_transfer.iloc[j]['Дата осуществления переброски']).month
