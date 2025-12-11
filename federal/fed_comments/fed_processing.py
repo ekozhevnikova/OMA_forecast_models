@@ -305,9 +305,7 @@ class Federal_Processing:
                     data_output_dates['Дата'] = pd.to_datetime(data_output_dates['Дата'])
                     smi_by_days_['Дата'] = pd.to_datetime(smi_by_days_['Дата'])
 
-
                     merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Месяц', 'Дата'], how = 'left')
-                    print(merged_df)
 
                     merged_df['Комментарий'] = merged_df.apply(Federal_Comments.combine_columns, axis = 1)
 

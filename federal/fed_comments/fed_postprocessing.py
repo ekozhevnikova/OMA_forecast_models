@@ -173,7 +173,13 @@ class Federal_Postprocessing:
                                     filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in joined_possible_comments)]
                                     result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
                             else:
-                                result_df.at[j, 'Комментарий'] = ''
+                                if smi_date_flag == True:
+                                    comment_splitted = comment.split('. ')
+                                    # Фильтруем комментарии
+                                    filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in possible_comments_smi)]
+                                    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                                else:
+                                    result_df.at[j, 'Комментарий'] = ''
                 else:
                     if channel_i == channel_j and date_i == date_j:
                         comment = result_df.iloc[j]['Комментарий']

@@ -1122,6 +1122,8 @@ class Federal_Comments:
     def combine_columns(row):
         if pd.isna(row['Комментарий_y']):
             return row['Комментарий_x']
+        elif pd.isna(row['Комментарий_x']):
+            return row['Комментарий_y']
         elif isinstance(row['Комментарий_x'], str) and isinstance(row['Комментарий_y'], str):
             return f"{row['Комментарий_y']} {row['Комментарий_x']}" 
         else:
