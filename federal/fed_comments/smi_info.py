@@ -398,7 +398,7 @@ class SMI_info:
                                             'Дата из СМИ': date_2,
                                             'Комментарий': f'Перераспределение из регионов {grp_plus_} GRP.'
                                         }
-                #Заполнение итогового словаря с изменениями             
+                #Заполнение итогового словаря с изменениями          
                 if comments:
                     channel_date = channel_2 + month_2
                     if month_2 in comments_full.keys():
@@ -436,6 +436,7 @@ class SMI_info:
             df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
                 lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
             ).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop = True)
+
         else:
             df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
                 lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)

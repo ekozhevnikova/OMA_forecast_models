@@ -221,13 +221,13 @@ class Find_Similarity:
         #Отбираем колонки в исторической сетке Palomars
         plmrs_analysis = self.df_big[['Дата', 'program_name', 
                                     'Время выхода', 'Время окончания', 
-                                    'День недели', 'Share']]
+                                    'Share']]
         plmrs_analysis = plmrs_analysis.rename(columns = {'program_name': 'Название программы'})
 
         #Отбираем колонки в новой сетке VIMB
         vimb_analysis = self.small_df[['Дата', 'program_name', 
-                            'Время выхода', 'Время окончания', 
-                            'День недели']]
+                            'Время выхода', 'Время окончания'
+                            ]]
         vimb_analysis['Share'] = ''
         vimb_analysis = vimb_analysis.rename(columns = {'program_name': 'Название программы'})
 

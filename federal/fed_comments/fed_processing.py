@@ -296,7 +296,19 @@ class Federal_Processing:
                 
                 #Если нашлись релеватные данные от СМИ и нашлись объяснения из таблицы со сравнением прогнозов
                 else:
-                    merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Дата', 'Месяц'], how = 'left')
+                    
+                    columns = ['Канал', 'Месяц']
+                    for col in columns:
+                        data_output_dates[col] = data_output_dates[col].astype(str)
+                        smi_by_days_[col] = smi_by_days_[col].astype(str)
+
+                    data_output_dates['Дата'] = pd.to_datetime(data_output_dates['Дата'])
+                    smi_by_days_['Дата'] = pd.to_datetime(smi_by_days_['Дата'])
+
+
+                    merged_df = pd.merge(data_output_dates, smi_by_days_, on = ['Канал', 'Месяц', 'Дата'], how = 'left')
+                    print(merged_df)
+
                     merged_df['Комментарий'] = merged_df.apply(Federal_Comments.combine_columns, axis = 1)
 
                     general_by_days = merged_df[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий', 'Дата осуществления']]
