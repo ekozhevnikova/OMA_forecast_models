@@ -154,26 +154,11 @@ class Federal_Processing:
                 start_date: дата, начиная с которой начинаем смотреть изменения GRP.
                 flag: Если True, то парсим файл со сравнением прогнозов.
         """
-        ##Определение порогов
-        #df_limits = Federal_Processing.define_limits(self.limits_file)
-        ##Чтение данных из федерального кубика
-        #data_cubik = Federal_Preprocessing.read_cubik(filename = self.cubik_file)
-
-        ##Обрезание данных Федерального Кубика
-        #prepr = Federal_Preprocessing(data_cubik)
-        #need_data = prepr.cut_data_cubik(start_date)
-
-        #general_df_by_dates, df_by_dates_need_comment = Federal_Preprocessing.calculate_differencies(
-        #                                                                                    need_data, 
-        #                                                                                    df_limits
-        #                                                                                        )
-        # Парсим файл со сравнением прогнозов
         if flag:
             try:
                 #Считывание файла со сравнением прогнозов
                 forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 2, sheet_name = 'Сводная')
 
-                #date_old_forecast = forecast_comparison.iloc[0]['Дата обновления']
                 date_new_forecast = forecast_comparison.iloc[0]['Unnamed: 23']
 
                 forecast_comparison = pd.read_excel(self.forecast_comparison_file, skiprows = 5, sheet_name = 'Сводная')
@@ -186,7 +171,6 @@ class Federal_Processing:
                     'Август.2', 'Сентябрь.2', 'Октябрь.2', 'Ноябрь.2', 'Декабрь.2']
                 forecast_comparison = forecast_comparison[columns]
 
-                #return df_limits, forecast_comparison, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment, date_new_forecast
                 return forecast_comparison, date_new_forecast
             
             except FileNotFoundError:
@@ -194,7 +178,6 @@ class Federal_Processing:
         
         else:
             return None
-            #return df_limits, data_cubik, need_data, general_df_by_dates, df_by_dates_need_comment
     
 
     ### НОВАЯ ВЕРСИЯ МЕТОДА BY_DAYS ###
@@ -227,7 +210,17 @@ class Federal_Processing:
 
         years = list(by_dates_dict.keys())
 
+        # Фильтруем года - оставляем только те, у которых есть непустые датафреймы
+        non_empty_years = [
+            year for year in years 
+            if isinstance(by_dates_dict.get(year), pd.DataFrame) 
+            and not by_dates_dict[year].empty
+        ]
+
+        print(color.BOLD + color.RED + f'Найдено {len(non_empty_years)} непустых годов из {len(years)}' + color.END)
+
         for year in years:
+            print(color.BOLD + color.BLUE + f'Обрабатываем {year} год' + color.END)
             try:
 
                 # Генерация нужного порядка месяцев нужного формат, основываясь на годе
@@ -409,6 +402,7 @@ class Federal_Processing:
                 raise ValueError('Проверьте данные кубика. Изменений не найдено.')
 
         # Фильтруем пустые датафреймы
+        print(color.BOLD + color.GREEN + f'Объединяю результаты. Пожалуйста, подождите ...' + color.END)
         non_empty_dfs = [year_results[year][0] for year in year_results 
                         if not year_results[year][0].empty]
 
@@ -450,7 +444,18 @@ class Federal_Processing:
 
         years = list(by_dates_dict.keys())
 
+        # Фильтруем года - оставляем только те, у которых есть непустые датафреймы
+        non_empty_years = [
+            year for year in years 
+            if isinstance(by_dates_dict.get(year), pd.DataFrame) 
+            and not by_dates_dict[year].empty
+        ]
+
+        print(color.BOLD + color.RED + f'Найдено {len(non_empty_years)} непустых годов из {len(years)}' + color.END)
+
         for year in years:
+
+            print(color.BOLD + color.BLUE + f'Обрабатываем {year} год' + color.END)
             # Генерация нужного порядка месяцев нужного формат, основываясь на годе
             month_order = Federal_Processing.generate_month_order(year)
 
@@ -640,6 +645,7 @@ class Federal_Processing:
                         #eturn general_summ_sorted, problem_channels
 
         # Фильтруем пустые датафреймы
+        print(color.BOLD + color.GREEN + f'Объединяю результаты. Пожалуйста, подождите ...' + color.END)
         non_empty_dfs = [year_results[year][0] for year in year_results 
                         if not year_results[year][0].empty]
 

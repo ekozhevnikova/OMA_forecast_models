@@ -452,7 +452,7 @@ class SMI_info:
 
             df_result = df[
                         (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days=3)
-                        ].groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_periods).reset_index(drop=True)
+                        ].groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop=True)
 
 
         #df_result.drop_duplicates(['Канал', 'Месяц', 'Дата'], inplace=True)
