@@ -247,7 +247,9 @@ class SMI_info:
                         grp_minus = volume_transfer.iloc[j]['GRP сокращено']
                         #Обработка случая, если в столбце 'GRP открыто' и интересующей строчке j не NaN
                         if not np.isnan(grp_minus):
+
                             if np.abs(grp_minus) >= limit * smi_criteria:
+
                                 #Генерация комментариев для снятия телемагазинов
                                 if re.search(pattern_telemag, volume_transfer.iloc[j]['Комментарий']):
                                     if flag_by_days:
@@ -398,15 +400,16 @@ class SMI_info:
                                             'Дата из СМИ': date_2,
                                             'Комментарий': f'Перераспределение из регионов {grp_plus_} GRP.'
                                         }
-                #Заполнение итогового словаря с изменениями          
+                #Заполнение итогового словаря с изменениями
                 if comments:
-                    channel_date = channel_2 + month_2
+                    channel_date = channel_2 + month_2 + date_2
                     if month_2 in comments_full.keys():
                         if not channel_date in used_channels_dates:
                             comments_full[month_2].append(comments)
                     else:
                         comments_full[month_2] = [comments]
                         used_channels_dates.append(channel_date)
+
         #Создание DataFrame с комментариями
         result = []
         for month, channel_comments in comments_full.items():
@@ -433,14 +436,24 @@ class SMI_info:
 
         # Группируем по 'Канал', 'Месяц' и объединяем комментарии
         if flag_by_days:
-            df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
-                lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
-            ).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop = True)
+            #df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
+            #    lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
+            #).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop = True)
+
+            df_result = df[
+                        (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days=3)
+                        ].groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop=True)
+            
 
         else:
-            df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
-                lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
-            ).groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop = True)
+            #df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
+            #    lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
+            #).groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop = True)
+
+            df_result = df[
+                        (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days=3)
+                        ].groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_periods).reset_index(drop=True)
+
 
         #df_result.drop_duplicates(['Канал', 'Месяц', 'Дата'], inplace=True)
 

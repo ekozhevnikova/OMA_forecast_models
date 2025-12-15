@@ -99,7 +99,6 @@ class TVShareCalculator:
         elif param == "start_previous_hour":
             return dt.replace(minute=0, second=0, microsecond=0) + timedelta(hours=-1)
 
-
     def round_time(self, time_column: str, minutes=1, method="round"):
         """
         Точное округление времени до минут без использования float.
@@ -167,7 +166,6 @@ class TVShareCalculator:
 
         # Применяем к каждой строке
         return time_series.apply(lambda x: round_single_time(x, minutes, method))
-
 
     def adjust_hour_start(self, end_col="Время окончания", start_col="Время выхода"):
         """
@@ -424,25 +422,6 @@ class TVScheduleProcessor:
         self.vimb_init = None
         self.palomars_init = None
         self.stats = {}
-    
-
-    @staticmethod
-    def calculate_duration_minutes(row):
-            try:
-                start_time = datetime.strptime(row["Время выхода"], "%H:%M:%S")
-                end_time = datetime.strptime(row["Время окончания"], "%H:%M:%S")
-
-                # Если время окончания меньше времени начала (переход через полночь)
-                if end_time < start_time:
-                    end_time = end_time.replace(day=end_time.day + 1)
-
-                duration_minutes = (
-                    end_time - start_time
-                ).total_seconds() / 60  # в минутах
-                return duration_minutes
-            except:
-                return 0
-            
 
     def _adjust_end_time(
         self, df: pd.DataFrame, time_col: str = "Время окончания"
@@ -475,63 +454,6 @@ class TVScheduleProcessor:
         df = df.copy()
         df[time_col] = df[time_col].apply(adjust_time)
         return df
-    
-
-    @staticmethod
-    def split_programs_by_time(
-            df, 
-            start_minutes_allowed = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55],  # разрешенные минуты для начала
-            end_minutes_allowed = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55],  # разрешенные минуты для окончания
-            max_duration_minutes = 60
-        ):
-        """
-            Универсальное разделение по времени начала/окончания.
-            
-            Параметры:
-            - start_minutes_allowed: список разрешенных минут для времени начала
-            - end_minutes_allowed: список разрешенных минут для времени окончания  
-            - max_duration_minutes: максимальная длительность в минутах
-        """
-        def parse_time(time_str):
-            """
-                Парсит время в (часы, минуты, секунды).
-            """
-            parts = list(map(int, time_str.split(':')))
-            if len(parts) == 2:
-                return parts[0], parts[1], 0
-            return parts[0], parts[1], parts[2]
-        
-        def check_condition(row):
-            h1, m1, s1 = parse_time(row['Время выхода'])
-            h2, m2, s2 = parse_time(row['Время окончания'])
-            
-            # Проверка секунд (должны быть 0)
-            if s1 != 0 or s2 != 0:
-                return False
-            
-            # Проверка минут начала
-            if m1 not in start_minutes_allowed:
-                return False
-            
-            # Проверка минут окончания
-            if m2 not in end_minutes_allowed:
-                return False
-            
-            # Расчет длительности
-            start_total = h1 * 60 + m1
-            end_total = h2 * 60 + m2
-            
-            if end_total < start_total:
-                end_total += 24 * 60
-                
-            duration = end_total - start_total
-            
-            return duration <= max_duration_minutes
-        
-        mask = df.apply(check_condition, axis=1)
-        
-        return df[mask].reset_index(drop = True), df[~mask].reset_index(drop = True)
-    
 
     def _add_original_time_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -550,14 +472,13 @@ class TVScheduleProcessor:
             result["Время окончания_исходное"] = result["Время окончания"]
 
         return result
-    
 
     def _prepare_dataframe(
-            self, df: pd.DataFrame, minutes: int, include_share: bool = True
-        ) -> pd.DataFrame:
+        self, df: pd.DataFrame, minutes: int, include_share: bool = True
+    ) -> pd.DataFrame:
         """
-            Подготовка датафрейма. Времена слотов округляются до установленных минут.
-            Таким образом, датафрейм подготавливается для дальнейшего анализа.
+        Подготовка датафрейма. Времена слотов округляются до установленных минут.
+        Таким образом, датафрейм подготавливается для дальнейшего анализа.
         """
         data = df.copy()
 
@@ -590,20 +511,19 @@ class TVScheduleProcessor:
         result["Дата"] = pd.to_datetime(result["Дата"]).dt.strftime("%Y-%m-%d")
 
         return result
-    
 
     def _remove_found_programs(
-            self, source_df: pd.DataFrame, found_df: pd.DataFrame
-        ) -> pd.DataFrame:
+        self, source_df: pd.DataFrame, found_df: pd.DataFrame
+    ) -> pd.DataFrame:
         """
-            Удаление найденных программ из исходных данных
+        Удаление найденных программ из исходных данных
 
-            Args:
-                source_df: датафрейм, из которого будем удалять найденные программы
-                found_df: датафрейм, с найденными программами
+        Args:
+            source_df: датафрейм, из которого будем удалять найденные программы
+            found_df: датафрейм, с найденными программами
 
-            Returns:
-                pd.DataFrame: очищенный датафрейм source_df от найденных программ в датафрейме found_df
+        Returns:
+            pd.DataFrame: очищенный датафрейм source_df от найденных программ в датафрейме found_df
 
         """
         if found_df.empty:
@@ -611,24 +531,23 @@ class TVScheduleProcessor:
 
         merge_keys = ["Дата", "Название программы", "Время выхода", "Время окончания"]
         merged = source_df.merge(
-            found_df[merge_keys], on = merge_keys, how = "left", indicator = True
+            found_df[merge_keys], on=merge_keys, how="left", indicator=True
         )
 
-        return merged.query('_merge == "left_only"').drop("_merge", axis = 1)
-    
+        return merged.query('_merge == "left_only"').drop("_merge", axis=1)
 
     @staticmethod
     def group_broadcasts_by_hours(data):
         """
-            Объединяет последовательные трансляции одной программы по часам.
-            Объединяет сегменты, которые находятся в одном часу и имеют последовательное время.
-            ИСПРАВЛЕНО: Теперь находит все сегменты программы в пределах часа, даже если они прерываются другими программами.
+        Объединяет последовательные трансляции одной программы по часам.
+        Объединяет сегменты, которые находятся в одном часу и имеют последовательное время.
+        ИСПРАВЛЕНО: Теперь находит все сегменты программы в пределах часа, даже если они прерываются другими программами.
 
-            Args:
-                data (pd.DataFrame): Исходный DataFrame с временными сегментами
+        Args:
+            data (pd.DataFrame): Исходный DataFrame с временными сегментами
 
-            Returns:
-                pd.DataFrame: DataFrame с консолидированными сегментами по часам
+        Returns:
+            pd.DataFrame: DataFrame с консолидированными сегментами по часам
         """
         df = data.copy()
 
@@ -650,7 +569,7 @@ class TVScheduleProcessor:
             # Группируем по дате и часу
             for (date, hour), hour_group in program_df.groupby(["Дата", "Час_начала"]):
                 hour_group = hour_group.sort_values("Время выхода").reset_index(
-                    drop = True
+                    drop=True
                 )
 
                 # Находим все сегменты этой программы в данном часу
@@ -744,22 +663,21 @@ class TVScheduleProcessor:
         else:
             # Если нет данных, возвращаем пустой DataFrame с правильной структурой
             return pd.DataFrame(
-                columns = [
+                columns=[
                     "Дата",
                     "Название программы",
                     "Время выхода",
                     "Время окончания",
-                    "Share"
+                    "Share",
                 ]
             )
-        
 
     @staticmethod
     def join_broadcasts(data):
         """
-            Упрощенная версия для объединения трансляций в рамках одного дня.
-            Учитывает эфирные сутки (05:00-04:59).
-            ИСПРАВЛЕНО: Теперь находит все сегменты программы в течение дня, даже если они прерываются другими программами.
+        Упрощенная версия для объединения трансляций в рамках одного дня.
+        Учитывает эфирные сутки (05:00-04:59).
+        ИСПРАВЛЕНО: Теперь находит все сегменты программы в течение дня, даже если они прерываются другими программами.
         """
         df = data.copy()
 
@@ -894,11 +812,10 @@ class TVScheduleProcessor:
                 ]
             )
 
-
     @staticmethod
     def __get_overlap_duration_seconds(
-            start1: datetime, end1: datetime, start2: datetime, end2: datetime
-        ) -> float | None:
+        start1: datetime, end1: datetime, start2: datetime, end2: datetime
+    ) -> float | None:
         overlap_start: datetime = datetime.combine(
             datetime.today(), max(start1, start2)
         )
@@ -909,15 +826,14 @@ class TVScheduleProcessor:
         else:
             return None
 
-
     @staticmethod
     def find_time_overlaps(
-            program1_start: str,
-            program1_end: str,
-            program2_start: str,
-            program2_end: str,
-            min_overlap_ratio: float = 0.8,
-        ) -> bool:
+        program1_start: str,
+        program1_end: str,
+        program2_start: str,
+        program2_end: str,
+        min_overlap_ratio: float = 0.8,
+    ) -> bool:
         date_format = "%H:%M:%S"
 
         s1: datetime = datetime.strptime(program1_start, date_format).time()
@@ -942,21 +858,21 @@ class TVScheduleProcessor:
             >= min_overlap_ratio
         )
 
-
     def _process_schedule_step(
-            self,
-            palomars: pd.DataFrame,
-            vimb: pd.DataFrame,
-            minutes: int
-        ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        self,
+        palomars: pd.DataFrame,
+        vimb: pd.DataFrame,
+        minutes: int,
+        step_name: str,
+    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
         """
-            Обработка одного шага сопоставления с округлением времени
+        Обработка одного шага сопоставления с округлением времени
         """
 
         vimb = self._add_original_time_columns(vimb)
 
         # Подготовка данных
-        pal_processed = self._prepare_dataframe(palomars, minutes, include_share = True)
+        pal_processed = self._prepare_dataframe(palomars, minutes, include_share=True)
 
         # Корректировка времени окончания
         pal_processed = self._adjust_end_time(pal_processed, "Время окончания")
@@ -965,14 +881,12 @@ class TVScheduleProcessor:
         # Поиск совпадений
         merge_keys = ["Дата", "Название программы", "Время выхода", "Время окончания"]
 
-        vimb_processed =  self.convert_data_column(vimb_processed)
-        pal_processed =  self.convert_data_column(pal_processed)
         matches = pd.merge(vimb_processed, pal_processed, on=merge_keys, how="inner")[
             ["Дата", "Название программы", "Время выхода", "Время окончания", "Share"]
         ]
 
         # Сохранение статистики
-        #self.stats[f"{step_name}_matches"] = len(matches)
+        self.stats[f"{step_name}_matches"] = len(matches)
 
         # Удаление найденных
         vimb_remaining = self._remove_found_programs(
@@ -982,86 +896,79 @@ class TVScheduleProcessor:
             drop=True
         )
 
-        #self.stats[f"{step_name}_vimb_remaining"] = len(vimb_remaining)
-        #self.stats[f"{step_name}_pal_remaining"] = len(pal_remaining)
+        self.stats[f"{step_name}_vimb_remaining"] = len(vimb_remaining)
+        self.stats[f"{step_name}_pal_remaining"] = len(pal_remaining)
 
         return matches, vimb_remaining, pal_remaining
 
-
     def _extract_core_info(
-            self, df: pd.DataFrame, include_share: bool = True
-        ) -> pd.DataFrame:
+        self, df: pd.DataFrame, include_share: bool = True
+    ) -> pd.DataFrame:
         """
-            Извлечение основной информации с переименованием колонок
+        Извлечение основной информации с переименованием колонок
         """
         if "Время выхода_исходное" and "Время окончания_исходное" in df.columns:
             if include_share and "Share" in df.columns:
                 columns = [
-                    'Дата',
-                    'Название программы', 'Время выхода_исходное',
-                    'Время окончания_исходное', 'Share'
+                    "Дата",
+                    "Название программы",
+                    "Время выхода_исходное",
+                    "Время окончания_исходное",
+                    "Share",
                 ]
             else:
                 columns = [
-                    'Дата', 'Название программы',
-                    'Время выхода_исходное', 'Время окончания_исходное',
+                    "Дата",
+                    "Название программы",
+                    "Время выхода_исходное",
+                    "Время окончания_исходное",
                 ]
 
             result = df[columns].copy()
             result.rename(
-                columns = {
-                    'Время выхода_исходное': 'Время выхода',
-                    'Время окончания_исходное': 'Время окончания'
+                columns={
+                    "Время выхода_исходное": "Время выхода",
+                    "Время окончания_исходное": "Время окончания",
                 },
-                inplace = True
+                inplace=True,
             )
 
             return result
 
         else:
             return df
-    
-
-    def convert_data_column(self, df):
-        """
-            Всопомгательный метод для конвертации столбца с названием 'Дата'
-        """
-        df['Дата'] = pd.to_datetime(df['Дата'])
-        df['Дата'] = df["Дата"].dt.strftime("%Y-%m-%d")
-        return df
-        
 
     def broadcasts_overlaping_OLD(self, df, vimb):
         """
-            Метод для сопоставления программ методом перекрытия двух длительностей.
+        Метод для сопоставления программ методом перекрытия двух длительностей.
         """
-        vimb_ = self._adjust_end_time(vimb, 'Время окончания')
+        vimb_ = self._adjust_end_time(vimb, "Время окончания")
 
-        df['overlap'] = ''
-        df['Время выхода VIMB'] = ''
-        df['Время окончания VIMB'] = ''
+        df["overlap"] = ""
+        df["Время выхода VIMB"] = ""
+        df["Время окончания VIMB"] = ""
 
         # Через расчет процента перекрытия понимаем, нужная это программа или нет
         for i in range(len(df)):
-            name = df.iloc[i]['Название программы']
-            start_palomars = df.iloc[i]['Время выхода']
-            h_start_P, m, s = map(int, start_palomars.split(':'))
+            name = df.iloc[i]["Название программы"]
+            start_palomars = df.iloc[i]["Время выхода"]
+            h_start_P, m, s = map(int, start_palomars.split(":"))
 
-            end_palomars = df.iloc[i]['Время окончания']
-            h_end_P, m, s = map(int, end_palomars.split(':'))
+            end_palomars = df.iloc[i]["Время окончания"]
+            h_end_P, m, s = map(int, end_palomars.split(":"))
 
-            in_vimb = vimb_[vimb_['Название программы'] == name].reset_index(drop = True)
+            in_vimb = vimb_[vimb_["Название программы"] == name].reset_index(drop=True)
 
             # print(name, len(in_vimb))
 
             if len(in_vimb) != 0:
 
                 for j in range(len(in_vimb)):
-                    start_vimb = in_vimb.iloc[j]['Время выхода']
-                    h_start_V, m, s = map(int, start_vimb.split(':'))
+                    start_vimb = in_vimb.iloc[j]["Время выхода"]
+                    h_start_V, m, s = map(int, start_vimb.split(":"))
 
-                    end_vimb = in_vimb.iloc[j]['Время окончания']
-                    h_end_V, m, s = map(int, end_vimb.split(':'))
+                    end_vimb = in_vimb.iloc[j]["Время окончания"]
+                    h_end_V, m, s = map(int, end_vimb.split(":"))
 
                     if (
                         h_start_P == h_start_V
@@ -1102,16 +1009,15 @@ class TVScheduleProcessor:
                 "Время выхода VIMB": "Время выхода",
                 "Время окончания VIMB": "Время окончания",
             },
-            inplace = True,
+            inplace=True,
         )
         return res_overlap
 
-
     def broadcasts_overlaping(
-            self, df, vimb, check_both_sides: bool = True, only_hour_programs: bool = False
-        ):
+        self, df, vimb, check_both_sides: bool = True, only_hour_programs: bool = False
+    ):
         """
-            Метод для сопоставления программ методом перекрытия двух длительностей.
+        Метод для сопоставления программ методом перекрытия двух длительностей.
         """
         vimb_ = self._adjust_end_time(vimb, "Время окончания")
 
@@ -1319,255 +1225,279 @@ class TVScheduleProcessor:
                 "Share",
             ]
         )
-    
-    
-    def find_mathes(
-            self, 
-            vimb_init: pd.DataFrame, 
-            plmrs_init: pd.DataFrame, 
-            all_matches: list, 
-            minutes_palomars: int,
-            minutes_vimb: int,
-            round_vimb: bool = False):
-        """
-            Вспомогательный метод для поиска совпадающих программ по простому merge путем округления слотов до определенного количества минут.
-            Args:
-                vimb_init: исходный датафрейм с сеткой VIMB, для которого будем искать совпадения.
-                plmrs_init: исходный датафрейм с сеткой Mediascope, который будем использовать для поиска совпадений.
-                all_matches: список с наденными программами.
-                minutes_palomars: int: количество минут для округления времени сетки Mediascope.
-                minutes_vimb: int: количество минут для округления времени сетки VIMB.
-            Returns: 
-                all_matches: list: обновленный список с найденными программами.
-                found_programs: pd.DataFrame: полный датафрейм с найденными программами.
-                vimb_clean_not_found: pd.DataFrame: оставшийся датафрейм с программами VIMB, для которых не удалось найти совпадения.
-        """
-        palomars = plmrs_init.copy()
 
-        # Округление датафрейма с сеткой VIMB, если требуется:
-        if round_vimb and minutes_vimb is not None:
-            vimb_round = self._prepare_dataframe(vimb_init, minutes_vimb, False)
-            vimb = vimb_round.copy()
-        
-        vimb = vimb_init.copy()
+    def process_schedules(
+        self, vimb: pd.DataFrame, palomars: pd.DataFrame, verbose: bool = True
+    ) -> Tuple[pd.DataFrame, Dict, pd.DataFrame, pd.DataFrame]:
+        """
+        Основной метод обработки телепрограмм
+
+        Args:
+            vimb: pd.DataFrame: датафрейм с сеткой ВИМБ
+            palomars: pd.DataFrame: датафрейм с сеткой Mediascope
+            verbose: bool:
+        Returns:
+            Tuple: (результирующий DataFrame, статистика, найденные программы, оставшиеся программы)
+        """
+        share_sum_init = np.sum(list(palomars["Share"]))
+        # Инициализация
+        self.vimb_init = vimb.copy()
+        self.palomars_init = palomars.copy()
+        self.stats = {}
+
+        if verbose:
+            print(
+                f"Исходные данные: VIMB = {len(self.vimb_init)}, Palomars = {len(self.palomars_init)}"
+            )
+
+        # Список для хранения найденных программ
+        all_matches = []
+
+        ############################ ШАГ 1: Обработка мелких программ, которые легко сджойнить. Округляем Palomars до 5 мин ############################
+        if verbose:
+            print(
+                color.BOLD
+                + color.RED
+                + "ШАГ 1: Обработка мелких программ, которые легко сджойнить"
+                + color.END,
+                sep="\n",
+                end="\n",
+            )
+
+        vimb_10min = self._prepare_dataframe(vimb, 10, False)
+        pal_5min = self._prepare_dataframe(palomars, 5, True)
 
         matches, vimb_remaining, pal_remaining = self._process_schedule_step(
-            palomars, vimb, minutes_palomars
+            pal_5min, vimb_10min, 5, "5_minutes"
         )
 
         # Добавляем в список найденных программ
-        all_matches.append(self._adjust_end_time(matches, 'Время окончания'))
+        all_matches.append(self._adjust_end_time(matches, "Время окончания"))
 
-        found_programs = pd.concat(all_matches).reset_index(drop = True)
+        found_programs_after_1 = pd.concat(all_matches).reset_index(drop=True)
 
         # Удаление найденных длинных программ
-        vimb_init =  self.convert_data_column(vimb_init)
-        found_programs =  self.convert_data_column(found_programs)
+        vimb_after_1 = self._remove_found_programs(
+            self._adjust_end_time(vimb, "Время окончания"), found_programs_after_1
+        ).reset_index(drop=True)
+        vimb_clean_after_1 = self._extract_core_info(vimb_after_1, False)
 
-        vimb_not_found = self._remove_found_programs(
-            self._adjust_end_time(vimb_init, 'Время окончания'), found_programs
-        ).reset_index(drop = True)
-        vimb_clean_not_found = self._extract_core_info(vimb_not_found, False)
-       
-        return all_matches, found_programs, vimb_clean_not_found
+        if verbose:
+            print(color.BOLD + "НАЙДЕННЫЕ ПРОГРАММЫ:" + color.END, sep="\n", end="\n")
+            print(found_programs_after_1)
+            print("#" * 120)
+            print(
+                color.BOLD + color.BLUE + "ВИМБ, который осталось найти" + color.END,
+                sep="\n",
+                end="\n",
+            )
+            print(vimb_clean_after_1)
+            print("#" * 120)
 
+        ############################ ШАГ 2: Обработка длинных программ с разбивкой по часам (округление 10 минут) ############################
+        if verbose:
+            print(
+                color.BOLD
+                + color.RED
+                + "ШАГ 2: Обработка длинных программ с разбивкой по часам (округление 10 минут)"
+                + color.END,
+                sep="\n",
+                end="\n",
+            )
 
-    def filter_hour_programs(
-            self, 
-            vimb_init: pd.DataFrame, 
-            plmrs_init: pd.DataFrame, 
-            all_matches: list, 
-            minutes_palomars: int):
-        """
-            Фильтрует часовые программы (50-60 минут) и находит совпадения с VIMB.
+        # Работаем с исходным датафреймом palomars
+        pal_10min = self._prepare_dataframe(palomars, 10, True)
 
-            Args:
-                vimb_init: исходный датафрейм с сеткой VIMB, для которого будем искать совпадения.
-                plmrs_init: исходный датафрейм с сеткой Mediascope, который будем использовать для поиска совпадений.
-                all_matches: список с наденными программами.
-                minutes_palomars: int: количество минут для округления времени сетки Mediascope.
-            
-            Returns: 
-                current_all_matches: list: обновленный список с найденными программами.
-                found_programs: pd.DataFrame: полный датафрейм с найденными программами.
-                vimb_clean: pd.DataFrame: оставшийся датафрейм с программами VIMB, для которых не удалось найти совпадения.
-        """
-        found_programs_init = pd.concat(all_matches).reset_index(drop = True)
+        # Поиск длинных программ, которые шли в течение 1 часа
+        hour_programs = TVScheduleProcessor.group_broadcasts_by_hours(pal_10min)
 
-        # 1. Подготовка часовых программ из Palomars
-        pal_round = self._prepare_dataframe(plmrs_init.copy(), minutes_palomars, True)
-        hour_programs = TVScheduleProcessor.group_broadcasts_by_hours(pal_round)
-        
-        # 2. Фильтрация по длительности 50-60 минут
-        hour_programs['Длительность_минуты'] = hour_programs.apply(
-            TVScheduleProcessor.calculate_duration_minutes, axis = 1
+        ### НОВЫЙ КУСОК
+
+        # ДОБАВЛЯЕМ ФИЛЬТРАЦИЮ: оставляем только программы длительностью от 50 до 60 минут
+        hour_programs_filtered = hour_programs.copy()
+
+        # Функция для вычисления длительности в минутах
+        def calculate_duration_minutes(row):
+            try:
+                start_time = datetime.strptime(row["Время выхода"], "%H:%M:%S")
+                end_time = datetime.strptime(row["Время окончания"], "%H:%M:%S")
+
+                # Если время окончания меньше времени начала (переход через полночь)
+                if end_time < start_time:
+                    end_time = end_time.replace(day=end_time.day + 1)
+
+                duration_minutes = (
+                    end_time - start_time
+                ).total_seconds() / 60  # в минутах
+                return duration_minutes
+            except:
+                return 0
+
+        # Добавляем столбец с длительностью в минутах
+        hour_programs_filtered["Длительность_минуты"] = hour_programs_filtered.apply(
+            calculate_duration_minutes, axis=1
         )
-        hour_filtered = hour_programs[
-            (hour_programs['Длительность_минуты'] >= 50) &
-            (hour_programs['Длительность_минуты'] <= 60)
-        ].drop(columns = ['Длительность_минуты'])
-        
-        # Если нет часовых программ для поиска
-        if hour_filtered.empty:
-            return all_matches, None, vimb_init
-        
-        # 3. Поиск точных совпадений (первый merge)
-        vimb_round = self._prepare_dataframe(vimb_init.copy(), minutes_palomars, False)
-        vimb = self._extract_core_info(vimb_round, False)
+
+        # Фильтруем: только программы длительностью от 50 до 60 минут включительно
+        hour_programs_filtered = hour_programs_filtered[
+            (hour_programs_filtered["Длительность_минуты"] >= 50)
+            & (hour_programs_filtered["Длительность_минуты"] <= 60)
+        ].drop(columns=["Длительность_минуты"])
+
+        ### КОНЕЦ НОВОГО КУСКА
         hour_matches = pd.merge(
-            self._adjust_end_time(vimb),
-            self._adjust_end_time(hour_filtered),
-            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
-            how = 'inner'
+            self._adjust_end_time(vimb_clean_after_1),
+            self._adjust_end_time(hour_programs_filtered),
+            on=["Дата", "Название программы", "Время выхода", "Время окончания"],
+            how="inner",
         )
-        
-        # Флаги и данные для работы
-        found_any_matches = False
-        current_vimb = vimb_init
-        current_all_matches = all_matches.copy()
-        
-        # 4. Обработка точных совпадений
-        if not hour_matches.empty:
-            found_any_matches = True
-            current_all_matches.append(
-                self._adjust_end_time(hour_matches, 'Время окончания')
-            )
-            
-            # Удаляем точные совпадения из VIMB
-            temp_found = pd.concat(current_all_matches).reset_index(drop = True)
 
-            vimb_init =  self.convert_data_column(vimb_init)
-            temp_found =  self.convert_data_column(temp_found)
+        # Добавляем в список найденных программ
+        all_matches.append(self._adjust_end_time(hour_matches, "Время окончания"))
 
-            vimb_after_exact = self._remove_found_programs(
-                self._adjust_end_time(vimb_init, 'Время окончания'),
-                temp_found,
-            ).reset_index(drop = True)
-            
-            current_vimb = self._extract_core_info(vimb_after_exact, False)
-        
-        # 5. Поиск overlapping совпадений
-        hour_overlap = self.broadcasts_overlaping(
-            self._adjust_end_time(hour_filtered),
-            self._adjust_end_time(current_vimb),
-            only_hour_programs = True
-        )
-        
-        hour_matches_overlap = pd.merge(
-            self._adjust_end_time(current_vimb),
-            self._adjust_end_time(hour_overlap),
-            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
-            how = 'inner'
-        )
-        
-        # 6. Обработка overlapping совпадений
-        if not hour_matches_overlap.empty:
-            found_any_matches = True
-            current_all_matches.append(
-                self._adjust_end_time(hour_matches_overlap, 'Время окончания')
-            )
-        
-        # 7. Формирование результата
-        if not found_any_matches:
-            # Не было ни точных, ни overlapping совпадений
-            return all_matches, found_programs_init, vimb_init
-        
-        # Были совпадения - формируем итоговые данные
-        found_programs = pd.concat(current_all_matches).reset_index(drop = True)
+        found_programs_after = pd.concat(all_matches).reset_index(drop=True)
 
-        vimb_init =  self.convert_data_column(vimb_init)
-        found_programs =  self.convert_data_column(found_programs)
-        
-        vimb_after_all = self._remove_found_programs(
-            self._adjust_end_time(vimb_init, 'Время окончания'),
-            found_programs,
-        ).reset_index(drop = True)
-        
-        vimb_clean = self._extract_core_info(vimb_after_all, False)
-        
-        return current_all_matches, found_programs, vimb_clean
-
-
-    def filter_long_programs(
-            self, 
-            vimb_init: pd.DataFrame, 
-            plmrs_init: pd.DataFrame, 
-            all_matches: list, 
-            minutes_palomars: int,
-            minutes_vimb: int,
-            round_vimb: bool = False):
-        """
-            Вспомогательный метод, который фильтрует длинные программы (более 1 часа) и ищет совпадения с VIMB.
-
-            #TODO
-        """
-        found_programs_init = pd.concat(all_matches).reset_index(drop = True)
-
-        # Подготовка данных
-        vimb = self._prepare_dataframe(vimb_init.copy(), minutes_vimb, False) if round_vimb else vimb_init.copy()
-        pal_round = self._prepare_dataframe(plmrs_init.copy(), minutes_palomars, True)
-        
-        # Поиск длинных программ и совпадений
-        long_programs = TVScheduleProcessor.join_broadcasts(pal_round)
-        
-        matches = pd.merge(
-            self._adjust_end_time(vimb, 'Время окончания'),
-            self._adjust_end_time(long_programs, 'Время окончания'),
-            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
-            how = 'inner'
-        )
-        
-        # Если нет совпадений
-        if matches.empty:
-            return all_matches, found_programs_init, vimb_init
-        
-        # Обработка найденных совпадений
-        matches_clean = self._extract_core_info(matches, True)
-        adjusted_matches = self._adjust_end_time(matches_clean, 'Время окончания')
-        
-        # Обновляем списки
-        updated_matches = all_matches.copy()
-        updated_matches.append(adjusted_matches)
-        found_programs = pd.concat(updated_matches).reset_index(drop = True)
-        
-        # Очищаем VIMB
-        vimb =  self.convert_data_column(vimb)
-        found_programs =  self.convert_data_column(found_programs)
-
+        # Удаление найденных длинных программ
         vimb_after = self._remove_found_programs(
-            self._adjust_end_time(vimb, 'Время окончания'),
-            found_programs,
-        ).reset_index(drop = True)
-        vimb_clean = self._extract_core_info(vimb_after, False)
-        
-        return updated_matches, found_programs, vimb_clean
-    
+            self._adjust_end_time(vimb_clean_after_1, "Время окончания"),
+            found_programs_after,
+        ).reset_index(drop=True)
 
-    def filter_long_overlap(
-            self, 
-            vimb_init: pd.DataFrame, 
-            plmrs_init: pd.DataFrame, 
-            all_matches: list, 
-            minutes_palomars: int,
-            minutes_vimb: int,
-            round_vimb: bool = False):
-        """
-            Вспомогательный метод, который фильтрует длинные программы (более 1 часа) и ищет совпадения с VIMB с помощью Overlaping.
+        vimb_clean_after = self._extract_core_info(vimb_after, False)
 
-            #TODO
-            Args:
-            Returns:
+        hour_overlap = self.broadcasts_overlaping(
+            self._adjust_end_time(hour_programs_filtered),
+            self._adjust_end_time(vimb_clean_after),
+            only_hour_programs=True,
+        )
 
-        """
-        if minutes_palomars is not None:
+        hour_matches_ = pd.merge(
+            self._adjust_end_time(vimb_clean_after_1),
+            self._adjust_end_time(hour_overlap),
+            on=["Дата", "Название программы", "Время выхода", "Время окончания"],
+            how="inner",
+        )
+        # Добавляем в список найденных программ
+        all_matches.append(self._adjust_end_time(hour_matches_, "Время окончания"))
 
-            if minutes_vimb is not None and round_vimb:
-                palomars = self._prepare_dataframe(plmrs_init.copy(), minutes_palomars, True)
-                vimb = self._prepare_dataframe(vimb_init.copy(), minutes_vimb, False)
+        found_programs_after_2 = pd.concat(all_matches).reset_index(drop=True)
 
-            else:
-                palomars = self._prepare_dataframe(plmrs_init.copy(), minutes_palomars, True)
-                vimb = vimb_init.copy()
+        # Удаление найденных длинных программ
+        vimb_after_2 = self._remove_found_programs(
+            self._adjust_end_time(vimb_clean_after_1, "Время окончания"),
+            found_programs_after_2,
+        ).reset_index(drop=True)
+
+        vimb_clean_after_2 = self._extract_core_info(vimb_after_2, False)
+
+        if verbose:
+            print(color.BOLD + "НАЙДЕННЫЕ ПРОГРАММЫ:" + color.END, sep="\n", end="\n")
+            print(found_programs_after_2)
+            print("#" * 120)
+
+        ############################ ШАГ 1*: Обработка мелких программ, которые легко сджойнить. Округляем Palomars до 10 мин ############################
+        if verbose:
+            print(
+                color.BOLD
+                + color.RED
+                + "ШАГ 1*: Обработка мелких программ, которые легко сджойнить"
+                + color.END,
+                sep="\n",
+                end="\n",
+            )
+
+        vimb_10min = self._prepare_dataframe(vimb_clean_after_2, 10, False)
+        pal_10min = self._prepare_dataframe(palomars, 10, True)
+
+        matches_10min, vimb_remaining, pal_remaining = self._process_schedule_step(
+            pal_5min, vimb_10min, 10, "10_minutes"
+        )
+
+        # Добавляем в список найденных программ
+        all_matches.append(self._adjust_end_time(matches_10min, "Время окончания"))
+
+        found_programs_after_3 = pd.concat(all_matches).reset_index(drop=True)
+
+        # Удаление найденных длинных программ
+        vimb_after_3 = self._remove_found_programs(
+            self._adjust_end_time(vimb_clean_after_2, "Время окончания"),
+            found_programs_after_3,
+        ).reset_index(drop=True)
+        vimb_clean_after_3 = self._extract_core_info(vimb_after_3, False)
+
+        if verbose:
+            print(color.BOLD + "НАЙДЕННЫЕ ПРОГРАММЫ:" + color.END, sep="\n", end="\n")
+            print(found_programs_after_3)
+            print("#" * 120)
+            print(
+                color.BOLD + color.BLUE + "ВИМБ, который осталось найти" + color.END,
+                sep="\n",
+                end="\n",
+            )
+            print(vimb_clean_after_3)
+            print("#" * 120)
+
+        ############################ ШАГ 3: Обработка длинных программ (округление 10 минут) ############################
+        if verbose:
+            print(
+                color.BOLD
+                + color.RED
+                + "ШАГ 3: Обработка длинных программ (округление 10 минут)"
+                + color.END,
+                sep="\n",
+                end="\n",
+            )
+
+        vimb_10min = self._prepare_dataframe(vimb_clean_after_3, 10, False)
+        pal_10min = self._prepare_dataframe(palomars, 10, True)
+
+        # Поиск длинных программ, которые шли более, чем 1 час
+        long_programs = TVScheduleProcessor.join_broadcasts(pal_10min)
+
+        long_matches = pd.merge(
+            self._adjust_end_time(vimb_10min, "Время окончания"),
+            self._adjust_end_time(long_programs, "Время окончания"),
+            on=["Дата", "Название программы", "Время выхода", "Время окончания"],
+            how="inner",
+        )
+
+        # Переименование колонок
+        long_matches_clean = self._extract_core_info(long_matches, True)
+
+        # Добавляем в список найденных программ
+        all_matches.append(self._adjust_end_time(long_matches_clean, "Время окончания"))
+
+        found_programs_after_4 = pd.concat(all_matches).reset_index(drop=True)
+
+        # Удаление найденных длинных программ
+        vimb_after_4 = self._remove_found_programs(
+            self._adjust_end_time(vimb_clean_after_3, "Время окончания"),
+            found_programs_after_4,
+        ).reset_index(drop=True)
+        vimb_clean_after_4 = self._extract_core_info(vimb_after_4, False)
+
+        if verbose:
+            print(color.BOLD + "НАЙДЕННЫЕ ПРОГРАММЫ:" + color.END, sep="\n", end="\n")
+            print(found_programs_after_4)
+            print("#" * 120)
+            print(
+                color.BOLD + color.BLUE + "ВИМБ, который осталось найти" + color.END,
+                sep="\n",
+                end="\n",
+            )
+            print(vimb_clean_after_4)
+            print("#" * 120)
+
+        ############################ ШАГ 4: Обработка длинных программ с overlaping ###########################
+        if verbose:
+            print(
+                color.BOLD
+                + color.RED
+                + "ШАГ 4: Обработка длинных программ с overlaping"
+                + color.END,
+                sep="\n",
+                end="\n",
+            )
 
         # Заменяем значения начиная со второго
         for i in range(1, len(palomars)):
@@ -1576,7 +1506,7 @@ class TVScheduleProcessor:
         # Отбираем программы, которые шли больше 1 часа и соединяем
         res = TVScheduleProcessor.join_broadcasts(palomars)
 
-        res_overlap = self.broadcasts_overlaping_OLD(res, vimb)
+        res_overlap = self.broadcasts_overlaping_OLD(res, vimb_clean_after_4)
 
         res_overlap["Дата"] = pd.to_datetime(res_overlap["Дата"])
         res_overlap["Дата"] = res_overlap["Дата"].dt.strftime("%Y-%m-%d")
@@ -1584,273 +1514,346 @@ class TVScheduleProcessor:
         # Добавляем в список найденных программ
         all_matches.append(self._adjust_end_time(res_overlap, "Время окончания"))
 
-        found_programs = pd.concat(all_matches).reset_index(drop = True)
+        found_programs_after_5 = pd.concat(all_matches).reset_index(drop=True)
 
         # Удаление найденных длинных программ
-        vimb =  self.convert_data_column(vimb)
-        found_programs =  self.convert_data_column(found_programs)
-
-        vimb_after = self._remove_found_programs(
-            self._adjust_end_time(vimb, "Время окончания"),
-            self._adjust_end_time(found_programs, "Время окончания"),
-        ).reset_index(drop = True)
-
-        vimb_clean = self._extract_core_info(vimb_after, False)
-
-        return all_matches, found_programs, vimb_clean
-
-    
-
-    def print_comments(self, found_programs, clean_vimb):
-        """
-            Метод для печати комментариев по найденным и не найденным программам
-        """
-        if len(found_programs) != 0:
-            print(
-                color.BOLD + color.GREEN
-                + f"НАЙДЕННЫЕ ПРОГРАММЫ: {len(found_programs)}"
-                + color.END,
-                sep = '\n', end = '\n'
-            )
-            print(found_programs)
-        print('#' * 120)
-
-        if len(clean_vimb) != 0:
-            print(
-                color.BOLD + color.BLUE
-                + f"ВИМБ, который осталось найти: {len(clean_vimb)}"
-                + color.END,
-                sep = '\n', end = '\n',
-            )
-            print(clean_vimb)
-        print('#' * 120)
-
-
-
-    def process_schedules(
-                self, vimb: pd.DataFrame, palomars: pd.DataFrame, verbose: bool = True
-            ) -> Tuple[pd.DataFrame, Dict, pd.DataFrame, pd.DataFrame]:
-        """
-            Основной метод обработки телепрограмм
-
-            Args:
-                vimb: pd.DataFrame: датафрейм с сеткой ВИМБ
-                palomars: pd.DataFrame: датафрейм с сеткой Mediascope
-                verbose: bool:
-            Returns:
-                Tuple: (результирующий DataFrame, статистика, найденные программы, оставшиеся программы)
-        """
-        # Сохраняем исходную суммарную долю, чтобы можно было проверить корректность после обработки
-        share_sum_init = np.sum(list(palomars['Share']))
-
-        # Инициализация
-        self.vimb_init = vimb.copy()
-        self.palomars_init = palomars.copy()
+        vimb_after_5 = self._remove_found_programs(
+            self._adjust_end_time(vimb_clean_after_4, "Время окончания"),
+            self._adjust_end_time(found_programs_after_5, "Время окончания"),
+        ).reset_index(drop=True)
+        vimb_clean_after_5 = self._extract_core_info(vimb_after_5, False)
 
         if verbose:
-            print(f'Исходные данные: VIMB = {len(self.vimb_init)}, Palomars = {len(self.palomars_init)}')
+            print(color.BOLD + "НАЙДЕННЫЕ ПРОГРАММЫ:" + color.END, sep="\n", end="\n")
+            print(found_programs_after_5)
+            print("#" * 120)
 
-        # Список для хранения найденных программ
-        all_matches = []
-
-        ############################ ШАГ 1: Обработка мелких программ, которые легко сджойнить. Округляем Palomars до 5 мин ############################
-        if verbose:
-            print(
-                color.BOLD + color.RED
-                + 'ШАГ 1: Обработка мелких программ, которые легко сджойнить'
-                + color.END, sep = '\n', end = '\n'
-            )
-
-        all_matches, found_programs_after_1, vimb_clean_after_1 = self.find_mathes(vimb, palomars, all_matches, 5, None)
-
-        if verbose:
-            self.print_comments(found_programs_after_1, vimb_clean_after_1)
-
-        ############################ ШАГ 2: Обработка длинных программ с разбивкой по часам (округление 10 минут) ############################
-        if verbose:
-            print(
-                color.BOLD + color.RED
-                + 'ШАГ 2: Обработка длинных программ с разбивкой по часам (округление 10 минут)'
-                + color.END, sep = '\n', end = '\n',
-            )
-
-        all_matches, found_programs_after_2, vimb_clean_after_2 = self.filter_hour_programs(vimb_clean_after_1, palomars, all_matches, 5)
-        print(len(found_programs_after_1), len(found_programs_after_2))
-
-        if verbose:
-            self.print_comments(found_programs_after_2, vimb_clean_after_2)
-
-        ############################ ШАГ 3: Обработка мелких программ, которые легко сджойнить. Округляем Palomars до 10 мин ############################
-        if verbose:
-            print(
-                color.BOLD + color.RED
-                + 'ШАГ 3: Обработка мелких программ, которые легко сджойнить'
-                + color.END, sep = '\n', end = '\n'
-            )
-
-        # Округлям VIMB до 10 минут и Palomars до 10 минут
-        all_matches, found_programs_after_3, vimb_clean_after_3 = self.find_mathes(vimb_clean_after_2, palomars, all_matches, 10, 10, True)
-        print(len(found_programs_after_2), len(found_programs_after_3))
-    
-
-        if verbose:
-            self.print_comments(found_programs_after_3, vimb_clean_after_3)
-
-        ############################ ШАГ 4: Обработка длинных программ (округление 10 минут) ############################
-        if verbose:
-            print(
-                color.BOLD + color.RED
-                + 'ШАГ 4: Обработка длинных программ (округление 10 минут)'
-                + color.END, sep = '\n', end = '\n'
-            )
-
-        all_matches, found_programs_after_4, vimb_clean_after_4 = self.filter_long_programs(
-                                                                                vimb_clean_after_3, 
-                                                                                palomars, 
-                                                                                all_matches, 
-                                                                                5, None, False)
-        print(len(found_programs_after_3), len(found_programs_after_4))
-
-        if len(found_programs_after_3) == len(found_programs_after_4):
-            all_matches, found_programs_after_4, vimb_clean_after_4 = self.filter_long_programs(
-                                                                                vimb_clean_after_3, 
-                                                                                palomars, 
-                                                                                all_matches, 
-                                                                                5, 5, True)
-            
-
-        if verbose:
-            self.print_comments(found_programs_after_4, vimb_clean_after_4)
-
-        ############################ ШАГ 5: Обработка длинных программ с overlaping ###########################
-        if verbose:
-            print(color.BOLD + color.RED + 'ШАГ 5: Обработка длинных программ с overlapping' + color.END)
-
-        vimb_current = vimb_clean_after_4.copy()
-        matches_current = all_matches.copy()
-
-        df1, df2 = TVScheduleProcessor.split_programs_by_time(vimb_current)
-
-        # 1. Обрабатываем df2
-        if not df2.empty:
-            # Сохраняем исходный VIMB для удаления
-            original_vimb = vimb_current.copy()
-            
-            # Ищем совпадения
-            matches_current, found_df2, vimb_cleaned_df2 = self.filter_long_overlap(
-                df2, palomars, all_matches, 5, None, False
-            )
-            
-            
-            if found_df2 is not None and not found_df2.empty:
-                # Удаляем найденные программы из исходного VIMB
-                vimb_after_removal = self._remove_found_programs(
-                    self._adjust_end_time(original_vimb, 'Время окончания'),
-                    self._adjust_end_time(found_df2, 'Время окончания')
-                ).reset_index(drop=True)
-                
-                vimb_current = self._extract_core_info(vimb_after_removal, False)
-
-        # 2. Обрабатываем df1
-        if not df1.empty:
-            # Фильтруем df1 - только то, что осталось в vimb_clean
-            # (комбинируем по ключевым колонкам)
-            merged = pd.merge(
-                vimb_current[['Дата', 'Название программы', 'Время выхода', 'Время окончания']],
-                df1,
-                on=['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
-                how='inner'
-            )
-            
-            if not merged.empty:
-                original_vimb = vimb_current.copy()
-                
-                matches_current, found_df1, vimb_cleaned_df1 = self.find_mathes(
-                    merged, palomars, all_matches, 10, 10, True
-                )
-                
-                print('==============================')
-                print(merged)
-                print('.-----------------------------')
-                print(palomars)
-                print('.-----------------------------')
-                print(found_df1)
-                print('==============================')
-                if found_df1 is not None and not found_df1.empty:
-                    vimb_after_removal = self._remove_found_programs(
-                        self._adjust_end_time(original_vimb, 'Время окончания'),
-                        self._adjust_end_time(found_df1, 'Время окончания')
-                    ).reset_index(drop=True)
-
-                    
-                    vimb_current = self._extract_core_info(vimb_after_removal, False)
-        
-        all_matches = matches_current
-        vimb_clean = vimb_current.copy()
-
-        
-        if verbose:
-            print(color.BOLD + 'НАЙДЕННЫЕ ПРОГРАММЫ:' + color.END, sep = '\n', end = '\n')
-            print(pd.concat(all_matches).reset_index(drop = True))
-            print('#' * 120)
-
-            if len(vimb_clean) != 0:
-                self.print_comments(pd.concat(all_matches).reset_index(drop = True), vimb_clean)
-
-        ############################ ШАГ 6: Дополнительный шаг, если после остальных остались ненайденные ###########################
-        if len(vimb_clean) != 0:
-
-            if verbose:
+            if len(vimb_clean_after_5) != 0:
                 print(
-                    color.BOLD + color.RED
-                    + 'ШАГ 6: Обработка длинных программ с разбивкой по часам (округление 10 минут)'
-                    + color.END, sep = '\n', end = '\n'
+                    color.BOLD
+                    + color.BLUE
+                    + "ВИМБ, который не удалось найти"
+                    + color.END,
+                    sep="\n",
+                    end="\n",
                 )
+                print(vimb_clean_after_4)
+                print("#" * 120)
 
-            all_matches, found_programs_after_6, vimb_clean_after_6 = self.filter_hour_programs(vimb_clean, palomars, all_matches, 10)
-            print(len(found_programs_after_5), len(found_programs_after_6))
-
-            if verbose:
-                self.print_comments(found_programs_after_6, vimb_clean_after_6)
-
-            vimb_clean_after_5 = vimb_clean_after_6
-            found_programs_after_5 = found_programs_after_6
-        
-        ############################ ШАГ 7: Дополнительный шаг, если после остальных остались ненайденные ###########################
+        ############################ ШАГ 5: Дополнительный шаг, если после остальных остались ненайденные ###########################
         if len(vimb_clean_after_5) != 0:
+
             if verbose:
                 print(
-                    color.BOLD + color.RED
-                    + 'ШАГ 7: Попытка обработки коротких программ (округление 10 минут)'
-                    + color.END, sep = '\n', end = '\n'
+                    color.BOLD
+                    + color.RED
+                    + "ШАГ 5: Обработка длинных программ с разбивкой по часам (округление 10 минут)"
+                    + color.END,
+                    sep="\n",
+                    end="\n",
                 )
-            
-            all_matches, found_programs_after_7, vimb_clean_after_7 = self.find_mathes(vimb_clean_after_5, palomars, all_matches, 10, None)
+
+            # Работаем с исходным датафреймом palomars
+            pal_10min = self._prepare_dataframe(palomars, 10, True)
+
+            # Поиск длинных программ, которые шли в течение 1 часа
+            hour_programs = TVScheduleProcessor.group_broadcasts_by_hours(pal_10min)
+
+            hour_overlap = self.broadcasts_overlaping(
+                self._adjust_end_time(hour_programs),
+                vimb_clean_after_5,
+                only_hour_programs=True,
+            )
+
+            hour_matches = pd.merge(
+                self._adjust_end_time(vimb_clean_after_5),
+                hour_overlap,
+                on=["Дата", "Название программы", "Время выхода", "Время окончания"],
+                how="inner",
+            )
+            # Добавляем в список найденных программ
+            all_matches.append(self._adjust_end_time(hour_matches, "Время окончания"))
+
+            found_programs_after_6 = pd.concat(all_matches).reset_index(drop=True)
+
+            # Удаление найденных длинных программ
+            vimb_after_6 = self._remove_found_programs(
+                self._adjust_end_time(vimb_clean_after_5, "Время окончания"),
+                found_programs_after_6,
+            ).reset_index(drop=True)
+
+            vimb_clean_after_6 = self._extract_core_info(vimb_after_6, False)
 
             if verbose:
-                self.print_comments(found_programs_after_7, vimb_clean_after_7)
+                print(
+                    color.BOLD + "НАЙДЕННЫЕ ПРОГРАММЫ:" + color.END, sep="\n", end="\n"
+                )
+                print(found_programs_after_6)
+                print("#" * 120)
 
-        ############################ ШАГ 7: ОБЪЕДИНЕНИЕ РЕЗУЛЬТАТОВ ############################
+                if len(vimb_clean_after_6) != 0:
+                    print(
+                        color.BOLD
+                        + color.BLUE
+                        + "ВИМБ, который не удалось найти"
+                        + color.END,
+                        sep="\n",
+                        end="\n",
+                    )
+                    print(vimb_clean_after_6)
+                    print("#" * 120)
 
-        found_programs = pd.concat(all_matches).reset_index(drop = True)
+        ############################ ШАГ 6: ОБЪЕДИНЕНИЕ РЕЗУЛЬТАТОВ ############################
+
+        found_programs = pd.concat(all_matches).reset_index(drop=True)
 
         # Проверяем, что в таблице VIMB действительно все найдено
         merged = pd.merge(
             self._adjust_end_time(vimb),
             found_programs,
-            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
-            how = 'left',
+            on=["Дата", "Название программы", "Время выхода", "Время окончания"],
+            how="left",
         )
 
         # Проверяем, что в таблице действительно все найдено
 
         if len(merged) != len(vimb):
-            print('Нужен дополнительный поиск!')
+            print("Нужен дополнительный поиск!")
 
-        if share_sum_init != np.sum(list(found_programs['Share'])):
-            share_sum_curr = np.sum(list(found_programs['Share']))
+        if share_sum_init != np.sum(list(found_programs["Share"])):
+            share_sum_curr = np.sum(list(found_programs["Share"]))
             print(
-                f'Обнаружено несовпадение суммарной доли по дню! Целевой показатель {np.round(share_sum_init, 4)}, а по итогу вышло {np.round(share_sum_curr, 4)}.'
+                f"Обнаружено несовпадение суммарной доли по дню! Целевой показатель {np.round(share_sum_init, 4)}, а по итогу вышло {np.round(share_sum_curr, 4)}."
             )
 
         return merged
+
+    #        # Работаем с исходным датафреймом palomars
+    #        pal_5min = self._prepare_dataframe(palomars, 5, True)
+    #
+    #        # Поиск длинных программ, которые шли в течение 1 часа
+    #        hour_programs = TVScheduleProcessor.group_broadcasts_by_hours(pal_5min)
+    #        hour_programs = self._adjust_end_time(hour_programs)
+    #
+    #        hour_matches = pd.merge(
+    #            self._adjust_end_time(vimb_cleaned), hour_programs,
+    #            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
+    #            how = 'inner'
+    #        )
+    #        # Добавляем в список найденных программ
+    #        all_matches.append(hour_matches)
+    #
+    #        # Удаление найденных длинных программ
+    #        pal_remaining_new = self._remove_found_programs(pal_5min, hour_matches).reset_index(drop = True)
+    #
+    #        # Переименование колонок
+    #        pal_clean_new = self._extract_core_info(pal_remaining_new, True)
+    #
+    #        vimb_remaining_new = self._remove_found_programs(vimb_cleaned, hour_matches).reset_index(drop = True)
+    #
+    #
+    #
+    #
+    #
+    #        ############################ Шаг 3: Поиск по недлительным программам. Поочереди округляем слоты Palomars ############################
+    #        # Для анализа берем исходный датафрейм Palomars и последний преобразованный датафрейм VIMB
+    #        # Последовательная обработка с разным округлением
+    #        rounding_steps = [
+    #            (1, "1_minute", palomars, vimb_remaining_new),
+    #            (5, "5_minutes", None, None),
+    #            (10, "10_minutes", None, None)
+    #        ]
+    #
+    #        current_pal = palomars
+    #        current_vimb = vimb_remaining_new
+    #        for minutes, step_name, pal_input, vimb_input in rounding_steps:
+    #            if verbose:
+    #                print(f'\nШаг {step_name}: Округление {minutes} минут')
+    #
+    #            # Используем переданные данные или результаты предыдущего шага
+    #            pal_to_process = pal_input if pal_input is not None else current_pal
+    #            vimb_to_process = vimb_input if vimb_input is not None else current_vimb
+    #
+    #            # Ищем совпадения
+    #            matches, vimb_remaining, pal_remaining = self._process_schedule_step(
+    #                pal_to_process, vimb_to_process, minutes, step_name
+    #            )
+    #
+    #            # Добавляем в список найденных программ
+    #            all_matches.append(matches)
+    #
+    #            # Подготовка данных для следующего шага
+    #            current_pal = self._extract_core_info(pal_remaining, True)
+    #            current_vimb = self._extract_core_info(vimb_remaining, False)
+    #
+    #            if minutes < 10:  # Для следующих шагов добавляем исходные метки
+    #                current_vimb = self._add_original_time_columns(current_vimb)
+    #
+    #        ############################ ДОПОЛНИТЕЛЬНЫЙ ШАГ: Повторное округление до 10 минут ############################
+    #        if verbose:
+    #            print('\nДополнительный шаг: Повторное округление до 10 минут')
+    #
+    #        # Снова округляем текущие данные до 10 минут
+    #        vimb_round_to_10 = self._prepare_dataframe(current_vimb, 10, False)
+    #        pal_round_to_10 = self._prepare_dataframe(current_pal, 10, True)
+    #
+    #        # Ищем совпадения
+    #        additional_matches = pd.merge(
+    #            vimb_round_to_10,
+    #            pal_round_to_10,
+    #            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
+    #            how = 'inner'
+    #        )[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']]
+    #
+    #        self.stats['additional_10min_matches'] = len(additional_matches)
+    #
+    #        # Добавляем в список найденных программ
+    #        all_matches.append(additional_matches)
+    #
+    #        # Удаление найденных программ
+    #        vimb_deleted = self._remove_found_programs(vimb_round_to_10, additional_matches).reset_index(drop = True)
+    #        pal_deleted = self._remove_found_programs(pal_round_to_10, additional_matches).reset_index(drop = True)
+    #
+    #        pal_deleted['Дата'] = pd.to_datetime(pal_deleted['Дата'], errors = 'coerce')
+    #        pal_deleted['Дата'] = pal_deleted['Дата'].dt.strftime('%Y-%m-%d')
+    #
+    #        # Подготовка данных для следующего шага
+    #        final_pal_remaining = self._extract_core_info(pal_deleted, True)
+    #        final_vimb_remaining = self._extract_core_info(vimb_deleted, False)
+    #
+    #        ############################ ПОСЛЕДНИЙ ШАГ: Поиск через перекрытия ############################
+    #        found_programs = pd.concat(all_matches).reset_index(drop = True)
+    #
+    #        found_programs_unique = found_programs.drop_duplicates(
+    #            subset = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
+    #        ).reset_index(drop = True)
+    #
+    #        print(final_vimb_remaining)
+    #        print('#' * 120)
+    #        print(found_programs_unique)
+    #
+    #        vimb_last = self._remove_found_programs(self._adjust_end_time(final_vimb_remaining, 'Время окончания'), found_programs_unique).reset_index(drop = True)
+    #
+    #        print('#' * 120)
+    #        print(vimb_last)
+    #        print('#' * 120)
+    #
+    #        if len(found_programs_unique) != len(self.vimb_init):
+    #            #final_vimb_remaining = self._adjust_end_time(final_vimb_remaining, 'Время окончания')
+    #            final_pal_remaining = self._adjust_end_time(final_pal_remaining, 'Время окончания')
+    #            matches_df, unmatched_vimb_df, palomar_df = TVScheduleProcessor.match_programs_with_tolerance(vimb_last, final_pal_remaining, consolidate_palomars = True)
+    #
+    #            print(matches_df)
+    #
+    #            matched = matches_df[['Дата', 'Название_VIMB', 'Время_начала_VIMB', 'Время_окончания_VIMB', 'Share']]
+    #            matched.rename(columns = {
+    #                                'Название_VIMB': 'Название программы',
+    #                                'Время_начала_VIMB': 'Время выхода',
+    #                                'Время_окончания_VIMB': 'Время окончания'
+    #                            },
+    #                           inplace = True)
+    #            # Добавляем в список найденных программ
+    #            all_matches.append(matched)
+    #
+    #            found_programs = pd.concat(all_matches).reset_index(drop = True)
+    #
+    #            found_programs_unique = found_programs.drop_duplicates(
+    #                subset = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
+    #            ).reset_index(drop = True)
+    #
+    #        ############################ Объединение всех найденных программ ############################
+    #        #found_programs = pd.concat(all_matches).reset_index(drop = True)
+    #
+    #        # Финальное сопоставление с исходными данными
+    #        vimb_adjusted = self._adjust_end_time(self.vimb_init, 'Время окончания')
+    #        found_adjusted = self._adjust_end_time(found_programs_unique, 'Время окончания')
+    #
+    #        result = pd.merge(
+    #            vimb_adjusted,
+    #            found_adjusted,
+    #            on = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
+    #            how = 'left'
+    #        )
+    #
+    #        # Расчёт статистики
+    #        final_stats = self._calculate_final_stats(final_vimb_remaining, found_programs_unique)
+    #
+    #        # Вывод статистики
+    #        if verbose:
+    #            self.print_statistics(final_stats)
+    #            print(f'\nОсталось ненайденных программ VIMB: {len(final_vimb_remaining)}')
+    #            print(f'Осталось ненайденных программ Palomar: {len(final_pal_remaining)}')
+    #
+    #        #found_programs_unique = found_programs.drop_duplicates(
+    #        #    subset = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
+    #        #).reset_index(drop = True)
+    #
+    #        if len(found_programs_unique) != len(self.vimb_init):
+    #            print(f'ВНИМАНИЕ: Размер результата ({len(found_programs_unique)}) не совпадает с исходным VIMB ({len(self.vimb_init)})')
+    #
+    #        if share_sum_init != np.sum(list(found_programs_unique['Share'])):
+    #            share_sum_curr = np.sum(list(found_programs_unique['Share']))
+    #            print(f'Обнаружено несовпадение суммарной доли по дню! Целевой показатель {np.round(share_sum_init, 2)}, а по итогу вышло {np.round(share_sum_curr, 2)}.')
+    #
+    #        return result, final_stats, found_programs_unique, final_vimb_remaining, final_pal_remaining
+
+    def _calculate_final_stats(
+        self, vimb_final: pd.DataFrame, found_programs: pd.DataFrame
+    ) -> Dict:
+        """
+        Расчёт финальной статистики по найденным и ненайденным программам
+        """
+        # Общее количество программ в исходных данных
+        total_vimb_programs = len(self.vimb_init)
+
+        # Количество найденных программ (уникальных записей)
+        found_count = len(
+            found_programs.drop_duplicates(
+                subset=["Дата", "Название программы", "Время выхода", "Время окончания"]
+            )
+        )
+
+        # Количество ненайденных программ
+        not_found_count = total_vimb_programs - found_count
+
+        # Процент найденных
+        found_percentage = (
+            (found_count / total_vimb_programs * 100) if total_vimb_programs > 0 else 0
+        )
+
+        # Статистика по шагам поиска
+        step_stats = {}
+        for key, value in self.stats.items():
+            if "_matches" in key:
+                step_name = key.replace("_matches", "")
+                step_stats[step_name] = value
+
+        return {
+            "total_vimb_programs": total_vimb_programs,
+            "found_programs": found_count,
+            "not_found_programs": not_found_count,
+            "found_percentage": round(found_percentage, 2),
+            "step_by_step_matches": step_stats,
+            "remaining_vimb_after_all_steps": len(vimb_final),
+        }
+
+    def print_statistics(self, stats: Dict) -> None:
+        """
+        Вывод статистики в удобном формате
+        """
+        print("\n" + "=" * 60)
+        print("СТАТИСТИКА ОБРАБОТКИ ТЕЛЕПРОГРАММ")
+        print("=" * 60)
+        print(f"Всего программ в VIMB: {stats['total_vimb_programs']}")
+        print(f"Найдено программ: {stats['found_programs']}")
+        print(f"Не найдено программ: {stats['not_found_programs']}")
+        print(f"Процент найденных: {stats['found_percentage']}%")
+        print("-" * 60)
+        print("Пошаговая статистика:")
+        for step, count in stats["step_by_step_matches"].items():
+            print(f"  {step}: {count} совпадений")
+        print("-" * 60)
+        print(
+            f"Осталось ненайденных после всех шагов: {stats['remaining_vimb_after_all_steps']}"
+        )
+        print("=" * 60 + "\n")
