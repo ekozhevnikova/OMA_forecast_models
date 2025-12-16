@@ -260,22 +260,48 @@ class Federal_Postprocessing:
             worksheet.set_column('F:F', 44.0, table_fmt_3)
             worksheet.set_column('G:G', 145.0, table_fmt_2)
     
+    
 
     @staticmethod
     def update_comments_file(filepath: str, data_new):
         """
-            Функция для обновления файла с Комментариями. В процессе работы считывается файл с исходными Комментариями и в конец добавляются новые.
-            В конце файл сохраняется.
-            Args:
-                filepath: Файл со старыми комментариями
-                data_new: Новые комментарии
-            
+            Функция для обновления файла с Комментариями.
         """
-        if len(data_new) != 0:
-            comments = pd.read_excel(filepath)
-            comments_full = pd.concat([comments, data_new]).reset_index(drop = True)
-            Federal_Postprocessing.make_style_of_table(filepath = filepath, 
-                                            output_df = comments_full, 
-                                            sheet_name = 'Sheet1')
-        else:
+        if len(data_new) == 0:
             print('Ошибка! Вы пытаетесь сохранить пустой DataFrame!')
+            return
+        
+        # Читаем существующие данные
+        comments = pd.read_excel(filepath)
+        
+        # Приводим даты к единому формату
+        comments['Дата'] = pd.to_datetime(comments['Дата'], dayfirst = True, errors = 'coerce')
+        data_new['Дата'] = pd.to_datetime(data_new['Дата'], dayfirst = True, errors = 'coerce')
+        
+        # Объединяем данные
+        comments_full = pd.concat([comments, data_new], ignore_index = True)
+        
+        # Очищаем строковые поля
+        text_columns = ['Канал', 'Месяц', 'Доп столбец', 'Комментарий']
+        for col in text_columns:
+            if col in comments_full.columns:
+                comments_full[col] = comments_full[col].astype(str).str.strip()
+        
+        # Заменяем строки 'nan' на пустые строки
+        comments_full = comments_full.replace(['nan', 'NaN', 'None'], '')
+        
+        # Преобразуем дату обратно в строковый формат для сохранения (опционально)
+        comments_full['Дата'] = comments_full['Дата'].dt.strftime('%d.%m.%Y')
+        
+        # Удаляем дубликаты
+        df_no_duplicates = comments_full.drop_duplicates(
+            subset = ['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий'],
+            keep = 'first'
+        )
+        
+        # Сохраняем
+        Federal_Postprocessing.make_style_of_table(
+            filepath = filepath, 
+            output_df = df_no_duplicates, 
+            sheet_name = 'Sheet1'
+        )

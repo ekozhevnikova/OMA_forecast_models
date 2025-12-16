@@ -206,6 +206,7 @@ class TVShareCalculator:
 
         return df_adj
 
+
     def calculate_hour_jump(self, start_col="Время выхода", end_col="Время окончания"):
         """
         Рассчитывает количество скачков через час для всех программ в DataFrame.
@@ -274,6 +275,7 @@ class TVShareCalculator:
         result_df["Длительность (мин)"] = durations_list
 
         return result_df
+
 
     def calculate_weighted_share(self, auedience) -> pd.DataFrame:
         """

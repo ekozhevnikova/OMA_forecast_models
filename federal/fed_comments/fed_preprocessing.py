@@ -168,14 +168,7 @@ class Federal_Preprocessing:
                 results_by_dates.append(data_full_by_days[channel])
 
         general_df_by_dates = pd.concat(results_by_dates).reset_index(drop = True) if results_by_dates else pd.DataFrame()
-        ##Отбор каналов и дат, которые вылетели за порог
-        #df_by_dates_need_comment = general_df_by_dates.loc[(general_df_by_dates['Flag'] == True)]
-        #df_by_dates_need_comment = df_by_dates_need_comment.reset_index(drop = True)
-        #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'], format = '%Y-%m-%d').dt.strftime('%Y-%m-%d')
-        #df_by_dates_need_comment['Дата'] = pd.to_datetime(df_by_dates_need_comment['Дата'])
-        #return general_df_by_dates, df_by_dates_need_comment
-    
-        ### НОВЫЙ КУСОК ###
+        
         # Поиск уникальных лет в таблице
         unique_years = Federal_Preprocessing.get_years_from_table(general_df_by_dates)
 
@@ -323,11 +316,7 @@ class Federal_Preprocessing:
                     if desired_year == y_comp and start_date_copy == start_comp:
                         print(f'Найден подходящий файл: {file}')
                         return file_path
-                            
-                    #except Exception as e:
-                    #    print(f'Ошибка при чтении файла {file}: {e}')
-            
-            #print('Подходящий файл не найден')
+
             return None
 
         elif param == 'КУС':
@@ -345,10 +334,6 @@ class Federal_Preprocessing:
                         print(f"Найден подходящий файл KUS: {file}")
                         return file_path
                             
-                    #except Exception as e:
-                    #    print(f"Ошибка при чтении файла {file}: {e}")
-            
-            #print("Подходящий файл KUS не найден")
             return None
     
 
