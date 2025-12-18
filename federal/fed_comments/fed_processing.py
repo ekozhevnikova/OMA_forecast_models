@@ -359,7 +359,6 @@ class Federal_Processing:
                     #for col in columns:
                     #    data_output_dates[col] = data_output_dates[col].astype(str)
                     #    smi_by_days_[col] = smi_by_days_[col].astype(str)
-
                     data_output_dates['Дата'] = pd.to_datetime(data_output_dates['Дата'])
                     smi_by_days_['Дата'] = pd.to_datetime(smi_by_days_['Дата'])
 

@@ -200,7 +200,7 @@ class Federal_Comments:
                     kus_threshold = channel_thresholds.get('kus', 0)
                     if check_value(attribute, value, kus_threshold):
                         if should_check_outhouse:
-                            if outhouse < criteria * abs(value):
+                            if abs(outhouse) < criteria * abs(value):
                                 reasons.append('КУС')
                             else:
                                 reasons.append('КУС Внедом')

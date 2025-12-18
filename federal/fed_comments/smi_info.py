@@ -31,6 +31,81 @@ class SMI_info:
     def replace_numbers(comment):
         # Используем регулярное выражение для замены
         return re.sub(r'\d+\.\d+', SMI_info.round_number, comment)
+    
+
+    @staticmethod
+    def sum_identical_sentences_in_text(text):
+        """
+            Объединение одинаковых предложений ВНУТРИ одного текста.
+            Пример: "Сокращение рекламных объемов 30 GRP. Сокращение рекламных объемов 20 GRP." =>
+            "Сокращение рекламных объемов 50 GRP."
+        """
+        if not text or not isinstance(text, str):
+            return text
+            
+        parts = [p.strip() for p in text.split('. ') if p.strip()]
+        if len(parts) <= 1:
+            return text
+            
+        templates_values = []
+        for part in parts:
+            # Убираем "GRP" и точку в конце для чистоты
+            part_clean = part.replace(' GRP.', '').replace(' GRP', '')
+            # Ищем последнее число в строке
+            numbers = re.findall(r'\d+', part_clean)
+            if numbers:
+                value = int(numbers[-1])
+                # Шаблон - все до последнего числа
+                template = re.sub(r'\d+\s*$', '', part_clean).strip()
+                templates_values.append([template, value])
+        
+        if not templates_values:
+            return text
+            
+        template_sum = {}
+        for template, value in templates_values:
+            template_sum[template] = template_sum.get(template, 0) + value
+        
+        united_sentences = [f'{template} {value} GRP' for template, value in template_sum.items()]
+        return '. '.join(united_sentences) + '.'
+    
+    
+
+    @staticmethod
+    def merge_identical_rows(df, group_columns = ['Канал', 'Дата', 'Месяц']):
+        """
+        Объединение строк с одинаковыми ключами в таблице.
+        """
+        result_rows = []
+        
+        # Группировка строк
+        df_sorted = df.sort_values(by=group_columns)
+        grouped = df_sorted.groupby(group_columns)
+        
+        for (channel, date, month), group in grouped:
+            if len(group) > 1:
+                # Объединяем все комментарии из группы
+                all_comments = ' '.join(group['Комментарий'].dropna().astype(str).tolist())
+                merged_comment = SMI_info.sum_identical_sentences_in_text(all_comments)
+                
+                # Берем первую строку как основу
+                base_row = group.iloc[0].copy()
+                base_row['Комментарий'] = merged_comment
+                
+                # Дата осуществления = True, если хотя бы в одной строке True
+                base_row['Дата осуществления'] = group['Дата осуществления'].any()
+                
+                result_rows.append(base_row)
+            else:
+                # Для одиночных строк просто применяем обработку (на случай нескольких предложений в одной ячейке)
+                row = group.iloc[0].copy()
+                if 'Комментарий' in row and pd.notna(row['Комментарий']):
+                    row['Комментарий'] = SMI_info.sum_identical_sentences_in_text(str(row['Комментарий']))
+                result_rows.append(row)
+        
+        return pd.DataFrame(result_rows)
+
+
 
     @staticmethod
     # Функция для объединения комментариев
@@ -66,35 +141,6 @@ class SMI_info:
     def combine_comments_by_periods(group):
         return SMI_info.combine_comments(group, False)
 
-    @staticmethod
-    def sum_identical_sentences(sentences):
-        """
-            Функция для объединения одинаковых предложений в одно. 
-            При этом неодинаковые предложения остаются без изменения.
-            Например: "Сокращение рекламных объемов 30 GRP. Сокращение рекламных объемов 20 GRP." =>
-            "Сокращение рекламных объемов 50 GRP."
-            Args:
-                sentences: список из предложений.
-            Returns:
-                result: обновленный список из предложений.
-        """
-        result = []
-        for sentence in sentences:
-            # Разделяем строку на предложения
-            parts = sentence.split('. ')
-            templates_values = list(map(lambda part: [ re.split(r'\d+.+', part)[0], int(re.findall(r'\d+', part)[0]) ], parts))
-
-            template_sum = {}
-            for template, value in templates_values:
-                if template in template_sum.keys():
-                    template_sum[template] += value
-                else:
-                    template_sum[template] = value
-
-            united_sentances = list(map(lambda template_value: f'{template_value[0]}{template_value[1]} GRP', template_sum.items()))
-            result.append('. '.join(united_sentances) + '.')
-        
-        return result
     
 
     def read_smi_file(self, channel: str, month: str, channels_need_replace: dict, year: int):
@@ -436,23 +482,15 @@ class SMI_info:
 
         # Группируем по 'Канал', 'Месяц' и объединяем комментарии
         if flag_by_days:
-            #df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
-            #    lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
-            #).groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop = True)
-
             df_result = df[
-                        (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days=3)
-                        ].groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop=True)
+                        (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days = 3)
+                        ].groupby(['Канал', 'Месяц', 'Дата', 'Дата осуществления']).apply(SMI_info.combine_comments_by_days).reset_index(drop = True)
             
-
+            
         else:
-            #df_result = df.groupby(['Канал', 'Месяц', 'Дата', 'Дата из СМИ']).filter(
-            #    lambda x: x['Дата'].iloc[0] - x['Дата из СМИ'].iloc[0] < timedelta(days = 3)
-            #).groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop = True)
-
             df_result = df[
                         (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days=3)
-                        ].groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop=True)
+                        ].groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop = True)
 
 
         #df_result.drop_duplicates(['Канал', 'Месяц', 'Дата'], inplace=True)
@@ -468,11 +506,17 @@ class SMI_info:
         #Объединение комментариев, если тексты одинаковые
         text_init = list(df_result_cleaned['Комментарий'])
         # Применяем функцию к нашему списку
-        text_updated = SMI_info.sum_identical_sentences(text_init)
-        df_result_cleaned['Комментарий'] = df_result_cleaned['Комментарий'].replace(text_init, text_updated)
+        df_result_cleaned = SMI_info.merge_identical_rows(df_result_cleaned)
+        #df_result_cleaned['Комментарий'] = df_result_cleaned['Комментарий'].replace(text_init, text_updated)
 
         if flag_by_days:
-            df_result_cleaned_ = df_result_cleaned.loc[(df_result_cleaned['Дата осуществления'] == True)]
+            #df_result_cleaned_ = df_result_cleaned.loc[(df_result_cleaned['Дата осуществления'] == True)]
+            # Определяем уникальные каналы через группировку
+            is_unique = df_result_cleaned.groupby('Канал')['Канал'].transform('count') == 1
+
+            # Применяем фильтр
+            df_result_cleaned_ = df_result_cleaned.loc[is_unique | (df_result_cleaned['Дата осуществления'] == True)]
+            #print(df_result_cleaned_)
             return df_result_cleaned_, channels_not_found
         else:
             return df_result_cleaned, channels_not_found

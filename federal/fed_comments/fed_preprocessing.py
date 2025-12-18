@@ -362,6 +362,11 @@ class Federal_Preprocessing:
                 
             except (IndexError, ValueError):
                 continue
+        
+        if len(years) > 1:
+            print(f'Найдено {len(years)} уникальных года: {sorted(list(years))}')
 
-        print(f'Найдено {len(years)} уникальных года: {sorted(list(years))}')
+        elif len(years) == 1:
+            print(f'Найден {len(years)} уникальный год: {sorted(list(years))}')
+            
         return sorted(list(years))

@@ -161,17 +161,17 @@ class Federal_Postprocessing:
                         comment = result_df.iloc[j]['Комментарий']
                         if comment is not np.nan:
                             if date_j == date_of_forecast:
-                                if smi_date_flag != True:
-                                    comment_splitted = comment.split('. ')
-                                    # Фильтруем комментарии
-                                    filtered_comments = [comment for comment in comment_splitted if any(possible in comment for possible in possible_comments)]
-                                    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
-                                elif smi_date_flag == True:
-                                    comment_splitted = comment.split('. ')
-                                    # Фильтруем комментарии
-                                    joined_possible_comments = possible_comments + possible_comments_smi
-                                    filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in joined_possible_comments)]
-                                    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                                #if smi_date_flag != True:
+                                #    comment_splitted = comment.split('. ')
+                                #    # Фильтруем комментарии
+                                #    filtered_comments = [comment for comment in comment_splitted if any(possible in comment for possible in possible_comments)]
+                                #    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                                #if smi_date_flag == True:
+                                comment_splitted = comment.split('. ')
+                                # Фильтруем комментарии
+                                joined_possible_comments = possible_comments + possible_comments_smi
+                                filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in joined_possible_comments)]
+                                result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
                             else:
                                 if smi_date_flag == True:
                                     comment_splitted = comment.split('. ')
