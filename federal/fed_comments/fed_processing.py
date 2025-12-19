@@ -5,6 +5,7 @@ import pymorphy3 as pmrph
 from pathlib import Path
 import datetime
 from OMA_tools.io_data.operations import Table, Dict_Operations
+from OMA_tools.io_data.colors import *
 from OMA_tools.federal.fed_comments.fed_preprocessing import Federal_Preprocessing
 from OMA_tools.federal.fed_comments.fed_postprocessing import Federal_Postprocessing
 from OMA_tools.federal.fed_comments.smi_info import SMI_info
@@ -16,14 +17,6 @@ locale.setlocale(locale.LC_ALL, 'ru_RU')
 import warnings
 warnings.filterwarnings('ignore')
 
-class color:
-   BOLD = '\033[1m'
-   BLUE = '\033[94m'
-   GREEN = '\033[92m'
-   PURPLE = '\033[95m'
-   RED = '\033[91m'
-   END = '\033[0m'
-   UNDERLINE = '\033[4m'
 
 channels_need_replace = {
                         '2Х2': '2X2',
@@ -218,19 +211,19 @@ class Federal_Processing:
         ]
 
         if len(non_empty_years) > 1:
-            print(color.BOLD + color.RED + f'Найдено {len(non_empty_years)} непустых года для анализа.' + color.END)
+            print(Color.BOLD + Color.RED + f'Найдено {len(non_empty_years)} непустых года для анализа.' + Color.END)
             print('\n')
 
         elif len(non_empty_years) == 1:
-            print(color.BOLD + color.RED + f'Найден {len(non_empty_years)} непустой год для анализа.' + color.END)
+            print(Color.BOLD + Color.RED + f'Найден {len(non_empty_years)} непустой год для анализа.' + Color.END)
             print('\n')
         
         else:
-            print(color.BOLD + color.RED + 'Не найдено данных для анализа!')
+            print(Color.BOLD + Color.RED + 'Не найдено данных для анализа!')
             print('\n')
 
         for year in years:
-            print(color.BOLD + color.BLUE + f'Обрабатываем {year} год' + color.END)
+            print(Color.BOLD + Color.BLUE + f'Обрабатываем {year} год' + Color.END)
             #try:
 
             # Генерация нужного порядка месяцев нужного формат, основываясь на годе
@@ -245,19 +238,19 @@ class Federal_Processing:
 
             if self.forecast_comparison_file is None:
                 print('\n')
-                print(color.BOLD + f'😢 Файл со сравнением прогнозов для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
+                print(Color.BOLD + f'😢 Файл со сравнением прогнозов для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
                       f' Проверьте, чтобы дата, с которой хотим смотреть изменения, совпадала с первоначальной датой в файле со Сравнением прогнозов по {year} году.' + 
-                      color.END)
+                      Color.END)
 
             #kus_file = Federal_Preprocessing.find_data_file(folder_path, start_date, year, 'КУС')
 
             elif kus_file is None:
                 print('\n')
-                print(color.BOLD + f'😢 Файл с прогнозом КУСа для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
-                      ' Файл нужно добавлять даже, если не было корректировки прогноза!' + color.END)
+                print(Color.BOLD + f'😢 Файл с прогнозом КУСа для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
+                      ' Файл нужно добавлять даже, если не было корректировки прогноза!' + Color.END)
             
             else:
-                print(color.GREEN + f'✅ Файлы для {year} года найдены! Начинаю анализ. Пожалуйста, подождите ...' + color.END)
+                print(Color.GREEN + f'✅ Файлы для {year} года найдены! Начинаю анализ. Пожалуйста, подождите ...' + Color.END)
 
             problem_channels = {}
 
@@ -426,7 +419,9 @@ class Federal_Processing:
             print('\n')
 
         # Фильтруем пустые датафреймы
-        print(color.BOLD + color.GREEN + f'Объединяю результаты. Пожалуйста, подождите ...' + color.END)
+        print(Color.center_text('Я КОНЧИЛ! 🐳', Color.BOLD + Color.VIOLET))
+        print('\n')
+        
         non_empty_dfs = [year_results[year][0] for year in year_results 
                         if not year_results[year][0].empty]
 
@@ -476,20 +471,20 @@ class Federal_Processing:
         ]
 
         if len(non_empty_years) > 1:
-            print(color.BOLD + color.RED + f'Найдено {len(non_empty_years)} непустых года для анализа' + color.END)
+            print(Color.BOLD + Color.RED + f'Найдено {len(non_empty_years)} непустых года для анализа' + Color.END)
             print('\n')
 
         elif len(non_empty_years) == 1:
-            print(color.BOLD + color.RED + f'Найден {len(non_empty_years)} непустой год для анализа' + color.END)
+            print(Color.BOLD + Color.RED + f'Найден {len(non_empty_years)} непустой год для анализа' + Color.END)
             print('\n')
         
         else:
-            print(color.BOLD + color.RED + 'Не найдено данных для анализа!')
+            print(Color.BOLD + Color.RED + 'Не найдено данных для анализа!')
             print('\n')
 
         for year in years:
 
-            print(color.BOLD + color.BLUE + f'Обрабатываем {year} год' + color.END)
+            print(Color.BOLD + Color.BLUE + f'Обрабатываем {year} год' + Color.END)
             # Генерация нужного порядка месяцев нужного формат, основываясь на годе
             month_order = Federal_Processing.generate_month_order(year)
 
@@ -506,17 +501,17 @@ class Federal_Processing:
 
             if self.forecast_comparison_file is None:
                 print('\n')
-                print(color.BOLD + f'😢 Файл со сравнением прогнозов для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
+                print(Color.BOLD + f'😢 Файл со сравнением прогнозов для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
                       f' Проверьте, чтобы дата, с которой хотим смотреть изменения, совпадала с первоначальной датой в файле со Сравнением прогнозов по {year} году.' + 
-                      color.END)
+                      Color.END)
 
             elif kus_file is None:
                 print('\n')
-                print(color.BOLD + f'😢 Файл с прогнозом КУСа для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
-                      ' Файл нужно добавлять даже, если не было корректировки прогноза!' + color.END)
+                print(Color.BOLD + f'😢 Файл с прогнозом КУСа для {year} года не найден! Пожалуйста, вставьте его в соответствующую папку!' +
+                      ' Файл нужно добавлять даже, если не было корректировки прогноза!' + Color.END)
             
             else:
-                print(color.GREEN + f'✅ Файлы для {year} года найдены! Начинаю анализ. Пожалуйста, подождите ...' + color.END)
+                print(Color.GREEN + f'✅ Файлы для {year} года найдены! Начинаю анализ. Пожалуйста, подождите ...' + Color.END)
 
             problem_channels = {}
 
@@ -695,7 +690,9 @@ class Federal_Processing:
             print('\n')
 
         # Фильтруем пустые датафреймы
-        print(color.BOLD + color.GREEN + f'Объединяю результаты. Пожалуйста, подождите ...' + color.END)
+        print(Color.center_text('Я КОНЧИЛ! 🐳', Color.BOLD + Color.VIOLET))
+        print('\n')
+        
         non_empty_dfs = [year_results[year][0] for year in year_results 
                         if not year_results[year][0].empty]
 
@@ -889,7 +886,7 @@ class Federal_Processing:
                     else:
                         morph = pmrph.MorphAnalyzer()
                         month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
-                        print(comment + f' для: {", ".join(list(channels))} в {month_}.' + color.END, end = '\n\n')
+                        print(comment + f' для: {", ".join(list(channels))} в {month_}.' + Color.END, end = '\n\n')
 
 
         #Вывод комментариев для изменений по дням
@@ -912,14 +909,14 @@ class Federal_Processing:
                     not_found.append(channel)
 
             if len(not_enough_reasons) != 0:
-                print(color.BOLD + color.GREEN + f'Требуется дописать причины для {", ".join(set(not_enough_reasons))}.' + color.END, end = '\n\n')
+                print(Color.BOLD + Color.GREEN + f'Требуется дописать причины для {", ".join(set(not_enough_reasons))}.' + Color.END, end = '\n\n')
             else:
                 print('')
 
             if len(not_found) != 0:
-                print(color.BOLD + color.RED + 'Требуется ' + \
-                      color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + color.END + color.BOLD + color.RED + \
-                      f' написать комментарий для: {", ".join(set(not_found))}.' + color.END, end = '\n\n')
+                print(Color.BOLD + Color.RED + 'Требуется ' + \
+                      Color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + Color.END + Color.BOLD + Color.RED + \
+                      f' написать комментарий для: {", ".join(set(not_found))}.' + Color.END, end = '\n\n')
             else:
                 print('')
 
@@ -947,8 +944,8 @@ class Federal_Processing:
                 channels_not_exist_new = Dict_Operations(channels_not_exist).rename_items_in_dict(channel_names_init)
                 support_func_per_comment(channels_not_exist_new, 
                             months__and__channels, 
-                            color.BOLD + color.RED + 'Требуется написать комментарий ' + \
-                                color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + color.END + color.BOLD + color.RED)
+                            Color.BOLD + Color.RED + 'Требуется написать комментарий ' + \
+                                Color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + Color.END + Color.BOLD + Color.RED)
             else:
                 print('')
             
@@ -958,8 +955,8 @@ class Federal_Processing:
                 channels_not_exist_smi = Dict_Operations(channels_not_found_smi).rename_items_in_dict(channel_names_init)
                 support_func_per_comment(channels_not_exist_smi, 
                             months__and__channels, 
-                            color.BOLD + color.PURPLE + 'Не найдено данных от ' + color.UNDERLINE + 'СМИ' + color.END + ' ' + \
-                                color.BOLD + color.PURPLE)
+                            Color.BOLD + Color.PURPLE + 'Не найдено данных от ' + Color.UNDERLINE + 'СМИ' + Color.END + ' ' + \
+                                Color.BOLD + Color.PURPLE)
             else:
                 print('')
             
@@ -969,9 +966,9 @@ class Federal_Processing:
                 channels_not_enough_reasons_new = Dict_Operations(channels_not_enough_reasons).rename_items_in_dict(channel_names_init)
                 support_func_per_comment(channels_not_enough_reasons_new, 
                             months__and__channels, 
-                            color.BOLD + color.GREEN + 'Найдено ' + color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
-                                color.END + color.BOLD + color.GREEN + ' причин')
+                            Color.BOLD + Color.GREEN + 'Найдено ' + Color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
+                                Color.END + Color.BOLD + Color.GREEN + ' причин')
             else:
                 print('')
         else:
-            print(color.BOLD + color.RED + 'ПЕРЕМЕННАЯ type_of_comments ДОЛЖНА БЫТЬ ЛИБО by days, либо summ' + color.END)
+            print(Color.BOLD + Color.RED + 'ПЕРЕМЕННАЯ type_of_comments ДОЛЖНА БЫТЬ ЛИБО by days, либо summ' + Color.END)
