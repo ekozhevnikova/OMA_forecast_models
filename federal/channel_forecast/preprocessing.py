@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
-from OMA_tools.federal.channel_forecast.calculator import TVShareCalculator
+from OMA_tools.federal.channel_forecast.calculator import *
 
 import warnings
 warnings.filterwarnings('ignore')
