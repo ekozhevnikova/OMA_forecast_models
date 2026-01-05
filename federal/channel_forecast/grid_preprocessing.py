@@ -16,6 +16,120 @@ import warnings
 warnings.filterwarnings('ignore')
 
 
+class AudienceParser:
+    """
+        Класс для предобработки и постобработки файлов с Total TV Auedience
+    """
+    def __init__(self, filepath):
+        self.filepath = filepath
+
+
+    def read_auedience(self):
+        """
+            Метод для чтения файла с первичными данными
+        """
+        # Чтение данных из файла
+        self.total_tv_audience = pd.read_excel(f'{self.filepath}', index_col = 0)
+        self.total_tv_audience['Date'] = pd.to_datetime(self.total_tv_audience['Date'])
+        self.total_tv_audience['Auedience'] = self.total_tv_audience['Auedience'].astype(float)
+
+         # Расчет веса слотов
+        A = TVShareCalculator.calculate_slot_weights(self.total_tv_audience)
+
+        A.rename(columns = {'Date': 'Дата'}, inplace = True)
+        A['Дата'] = A['Дата'].dt.strftime('%Y-%m-%d')
+
+        A['Auedience'] = A['Auedience'].round(5)
+        A['Slot_weight'] = A['Slot_weight'].round(8)
+        return A
+    
+    
+    def update_table_auedience(self, old_data: pd.DataFrame, new_data: pd.DataFrame) -> pd.DataFrame:
+        """
+            Метод для обновления таблицы с Auedience
+        """
+        new = pd.DataFrame()
+
+        # Отбираем уникальные даты из старых и новых данных
+        old_unique_dates = old_data['Дата'].unique()
+        new_unique_dates = new_data['Дата'].unique()
+        
+        old_ones = []
+
+        # Фильтруем даты, которые уже присутствуют в данных
+        for new_date in new_unique_dates:
+                
+            if new_date in old_unique_dates:
+                old_ones.append(pd.to_datetime(new_date))
+
+        if len(old_ones) != 0:
+            min_date_str = min(old_ones).strftime('%Y-%m-%d')
+
+            # Оставляем только те даты, которые не встречаются в новых, если таковые нашлись
+            filtered = old_data[old_data['Дата'] < min_date_str]
+
+            if len(filtered) != 0:
+        
+                # Обновляем таблицу с фактическими данными
+                new = pd.concat([filtered, new_data]).reset_index(drop = True)
+        
+        # В противном случае просто добавляем новые данные в конец старой таблицы
+        else:
+            new = pd.concat([old_data, new_data]).reset_index(drop = True)
+
+        # ДОБАВИТЬ ФИЛЬТРАЦИЮ. ВЗЯТЬ ИЗ МАШИНЫ С ТРЕТЬИМ ПИТОНОМ
+        
+        return new
+    
+
+    def make_style_of_table(self, sheet_name: str):
+        """
+            Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
+                Args:
+                    filepath: путь к файлу, в который будем сохранять итоговый результат
+                    output_df: DataFrame, который будем стилизировать
+                    sheet_name: имя листа, на который это будет записываться.
+                Returns:
+                    Стилизированная таблица в файле xlsx
+        """
+        with pd.ExcelWriter(self.filepath, 
+                        date_format = '%Y-%m-%d',
+                        datetime_format = '%Y-%m-%d',
+                        engine = 'xlsxwriter') as writer:
+            
+            self.total_tv_audience.to_excel(writer, index = None)
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+        
+            #Стиль шапки таблицы
+            header_format = workbook.add_format({'bold': True,
+                                                'text_wrap': True, #перенос текста
+                                                'align': 'center', #выравнение текста в ячейке
+                                                'align': 'vcenter', #выравнение текста в ячейке
+                                                'center_across': True
+                                                })
+            
+            #Стиль тела таблицы для Канала, Месяца
+            table_fmt = workbook.add_format({'bold': False, 'align': 'center', 'border': 0})
+            
+            worksheet.write('A1', 'Date', header_format)
+            worksheet.write('B1', 'Time slot', header_format)
+            worksheet.write('C1', 'Auedience', header_format)
+            worksheet.write('D1', 'Slot weight', header_format)
+            worksheet.write('E1', 'hour_start', header_format)
+            worksheet.set_column('A:A', 13.0, table_fmt)
+            worksheet.set_column('B:B', 9.0, table_fmt)
+            worksheet.set_column('C:C', 11.0, table_fmt)
+            worksheet.set_column('D:D', 14.0, table_fmt)
+            worksheet.set_column('E:E', 9.0, table_fmt)
+
+
+class MediascopeParser:
+    def __init__():
+        pass
+
+    # TODO
+
 class TVPreprocessing:
     """
         Класс для предобработки файлов с исторической и новыми сетками Федеральных ТВ-каналовс регулярной сеткой
@@ -77,24 +191,7 @@ class TVPreprocessing:
             return 0
 
 
-
-    def parse_total_tv_auedience(self, date_col: str = 'Date', statistic_col: str = 'TTVRtg000') -> pd.DataFrame:
-        """
-            Метод для парсинга файла с Total TV Auedience.
-            Args:
-                date_col: название колонки с датой. По умолчанию "Date"
-                statistic_col: название колонки со статистикой Total TV Auedience. По умолчанию "TTVRtg000"
-            Returns:
-                total_tv_audiece: pd.DataFrame: датафрейм с Total TV Auedience
-
-        """
-        total_tv_audiece = pd.read_excel(self.filename, index_col = 0)
-        total_tv_audiece['Date'] = pd.to_datetime(total_tv_audiece['Date'])
-        total_tv_audiece['TTVRtg000'] = total_tv_audiece['TTVRtg000'].astype(float)
-        return total_tv_audiece
-
-
-    def parse_Palomars(self, start_time_col: str = 'Время выхода', end_time_col: str = 'Время окончания'):
+    def parse_Palomars(self, start_time_col: str = 'Время выхода', end_time_col: str = 'Время окончания') -> pd.DataFrame:
         """
             Функция для парсинга файла с исторической сеткой Palomars.
             Args:
@@ -134,11 +231,11 @@ class TVPreprocessing:
         return self.plmrs
     
 
-    def _palomars_convert_time(self, df):
+    def _palomars_convert_time(self, df) -> pd.DataFrame:
         """
             Функция для округления времени слотов программ в исторической сетке Palomars для какого-то конкретного дня
         """
-        mars = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']]
+        mars = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
         mars['Дата'] = pd.to_datetime(mars['Дата'])
         
         # Округляем время до минут
@@ -146,7 +243,7 @@ class TVPreprocessing:
         mars['Время выхода_1min'] = share_calc.round_time('Время выхода')
         mars['Время окончания_1min'] = share_calc.round_time('Время окончания')
         
-        mars_new = mars[['Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min']]
+        mars_new = mars[['Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
         mars_new.rename(columns = {'Время выхода_1min': 'Время выхода', 'Время окончания_1min': 'Время окончания'}, inplace = True)
         
         # Создаем копию оригинального столбца
@@ -159,7 +256,7 @@ class TVPreprocessing:
         # Переименовываем колонки для наглядности
         mars_new.rename(columns = {'Время выхода': 'Время выхода_старое', 'Время выхода_новое': 'Время выхода'}, inplace = True)
         
-        palomars = mars_new[['Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания']]
+        palomars = mars_new[['Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
         self.palomars_adjusted = TVShareCalculator(palomars).adjust_hour_start()
         
         # Эфирные сутки всегда начинаются с 05:00:00
@@ -211,7 +308,7 @@ class TVPreprocessing:
         for date in dates_unique:
 
             try:
-            
+
                 df = self.plmrs[self.plmrs[date_col] == date].reset_index(drop = True)
                 auedience = weighted_auedience[weighted_auedience['Date'] == date].reset_index(drop = True)
 
@@ -226,7 +323,7 @@ class TVPreprocessing:
         
         # Объединение результатов
         if not results_list:
-            print("Нет результатов для объединения")
+            print('Нет результатов для объединения')
             return pd.DataFrame(), {}
         
         combined_result = pd.concat(results_list).reset_index(drop = True)
@@ -245,10 +342,76 @@ class TVPreprocessing:
         
         general_result = pd.concat(res).reset_index(drop = True)
 
+        # Округление столбцов с долей
+        general_result['Share'] = general_result['Share'].round(5)
+        general_result['Share_weighted'] = general_result['Share_weighted'].round(8)
+
+        general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
+
         return general_result, shares
-   
     
-    def parse_VIMB(self, sheet_name: str = 'ГРАФИК', skiprows = 1):
+
+    def make_plmrs_style_of_table(self, folder_path: str, output_df: pd.DataFrame, sheet_name: str):
+        """
+            Функция для генерации внешнего вида таблицы с сеткой Mediascope.
+            Args:
+                filepath: путь к файлу, в который будем сохранять итоговый результат
+                output_df: DataFrame, который будем стилизировать
+                sheet_name: имя листа, на который это будет записываться.
+            Returns:
+                Стилизированная таблица в файле xlsx
+        """
+        with pd.ExcelWriter(folder_path, 
+                        date_format = '%Y-%m-%d',
+                        datetime_format = '%Y-%m-%d',
+                        engine = 'xlsxwriter') as writer:
+            
+            output_df.to_excel(writer, index = None)
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+        
+            #Стиль шапки таблицы
+            header_format = workbook.add_format({'bold': True,
+                                                'text_wrap': True, #перенос текста
+                                                'align': 'center', #выравнение текста в ячейке
+                                                'align': 'vcenter', #выравнение текста в ячейке
+                                                'center_across': True
+                                                })
+            
+            #Стиль тела таблицы для Канала, Месяца
+            table_fmt = workbook.add_format({'bold': False, 'align': 'center', 'border': 0})
+            
+            worksheet.write('A1', 'Дата', header_format)
+            worksheet.write('B1', 'Название программы', header_format)
+            worksheet.write('C1', 'Время выхода', header_format)
+            worksheet.write('D1', 'Время окончания', header_format)
+            worksheet.write('E1', 'Share', header_format)
+            worksheet.write('F1', 'Share_weighted', header_format)
+            worksheet.write('G1', 'Жанр', header_format)
+            worksheet.write('H1', 'День недели', header_format)
+            worksheet.set_column('A:A', 13.0, table_fmt)
+            worksheet.set_column('B:B', 70.0, table_fmt)
+            worksheet.set_column('C:C', 14.0, table_fmt)
+            worksheet.set_column('D:D', 14.0, table_fmt)
+            worksheet.set_column('E:E', 9.0, table_fmt)
+            worksheet.set_column('F:F', 13.0, table_fmt)
+            worksheet.set_column('G:G', 35.0, table_fmt)
+            worksheet.set_column('H:H', 11.0, table_fmt)
+
+
+class VIMBGridProcessor:
+    """
+        Класс для парсинга сеток VIMB (Сводная таблица)
+    """
+    def __init__(self, folder_path: str):
+        """
+            Атрибуты:
+                folder_path: путь к файлам с новыми сетками ТВ-программ.
+        """
+        self.folder_path = folder_path
+    
+
+    def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows = 1):
         """
             Ещё один метод для парсинга файла с сеткой VIMB из отчета Размещение -> Сводная таблица
             Args:
@@ -258,7 +421,7 @@ class TVPreprocessing:
                 VIMB: причёсанный DataFrame с сеткой VIMB.
         """
         # Чтение файла
-        df = pd.read_excel(self.filename, sheet_name = sheet_name, skiprows = skiprows)
+        df = pd.read_excel(filepath, sheet_name = sheet_name, skiprows = skiprows)
 
         # Оставляем только нужные столбцы
         data = df[['Дата', 'Время выхода', 'Прод-ть', 'Название программы']]
@@ -309,18 +472,6 @@ class TVPreprocessing:
         return VIMB
 
 
-class VIMBGridProcessor:
-    """
-        Класс для парсинга сеток VIMB (Сводная таблица)
-    """
-    def __init__(self, folder_path: str):
-        """
-            Атрибуты:
-                folder_path: путь к файлам с новыми сетками ТВ-программ.
-        """
-        self.folder_path = folder_path
-
-
     def parse_new_vimb_grids(
                 self, 
                 file_format: str = '*.xlsm', 
@@ -345,7 +496,7 @@ class VIMBGridProcessor:
         for file_path in xlsx_files:
             try:
                 # Читаем файл в DataFrame
-                vimb = TVPreprocessing(file_path).parse_VIMB()
+                vimb = self.parse_VIMB(file_path)
                 files.append(vimb)
         
             except Exception as e:
@@ -555,8 +706,6 @@ class VIMBGridProcessor:
         duration_s = duration_sec % 60
         
         return f"{duration_h:02d}:{duration_m:02d}:{duration_s:02d}"
-        
-    
     
 
     def adjust_end_time(
@@ -634,7 +783,7 @@ class VIMBGridProcessor:
                 print(f'⚠️ Для {date} не найдена кульминационная программа дня.')
     
 
-    def update_file(self, web_new):
+    def update_vimb_file(self, web_new):
         """
             Функция для обновления файла с сетками ТВ-программ VIMB.
         """
@@ -660,7 +809,7 @@ class VIMBGridProcessor:
             # Создаем Excel файл с форматированием
             self.folder_path = file_path # Добавляем путь для сохранения
 
-            self.make_style_of_table(
+            self.make_vimbs_style_of_table(
                 output_df = new_cleaned, 
                 sheet_name = 'Sheet1'
             )
@@ -689,7 +838,7 @@ class VIMBGridProcessor:
             # Проверяем границы дней
             self.check_start__and__end_day(df_no_duplicates)
 
-            self.make_style_of_table(
+            self.make_vimbs_style_of_table(
                 output_df = df_no_duplicates, 
                 sheet_name = 'Sheet1'
             )
@@ -708,7 +857,7 @@ class VIMBGridProcessor:
                 # Создаем новый файл с web_new данными
                 self.folder_path = file_path
 
-                self.make_style_of_table(
+                self.make_vimbs_style_of_table(
                     output_df = web_new, 
                     sheet_name = 'Sheet1'
                 )
@@ -719,7 +868,7 @@ class VIMBGridProcessor:
 
     
 
-    def make_style_of_table(self, output_df, sheet_name):
+    def make_vimbs_style_of_table(self, output_df, sheet_name):
         """
             Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
             Args:

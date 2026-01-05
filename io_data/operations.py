@@ -263,8 +263,8 @@ class Table:
             Updates table
         """
         for col_name in data_old.columns:
-                if 'Unnamed' in col_name:
-                    data_old = data_old.drop(columns=[col_name])
+            if 'Unnamed' in col_name:
+                data_old = data_old.drop(columns=[col_name])
         for col_name in data_new.columns:
             if 'Unnamed' in data_new:
                 data_new = data_new.drop(columns=[col_name])

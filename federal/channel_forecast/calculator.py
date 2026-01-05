@@ -35,7 +35,7 @@ class TVShareCalculator:
     @staticmethod
     def calculate_slot_weights(
                     total_tv_audience: pd.DataFrame,
-                    rating_col: str = 'TTVRtg000',
+                    rating_col: str = 'Auedience',
                     timeslot_col: str = 'TimeSlot',
                     date_col: str = 'Date'
                 ) -> pd.DataFrame:
@@ -217,7 +217,7 @@ class TVShareCalculator:
                 
                 # Корректируем время окончания при переходе через полночь
                 if end_time <= start_time:
-                    end_time += timedelta(days=1)
+                    end_time += timedelta(days = 1)
                 
                 # Рассчитываем количество скачков
                 current_time = start_time
@@ -369,7 +369,7 @@ class TVShareCalculator:
                 coefficient = np.sum(coeffs)
                 df.at[i, 'Share_weighted'] = share * coefficient
 
-        res = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted']]
+        res = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
         #res.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
         # Расчёт суммарной доли по дню
         share_sum = np.sum(list(res['Share_weighted']))
@@ -401,7 +401,7 @@ class TVScheduleProcessor:
         return df
     
 
-    def _adjust_end_time(
+    def adjust_end_time(
                     self, 
                     df: pd.DataFrame, 
                     time_col: str = 'Время окончания'
@@ -418,7 +418,7 @@ class TVScheduleProcessor:
                 Датафрейм df с конвертированными слотами Времени окончания программ.
         """
 
-        def adjust_time(time_str: str) -> str:
+        def adjust_time__(time_str: str) -> str:
             h, m, s = map(int, time_str.split(':'))
 
             if m == 0 and s == 0:
@@ -432,7 +432,7 @@ class TVScheduleProcessor:
             return time_str
 
         df = df.copy()
-        df[time_col] = df[time_col].apply(adjust_time)
+        df[time_col] = df[time_col].apply(adjust_time__)
         return df
     
 
@@ -451,7 +451,7 @@ class TVScheduleProcessor:
         
         df = data.copy()
         
-        df = self._adjust_end_time(df)
+        df = self.adjust_end_time(df)
         
         # Функция для сортировки по эфирным суткам
         def broadcast_time_key(time_str):

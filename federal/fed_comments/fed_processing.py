@@ -288,7 +288,37 @@ class Federal_Processing:
                                                             smi_criteria = smi_criteria)
                 
                 smi_by_days_ = smi_by_days.copy()
+
                 if  len(data_output_dates) == 0 and len(smi_by_days) == 0:
+
+                    months_init = list(df_by_dates_need_comment['Месяц'])
+                    months_new = []
+                    for old_month in months_init:
+                        month_new = str(old_month).split('\'')[0].title()
+                        months_new.append(month_new)
+                            
+                    # Замена столбца дат на новый конвертированный столбец
+                    df_by_dates_need_comment['Месяц'] = df_by_dates_need_comment['Месяц'].replace(months_init, months_new)
+
+                    #Добавление пустого столбца для комментариев руководителя
+                    df_by_dates_need_comment['Комментарий'] = ''
+                    df_by_dates_need_comment['Доп столбец'] = ''
+
+                    #Join комментариев с порогами
+                    result = pd.merge(df_by_dates_need_comment, df_limits.T, on = ['Канал'], how = 'inner')
+
+                    result = result[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+
+                    #Форматирование столбца с Месяцем
+                    by_days = Federal_Postprocessing(result).replace_name_of_months('Месяц', str(year))
+                    by_days_sorted = Table(by_days).sort_in_specific_way(month_order, 'Месяц', date_column = 'Дата')
+                    by_days_sort = by_days_sorted[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+                    by_days_FINAL = Federal_Comments.change_channels_name(channel_names_init, by_days_sort, 'Канал')
+
+                    problem_channels = {}
+
+                    year_results[year] = [by_days_FINAL, problem_channels]
+
                     print('НЕ НАЙДЕНО ДАННЫХ ДЛЯ УКАЗАННОГО ПЕРИОДА')
                 
                 #Если не нашлось релеватных данных от СМИ
@@ -348,10 +378,6 @@ class Federal_Processing:
                 
                 #Если нашлись релеватные данные от СМИ и нашлись объяснения из таблицы со сравнением прогнозов
                 else:
-                    #columns = ['Канал', 'Месяц']
-                    #for col in columns:
-                    #    data_output_dates[col] = data_output_dates[col].astype(str)
-                    #    smi_by_days_[col] = smi_by_days_[col].astype(str)
                     data_output_dates['Дата'] = pd.to_datetime(data_output_dates['Дата'])
                     smi_by_days_['Дата'] = pd.to_datetime(smi_by_days_['Дата'])
 
