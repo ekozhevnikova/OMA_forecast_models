@@ -112,26 +112,17 @@ class AudienceParser:
         data_by_slots = data.sort_values('Date').reset_index(drop = True)
         res = data_by_slots[data_by_slots['TTVRtg000'] != 0.0]
         final_data = res[['Date', 'TimeSlot', 'TTVRtg000']].reset_index(drop = True)
-        df_sorted = final_data.sort_values(['Date', 'TimeSlot'], ascending = [True, True])
-        df_sorted.rename(columns = {'TTVRtg000': 'Auedience'}, inplace = True)
 
-        df_sorted['Auedience'] = df_sorted['Auedience'].round(5)
-        df_sorted['Slot_weight'] = df_sorted['Slot_weight'].round(8)
+        sorted = final_data.sort_values(['Date', 'TimeSlot'], ascending = [True, True])
+        sorted.rename(columns = {'TTVRtg000': 'Auedience'}, inplace = True)
 
-        return df_sorted
-    
+        sorted.reset_index(drop = True)
 
-    def read_auedience(self):
-        """
-            Метод для чтения файла с первичными данными
-        """
-        # Чтение данных из файла
-        self.total_tv_audience = pd.read_excel(f'{self.filepath}', index_col = 0)
-        self.total_tv_audience['Date'] = pd.to_datetime(self.total_tv_audience['Date'])
-        self.total_tv_audience['Auedience'] = self.total_tv_audience['Auedience'].astype(float)
+        sorted['Date'] = pd.to_datetime(sorted['Date'])
+        sorted['Auedience'] = sorted['Auedience'].astype(float)
 
-         # Расчет веса слотов
-        A = TVShareCalculator.calculate_slot_weights(self.total_tv_audience)
+        # Расчет веса слотов
+        A = TVShareCalculator.calculate_slot_weights(sorted)
 
         A.rename(columns = {'Date': 'Дата'}, inplace = True)
         A['Дата'] = A['Дата'].dt.strftime('%Y-%m-%d')
@@ -140,13 +131,21 @@ class AudienceParser:
         A['Slot_weight'] = A['Slot_weight'].round(8)
 
         return A
+
     
     
-    def update_table_auedience(self, old_data: pd.DataFrame, new_data: pd.DataFrame) -> pd.DataFrame:
+    def update_table_auedience(self, new_data: pd.DataFrame) -> pd.DataFrame:
         """
             Метод для обновления таблицы с Auedience
         """
         new = pd.DataFrame()
+
+        # Чтение данных из файла
+        old_data = pd.read_excel(f'{self.filepath}', index_col = 0)
+        old_data['Date'] = pd.to_datetime(old_data['Date'])
+        old_data['Auedience'] = old_data['Auedience'].astype(float)
+
+        #old_data = self.total_tv_audience.coopy()
 
         # Отбираем уникальные даты из старых и новых данных
         old_unique_dates = old_data['Дата'].unique()
@@ -176,9 +175,9 @@ class AudienceParser:
             new = pd.concat([old_data, new_data]).reset_index(drop = True)
 
         sorted_by_dates = new.sort_values('Дата').reset_index(drop = True)
-        sorted = sorted_by_dates.sort_values(['Дата', 'TimeSlot'], ascending = [True, True])
+        self.total_tv_audience = sorted_by_dates.sort_values(['Дата', 'TimeSlot'], ascending = [True, True])
         
-        return sorted
+        return self.total_tv_audience
     
 
     def auedience_pipeline(self, date_filter, company_filter, basedemo_filter):
@@ -188,13 +187,10 @@ class AudienceParser:
         # 1. Выгрузка новых данных по Total TV Auedience
         auedience_new = self.audience_by_slots(date_filter, company_filter, basedemo_filter)
 
-        # 2. Чтение старых данных по Total TV Auedience
-        old = self.read_auedience()
+        # 2. Обновление таблицы
+        self.total_tv_audience = self.update_table_auedience(auedience_new)
 
-        # 3. Обновление таблицы
-        self.total_tv_audience = self.update_table_auedience(old, auedience_new)
-
-        # 4. Сохранение в файл
+        # 3. Сохранение в файл
         self.make_style_of_table(sheet_name = 'Sheet1')
 
         return self.total_tv_audience
