@@ -17,8 +17,6 @@ warnings.filterwarnings('ignore')
 
 # Для mediascope_api
 from datetime import datetime, timedelta
-%reload_ext autoreload
-%autoreload 2
 
 import sys
 import os
