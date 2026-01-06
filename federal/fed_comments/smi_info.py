@@ -489,7 +489,7 @@ class SMI_info:
             
         else:
             df_result = df[
-                        (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days=3)
+                        (df['Дата'] - df['Дата из СМИ']).abs() < timedelta(days = 3)
                         ].groupby(['Канал', 'Месяц', 'Дата']).apply(SMI_info.combine_comments_by_periods).reset_index(drop = True)
 
 

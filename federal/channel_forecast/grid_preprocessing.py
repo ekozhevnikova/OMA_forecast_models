@@ -15,6 +15,31 @@ from OMA_tools.federal.channel_forecast.calculator import *
 import warnings
 warnings.filterwarnings('ignore')
 
+# Для mediascope_api
+from datetime import datetime, timedelta
+%reload_ext autoreload
+%autoreload 2
+
+import sys
+import os
+import re
+import json
+import datetime
+import time
+import pandas as pd
+from IPython.display import JSON
+
+from mediascope_api.core import net as mscore
+from mediascope_api.mediavortex import tasks as cwt
+from mediascope_api.mediavortex import catalogs as cwc
+
+# Включаем отображение всех колонок
+pd.set_option('display.max_columns', None)
+# Cоздаем объекты для работы с TVI API
+mnet = mscore.MediascopeApiNetwork()
+mtask = cwt.MediaVortexTask()
+cats = cwc.MediaVortexCats()
+
 
 class AudienceParser:
     """
@@ -22,7 +47,79 @@ class AudienceParser:
     """
     def __init__(self, filepath):
         self.filepath = filepath
+    
 
+    @staticmethod
+    def format_time(time_int):
+        """
+            Функция для преобразования временного слота
+        """
+        time_str = str(time_int).zfill(6)
+        return f'{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}'
+
+
+    def audience_by_slots(
+            self, date_filter, company_filter, basedemo_filter,
+            statistics = ['TTVRtg000'],
+            time_filter = 'timeBand1 >= 50000 AND timeBand1 < 290000',
+            slices = ['researchDate', 'tvCompanyName','timeBand60'],
+            sortings = {'researchDate': 'ASC', 'tvCompanyName': 'ASC'},
+            options = {
+                        "kitId": 1, #TV Index Cities  
+                        "totalType": "TotalChannels" #база расчета Share: Total Channels. Возможны опции: TotalTVSet, TotalChannelsThem
+                    },
+            weekday_filter = None, daytype_filter = None, 
+            targetdemo_filter = None, location_filter = None):
+        """
+            Метод для выгрузки Auedience из БД Mediscope API
+        """
+        
+        # Формируем задание для API TV Index в формате JSON
+        task_json = mtask.build_timeband_task(date_filter = date_filter, 
+                                            weekday_filter = weekday_filter, 
+                                            daytype_filter = daytype_filter, 
+                                            company_filter = company_filter, 
+                                            time_filter = time_filter, # 7:00 - 25:00, 
+                                            basedemo_filter = basedemo_filter,
+                                            targetdemo_filter = targetdemo_filter, 
+                                            location_filter = location_filter, 
+                                            slices = slices,
+                                            statistics = statistics, 
+                                            sortings = sortings,
+                                            options = options)
+
+        # Отправляем задание на расчет и ждем выполнения
+        task_timeband = mtask.wait_task(mtask.send_timeband_task(task_json))
+
+        # Получаем результат
+        df = mtask.result2table(mtask.get_result(task_timeband))
+        df['tvCompanyName'] = df['tvCompanyName'].str.replace(' (СЕТЕВОЕ ВЕЩАНИЕ)', '', regex = False)
+        df.rename(columns = {'researchDate': 'Date', 'tvCompanyName': 'Channel', 'timeBand60': 'TimeSlot'}, inplace = True)
+        df['Date'] = pd.to_datetime(df['Date'])
+        #Приведение слота к нормальному виду
+        df['TimeSlot'] = df['TimeSlot'].apply(AudienceParser.format_time)
+        df['TimeSlot'] = df['TimeSlot'].apply(TVPreprocessing.convert_time)
+        
+        df['TimeSlot_dt'] = pd.to_datetime(df['TimeSlot'], format='%H:%M:%S')
+
+        # Сортируем по времени
+        df_sorted = df.sort_values('TimeSlot_dt')
+
+        # Удаляем временную колонку если нужно
+        df_sorted = df_sorted.drop('TimeSlot_dt', axis = 1)
+        df_sorted.reset_index(drop = True)
+        data = df_sorted[['Channel', 'Date', 'TimeSlot', 'TTVRtg000']]
+        data_by_slots = data.sort_values('Date').reset_index(drop = True)
+        res = data_by_slots[data_by_slots['TTVRtg000'] != 0.0]
+        final_data = res[['Date', 'TimeSlot', 'TTVRtg000']].reset_index(drop = True)
+        df_sorted = final_data.sort_values(['Date', 'TimeSlot'], ascending = [True, True])
+        df_sorted.rename(columns = {'TTVRtg000': 'Auedience'}, inplace = True)
+
+        df_sorted['Auedience'] = df_sorted['Auedience'].round(5)
+        df_sorted['Slot_weight'] = df_sorted['Slot_weight'].round(8)
+
+        return df_sorted
+    
 
     def read_auedience(self):
         """
@@ -41,6 +138,7 @@ class AudienceParser:
 
         A['Auedience'] = A['Auedience'].round(5)
         A['Slot_weight'] = A['Slot_weight'].round(8)
+
         return A
     
     
@@ -77,9 +175,29 @@ class AudienceParser:
         else:
             new = pd.concat([old_data, new_data]).reset_index(drop = True)
 
-        # ДОБАВИТЬ ФИЛЬТРАЦИЮ. ВЗЯТЬ ИЗ МАШИНЫ С ТРЕТЬИМ ПИТОНОМ
+        sorted_by_dates = new.sort_values('Дата').reset_index(drop = True)
+        sorted = sorted_by_dates.sort_values(['Дата', 'TimeSlot'], ascending = [True, True])
         
-        return new
+        return sorted
+    
+
+    def auedience_pipeline(self, date_filter, company_filter, basedemo_filter):
+        """
+            Пайплайн для выгрузки и записи Auedience в файл для какого-то конкретного Федерального канала и конкретной БЦА.
+        """
+        # 1. Выгрузка новых данных по Total TV Auedience
+        auedience_new = self.audience_by_slots(date_filter, company_filter, basedemo_filter)
+
+        # 2. Чтение старых данных по Total TV Auedience
+        old = self.read_auedience()
+
+        # 3. Обновление таблицы
+        self.total_tv_audience = self.update_table_auedience(old, auedience_new)
+
+        # 4. Сохранение в файл
+        self.make_style_of_table(sheet_name = 'Sheet1')
+
+        return self.total_tv_audience
     
 
     def make_style_of_table(self, sheet_name: str):
