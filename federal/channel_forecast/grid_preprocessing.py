@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from datetime import datetime, timedelta
 import os
 import shutil
 import glob
@@ -10,93 +11,286 @@ from concurrent.futures import ThreadPoolExecutor
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
+from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 
 import warnings
 warnings.filterwarnings('ignore')
 
-# Для mediascope_api
-from datetime import datetime, timedelta
 
-import sys
-import os
-import re
-import json
-import datetime
-import time
-import pandas as pd
-from IPython.display import JSON
+######################################### КОНСТАНТЫ #########################################
+TIME_FILTER = 'timeBand1 >= 50000 AND timeBand1 < 290000'
+OPTIONS = {
+            "kitId": 1, #TV Index Cities  
+            "totalType": "TotalChannels" #база расчета Share: Total Channels. Возможны опции: TotalTVSet, TotalChannelsThem
+                    }
+WEEKDAY_FILTER = None
+DAYTYPE_FILTER = None
+TARGETDEMO_FILTER = None
+LOCATION_FILTER = None
+ADD_CITY_TO_BASEDEMO_FROM_REGION = False    # работаем в Федеральной Базе
+ADD_CITY_TO_TARGETDEMO_FROM_REGION = False  # работаем в Федеральной Базе
+BREAK_FILTER = None
+AD_FILTER = None
+PROGRAM_FILTER = 'programDuration >= 300'
+#############################################################################################
 
-from mediascope_api.core import net as mscore
-from mediascope_api.mediavortex import tasks as cwt
-from mediascope_api.mediavortex import catalogs as cwc
-
-# Включаем отображение всех колонок
-pd.set_option('display.max_columns', None)
-# Cоздаем объекты для работы с TVI API
-mnet = mscore.MediascopeApiNetwork()
-mtask = cwt.MediaVortexTask()
-cats = cwc.MediaVortexCats()
-
-
-class AudienceParser:
+class BaseParser:
     """
-        Класс для предобработки и постобработки файлов с Total TV Auedience
+        Базовый класс с набором базовых операций для парсинга различных файлов.
+        Все классы-парсеры должны наследоваться от этого класса.
     """
-    def __init__(self, filepath):
-        self.filepath = filepath
     
-
-    @staticmethod
-    def format_time(time_int):
+    def __init__(self, filepath: str):
         """
-            Функция для преобразования временного слота
+            Инициализация базового парсера.
+            
+            Args:
+                filepath: Путь к файлу для работы
+        """
+        self.filepath = filepath
+
+    
+    def _ensure_file_exists(self, default_columns: list = None):
+        """
+            Проверяет существование файла. 
+            Если файл не существует, создает его с базовой структурой.
+            
+            Args:
+                default_columns: Список колонок для создания пустого файла
+        """
+        if not os.path.exists(self.filepath):
+            if default_columns is None:
+                print('Список колонок не передан! Пожалуйста, исправьте!')
+            
+            # Создаем пустой DataFrame с указанными колонками
+            empty_df = pd.DataFrame(columns = default_columns)
+            
+            # Создаем директорию, если она не существует
+            directory = os.path.dirname(self.filepath)
+            if directory and not os.path.exists(directory):
+                os.makedirs(directory, exist_ok = True)
+                print(f'Создана директория: {directory}')
+            
+            # Сохраняем пустой файл
+            with pd.ExcelWriter(self.filepath, engine = 'xlsxwriter') as writer:
+                empty_df.to_excel(writer, sheet_name = 'Sheet1', index = False)
+            
+            print(f'Создан новый файл: {self.filepath}')
+
+    
+    def _get_column_letter(self, col_idx: int) -> str:
+        """
+            Преобразует индекс колонки в буквенное обозначение Excel.
+            Например: 0 -> 'A', 1 -> 'B', 25 -> 'Z', 26 -> 'AA'
+        """
+        col_letter = ''
+        while col_idx >= 0:
+            col_letter = chr(col_idx % 26 + 65) + col_letter
+            col_idx = col_idx // 26 - 1
+        return col_letter
+
+    
+    @staticmethod
+    def format_time(time_int: int) -> str:
+        """
+            Функция для преобразования временного слота.
+            
+            Args:
+                time_int: Время в формате числа (например, 50000 для 05:00:00)
+            
+            Returns:
+                Время в формате HH:MM:SS
         """
         time_str = str(time_int).zfill(6)
         return f'{time_str[:2]}:{time_str[2:4]}:{time_str[4:6]}'
+    
+    
+    @staticmethod
+    def get_sort_key(time_str: str) -> int:
+        """
+            Преобразует время в числовое значение для сортировки от 05:00.
+            
+            Args:
+                time_str: время в формате 'HH:MM:SS'
+            
+            Returns:
+                int: количество секунд для сортировки
+        """
+        try:
+            h, m, s = map(int, time_str.split(':'))
+            if h < 5:
+                h += 24
+            return h * 3600 + m * 60 + s
+        except (ValueError, AttributeError):
+            return 0
+
+    
+    @staticmethod
+    def convert_time(time_str: str):
+        """
+            Функция для конвертации времени из формата 25:00:00 в 01:00:00 или 5:00:00 в 05:00:00
+            Args:
+                time_str: время в формате строки
+        """
+        # Предполагаем стандартный формат HH:MM:SS или H:MM:SS
+        if time_str[1] == ':':  # Формат H:MM:SS (одна цифра)
+            hours = int(time_str[0])
+            rest = time_str[1: ]  # :MM:SS
+        else:  # Формат HH:MM:SS (две цифры)
+            hours = int(time_str[: 2])
+            rest = time_str[2: ]  # :MM:SS
+        
+        # Применяем преобразование часов
+        if hours >= 24:
+            hours = hours - 24
+        # Форматируем с ведущим нулем
+        return f'{hours:02d}{rest}'
+    
+
+    def make_style_of_table(self, df: pd.DataFrame, sheet_name: str, 
+                          column_configs: list, date_columns: list = None,
+                          use_filters: bool = True, freeze_panes: bool = True):
+        """
+        Универсальный метод для стилизации таблиц в Excel.
+        
+        Args:
+            df: DataFrame для записи
+            sheet_name: Имя листа
+            column_configs: Список словарей с настройками колонок
+                Пример: [
+                    {'header': 'Дата', 'width': 13.0, 'format': 'date'},
+                    {'header': 'TimeSlot', 'width': 9.0, 'format': 'general'},
+                    ...
+                ]
+            date_columns: Список названий колонок, содержащих даты
+            use_filters: Добавлять ли автофильтры
+            freeze_panes: Замораживать ли верхнюю строку
+        """
+        if date_columns is None:
+            date_columns = ['Дата']
+        
+        with pd.ExcelWriter(self.filepath, engine = 'xlsxwriter') as writer:
+            # Записываем данные без заголовков
+            df.to_excel(writer, 
+                       sheet_name = sheet_name, 
+                       index = False, 
+                       header = False,
+                       startrow = 0)
+            
+            workbook = writer.book
+            worksheet = writer.sheets[sheet_name]
+            
+            # Форматы
+            header_format = workbook.add_format({
+                'bold': True,
+                'text_wrap': True,
+                'align': 'center',
+                'valign': 'vcenter',
+                'border': 0
+            })
+            
+            table_fmt = workbook.add_format({
+                'align': 'center',
+                'valign': 'vcenter',
+                'border': 0
+            })
+            
+            date_fmt = workbook.add_format({
+                'num_format': 'yyyy-mm-dd',
+                'align': 'center',
+                'valign': 'vcenter',
+                'border': 0
+            })
+            
+            # Записываем заголовки
+            headers = [config['header'] for config in column_configs]
+            for col_num, header in enumerate(headers):
+                worksheet.write(0, col_num, header, header_format)
+            
+            # Записываем данные с правильным форматом
+            for row_idx in range(len(df)):
+                for col_idx in range(len(df.columns)):
+                    cell_value = df.iat[row_idx, col_idx]
+                    
+                    # Для колонки A используем формат даты
+                    if col_idx == 0:
+                        worksheet.write(row_idx + 1, col_idx, cell_value, date_fmt)
+                    else:
+                        worksheet.write(row_idx + 1, col_idx, cell_value, table_fmt)
+            
+            # Устанавливаем ширину колонок
+            for col_idx, config in enumerate(column_configs):
+                width = config.get('width', 12.0)
+                worksheet.set_column(col_idx, col_idx, width)
+            
+            # Добавляем автофильтры
+            if use_filters and len(df) > 0:
+                last_row = len(df)
+                last_col = len(headers) - 1
+                filter_range = f'A1:{self._get_column_letter(last_col)}{last_row + 1}'
+                worksheet.autofilter(filter_range)
+            
+            # Замораживаем верхнюю строку
+            if freeze_panes:
+                worksheet.freeze_panes(1, 0)
 
 
-    def audience_by_slots(
+
+class AuedienceParser(BaseParser):
+    """
+        Класс для предобработки и постобработки файлов с Total TV Auedience для ОДНОГО канала
+    """
+    
+    def __init__(self, filepath: str):
+        """
+            Инициализация парсера аудитории.
+            
+            Args:
+                filepath: Путь к файлу с данными аудитории
+        """
+        self.filepath = filepath
+
+        super().__init__(filepath)
+
+        # Вызываем ensure_file_exists с нужными колонками
+        self._ensure_file_exists(['Дата', 'TimeSlot', 'Auedience', 'Slot_weight', 'hour_start'])
+    
+
+    def auedience_by_slots(
             self, date_filter, company_filter, basedemo_filter,
+            targets = None,
             statistics = ['TTVRtg000'],
-            time_filter = 'timeBand1 >= 50000 AND timeBand1 < 290000',
+            time_filter = TIME_FILTER,
             slices = ['researchDate', 'tvCompanyName','timeBand60'],
             sortings = {'researchDate': 'ASC', 'tvCompanyName': 'ASC'},
-            options = {
-                        "kitId": 1, #TV Index Cities  
-                        "totalType": "TotalChannels" #база расчета Share: Total Channels. Возможны опции: TotalTVSet, TotalChannelsThem
-                    },
-            weekday_filter = None, daytype_filter = None, 
-            targetdemo_filter = None, location_filter = None):
+            options = OPTIONS,
+            weekday_filter = WEEKDAY_FILTER, daytype_filter = DAYTYPE_FILTER, 
+            targetdemo_filter = TARGETDEMO_FILTER, location_filter = LOCATION_FILTER):
         """
-            Метод для выгрузки Auedience из БД Mediscope API
+            Метод для выгрузки Auedience из БД Mediscope API для одного канала
         """
-        
-        # Формируем задание для API TV Index в формате JSON
-        task_json = mtask.build_timeband_task(date_filter = date_filter, 
-                                            weekday_filter = weekday_filter, 
-                                            daytype_filter = daytype_filter, 
-                                            company_filter = company_filter, 
-                                            time_filter = time_filter, # 7:00 - 25:00, 
-                                            basedemo_filter = basedemo_filter,
-                                            targetdemo_filter = targetdemo_filter, 
-                                            location_filter = location_filter, 
-                                            slices = slices,
-                                            statistics = statistics, 
-                                            sortings = sortings,
-                                            options = options)
+        # Формируем задачи в формате json
+        tasks = BaseDataService._build_timeband_common_params(
+                                                        date_filter = date_filter, company_filter = company_filter, 
+                                                        basedemo_filter = basedemo_filter, regions_id = None,          # работаем в Федеральной Базе
+                                                        targets = targets, time_filter = time_filter, 
+                                                        statistics = statistics, slices = slices, 
+                                                        sortings = sortings, options = options,
+                                                        location_filter = location_filter, weekday_filter = weekday_filter,
+                                                        daytype_filter = daytype_filter, targetdemo_filter = targetdemo_filter,
+                                                        add_city_to_basedemo_from_region = False,   # работаем в Федеральной Базе
+                                                        add_city_to_targetdemo_from_region = False  # работаем в Федеральной Базе
+                                                    )
+        # Отправляем задачи на расчет
+        df = BaseDataService._execute_tasks(tasks)
 
-        # Отправляем задание на расчет и ждем выполнения
-        task_timeband = mtask.wait_task(mtask.send_timeband_task(task_json))
-
-        # Получаем результат
-        df = mtask.result2table(mtask.get_result(task_timeband))
         df['tvCompanyName'] = df['tvCompanyName'].str.replace(' (СЕТЕВОЕ ВЕЩАНИЕ)', '', regex = False)
         df.rename(columns = {'researchDate': 'Date', 'tvCompanyName': 'Channel', 'timeBand60': 'TimeSlot'}, inplace = True)
         df['Date'] = pd.to_datetime(df['Date'])
         #Приведение слота к нормальному виду
-        df['TimeSlot'] = df['TimeSlot'].apply(AudienceParser.format_time)
-        df['TimeSlot'] = df['TimeSlot'].apply(TVPreprocessing.convert_time)
+        df['TimeSlot'] = df['TimeSlot'].apply(BaseParser.format_time)
+        df['TimeSlot'] = df['TimeSlot'].apply(BaseParser.convert_time)
         
         df['TimeSlot_dt'] = pd.to_datetime(df['TimeSlot'], format='%H:%M:%S')
 
@@ -111,26 +305,22 @@ class AudienceParser:
         res = data_by_slots[data_by_slots['TTVRtg000'] != 0.0]
         final_data = res[['Date', 'TimeSlot', 'TTVRtg000']].reset_index(drop = True)
 
-        sorted = final_data.sort_values(['Date', 'TimeSlot'], ascending = [True, True])
-        sorted.rename(columns = {'TTVRtg000': 'Auedience'}, inplace = True)
+        sorted_df = final_data.sort_values(['Date', 'TimeSlot'], ascending = [True, True])
+        sorted_df.rename(columns = {'TTVRtg000': 'Auedience', 'Date': 'Дата'}, inplace = True)
 
-        sorted.reset_index(drop = True)
+        sorted_df.reset_index(drop = True)
 
-        sorted['Date'] = pd.to_datetime(sorted['Date'])
-        sorted['Auedience'] = sorted['Auedience'].astype(float)
+        sorted_df['Дата'] = pd.to_datetime(sorted_df['Дата'])
+        sorted_df['Auedience'] = sorted_df['Auedience'].astype(float)
 
         # Расчет веса слотов
-        A = TVShareCalculator.calculate_slot_weights(sorted)
-
-        A.rename(columns = {'Date': 'Дата'}, inplace = True)
-        A['Дата'] = A['Дата'].dt.strftime('%Y-%m-%d')
+        A = TVShareCalculator.calculate_slot_weights(sorted_df)
 
         A['Auedience'] = A['Auedience'].round(5)
         A['Slot_weight'] = A['Slot_weight'].round(8)
 
         return A
 
-    
     
     def update_table_auedience(self, new_data: pd.DataFrame) -> pd.DataFrame:
         """
@@ -139,11 +329,9 @@ class AudienceParser:
         new = pd.DataFrame()
 
         # Чтение данных из файла
-        old_data = pd.read_excel(f'{self.filepath}', index_col = 0)
-        old_data['Date'] = pd.to_datetime(old_data['Date'])
+        old_data = pd.read_excel(f'{self.filepath}')
+        old_data['Дата'] = pd.to_datetime(old_data['Дата'])
         old_data['Auedience'] = old_data['Auedience'].astype(float)
-
-        #old_data = self.total_tv_audience.coopy()
 
         # Отбираем уникальные даты из старых и новых данных
         old_unique_dates = old_data['Дата'].unique()
@@ -173,86 +361,276 @@ class AudienceParser:
             new = pd.concat([old_data, new_data]).reset_index(drop = True)
 
         sorted_by_dates = new.sort_values('Дата').reset_index(drop = True)
-        self.total_tv_audience = sorted_by_dates.sort_values(['Дата', 'TimeSlot'], ascending = [True, True])
+        self.total_tv_auedience = sorted_by_dates.sort_values(['Дата', 'TimeSlot'], ascending = [True, True])
+
+        # Если нужно вернуть в строковый формат
+        self.total_tv_auedience['Дата'] = self.total_tv_auedience['Дата'].dt.strftime('%Y-%m-%d')
         
-        return self.total_tv_audience
+        return self.total_tv_auedience
     
 
-    def auedience_pipeline(self, date_filter, company_filter, basedemo_filter):
+    def make_style_of_auedience_table(self, df: pd.DataFrame, sheet_name: str):
         """
-            Пайплайн для выгрузки и записи Auedience в файл для какого-то конкретного Федерального канала и конкретной БЦА.
+            Функция для генерации внешнего вида таблицы с аудиторией.
         """
-        # 1. Выгрузка новых данных по Total TV Auedience
-        auedience_new = self.audience_by_slots(date_filter, company_filter, basedemo_filter)
+        column_configs = [
+            {'header': 'Дата', 'width': 13.0, 'format': 'date'},
+            {'header': 'TimeSlot', 'width': 9.0, 'format': 'general'},
+            {'header': 'Auedience', 'width': 11.0, 'format': 'general'},
+            {'header': 'Slot_weight', 'width': 14.0, 'format': 'general'},
+            {'header': 'hour_start', 'width': 12.0, 'format': 'general'}
+        ]
+        
+        self.make_style_of_table(
+            df = df,
+            sheet_name = sheet_name,
+            column_configs = column_configs,
+            date_columns = ['Дата']
+        )
 
-        # 2. Обновление таблицы
-        self.total_tv_audience = self.update_table_auedience(auedience_new)
 
-        # 3. Сохранение в файл
-        self.make_style_of_table(sheet_name = 'Sheet1')
 
-        return self.total_tv_audience
+class MediascopeParser(BaseParser):
+    """
+        Класс для работы с данными Mediascope
+    """
+    
+    def __init__(self, web_filepath: str):
+        """
+            Инициализация парсера Mediascope.
+            
+            Args:
+                web_filepath: Путь к файлу с исторической сеткой Mediascope
+        """
+        self.web_filepath = web_filepath
+
+        super().__init__(web_filepath)
+
+        # Вызываем ensure_file_exists с нужными колонками
+        self._ensure_file_exists([
+            'Канал', 'Дата', 'Название программы', 'Время выхода',
+            'Время окончания', 'Share', 'Жанр', 'День недели'
+        ])
     
 
-    def make_style_of_table(self, sheet_name: str):
+    @staticmethod
+    def sort_time(t):
         """
-            Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
-                Args:
-                    filepath: путь к файлу, в который будем сохранять итоговый результат
-                    output_df: DataFrame, который будем стилизировать
-                    sheet_name: имя листа, на который это будет записываться.
-                Returns:
-                    Стилизированная таблица в файле xlsx
+            Преобразует время в числовое значение для сортировки.
+            Значения до 05:00 получают +24 часа, чтобы оказаться после 23:59
         """
-        with pd.ExcelWriter(self.filepath, 
-                        date_format = '%Y-%m-%d',
-                        datetime_format = '%Y-%m-%d',
-                        engine = 'xlsxwriter') as writer:
-            
-            self.total_tv_audience.to_excel(writer, index = None)
-            workbook = writer.book
-            worksheet = writer.sheets[sheet_name]
+        if t.hour < 5:
+            total_seconds = (t.hour + 24) * 3600 + t.minute * 60 + t.second
+        else:
+            total_seconds = t.hour * 3600 + t.minute * 60 + t.second
         
-            #Стиль шапки таблицы
-            header_format = workbook.add_format({'bold': True,
-                                                'text_wrap': True, #перенос текста
-                                                'align': 'center', #выравнение текста в ячейке
-                                                'align': 'vcenter', #выравнение текста в ячейке
-                                                'center_across': True
-                                                })
+        return total_seconds
+
+
+    def make_web(self,
+            date_filter, company_filter, basedemo_filter,
+            weekday_filter = WEEKDAY_FILTER, daytype_filter = DAYTYPE_FILTER, 
+            location_filter = LOCATION_FILTER, targetdemo_filter = TARGETDEMO_FILTER, 
+            break_filter = BREAK_FILTER, ad_filter = AD_FILTER, 
+            program_filter = PROGRAM_FILTER, 
+            slices = ['programSpotId',                # Программа ID выхода, обязательный атрибут! 
+                      'researchDate',                 # Дата, обязательный атрибут! 
+                      'programName',                  # Название программы
+                      'tvCompanyName',                # Телекомпания
+                      'researchWeekDay',              # День недели
+                      'programStartTime',             # Программа время начала
+                      'programFinishTime',            # Программа время окончания
+                      'programCategoryName',          # Программа категория
+                      'programIssueDescriptionName',  # Программа описание выпуска
+                      'programProducerYear'           # Программа дата создания
+                        ], 
+            statistics = ['Share'], 
+            sortings = {'tvCompanyName': 'ASC', 'researchDate': 'ASC', 'programStartTime': 'ASC'},
+            options = {
+                       "kitId": 1 #TV Index Russia all
+                   }
+            ) -> pd.DataFrame:
+            """
+                Метод для выгрузки исторической сетки из БД Mediascope
+            """
+            # 1. Формируем задачи в формате json для отправки на сервер
+            tasks = BaseDataService._build_simple_common_params(
+                                        date_filter, company_filter, basedemo_filter, 
+                                        weekday_filter, daytype_filter, location_filter,
+                                        targetdemo_filter, break_filter, ad_filter, 
+                                        program_filter, slices, statistics, sortings, options
+                                        )
             
-            #Стиль тела таблицы для Канала, Месяца
-            table_fmt = workbook.add_format({'bold': False, 'align': 'center', 'border': 0})
+            # 2. Расчёт задач
+            df = BaseDataService._execute_simple_tasks(tasks)
+
+            # Приводим порядок столбцов в соответствие с условиями расчета
+            df = df[slices + statistics]
+
+            df.rename(columns = {'researchDate': 'Date'}, inplace = True)
+            df = df[
+                [
+                    'tvCompanyName', 'Date', 'programName', 
+                    'programStartTime', 'programFinishTime', 'Share', 
+                    'programCategoryName', 'researchWeekDay'
+                    ]
+                    ]
+            df['tvCompanyName'] = df['tvCompanyName'].apply(lambda x: x.removesuffix(' (СЕТЕВОЕ ВЕЩАНИЕ)'))
             
-            worksheet.write('A1', 'Date', header_format)
-            worksheet.write('B1', 'Time slot', header_format)
-            worksheet.write('C1', 'Auedience', header_format)
-            worksheet.write('D1', 'Slot weight', header_format)
-            worksheet.write('E1', 'hour_start', header_format)
-            worksheet.set_column('A:A', 13.0, table_fmt)
-            worksheet.set_column('B:B', 9.0, table_fmt)
-            worksheet.set_column('C:C', 11.0, table_fmt)
-            worksheet.set_column('D:D', 14.0, table_fmt)
-            worksheet.set_column('E:E', 9.0, table_fmt)
+            df['programStartTime'] = df['programStartTime'].astype(str).apply(BaseParser.convert_time)
+            df['programStartTime'] = pd.to_datetime(df['programStartTime'], format = '%H:%M:%S', errors = 'coerce')
+            
+            df['programFinishTime'] = df['programFinishTime'].astype(str).apply(BaseParser.convert_time)
+            df['programFinishTime'] = pd.to_datetime(df['programFinishTime'], format = '%H:%M:%S', errors = 'coerce')
+            
+            df.rename(columns = {
+                'tvCompanyName': 'Канал', 
+                'Date': 'Дата', 
+                'programName': 'Название программы', 
+                'programStartTime': 'Время выхода', 
+                'programFinishTime': 'Время окончания', 
+                'programCategoryName': 'Жанр', 
+                'researchWeekDay': 'День недели'}, inplace = True)
+            
+            time_slots_columns = ['Время выхода', 'Время окончания']
+            for i in range(len(time_slots_columns)):
+                df[time_slots_columns[i]] = df[time_slots_columns[i]].dt.time
+            
+            df['Share'] = df['Share'].round(6)
+
+            full_data = df.sort_values(['Дата'], ascending = [True])
+
+            full_data.reset_index(drop = True)
+
+            dates_unique = full_data['Дата'].unique()
+
+            res = []
+            for date in dates_unique:
+                t = full_data[full_data['Дата'] == date]
+                # Создаем колонку для сортировки на основе времени начала
+                t['sort_key'] = t['Время выхода'].apply(MediascopeParser.sort_time)
+
+                # Сортируем по sort_key
+                final = t.sort_values('sort_key').reset_index(drop = True)
+
+                # Удаляем вспомогательную колонку
+                final = final.drop('sort_key', axis = 1)
+                final['Дата'] = pd.to_datetime(final['Дата'])
+
+                res.append(final)
+            
+            return pd.concat(res).reset_index(drop = True)
+    
+
+    def update_web_table(self, new_data: pd.DataFrame) -> pd.DataFrame:
+        """
+            Метод для обновления таблицы с сеткой Mediascope
+        """
+        new = pd.DataFrame()
+
+        # Чтение данных из файла
+        old_data = pd.read_excel(f'{self.web_filepath}')
+        old_data['Дата'] = pd.to_datetime(old_data['Дата'])
+
+        old_data['Время выхода'] = pd.to_datetime(old_data['Время выхода'], format = '%H:%M:%S', errors = 'coerce')
+        old_data['Время окончания'] = pd.to_datetime(old_data['Время окончания'], format = '%H:%M:%S', errors = 'coerce')
+
+        new_data['Время выхода'] = pd.to_datetime(new_data['Время выхода'], format = '%H:%M:%S', errors = 'coerce')
+        new_data['Время окончания'] = pd.to_datetime(new_data['Время окончания'], format = '%H:%M:%S', errors = 'coerce')
+
+        # Отбираем уникальные даты из старых и новых данных
+        old_unique_dates = old_data['Дата'].unique()
+        new_unique_dates = new_data['Дата'].unique()
+        
+        old_ones = []
+
+        # Фильтруем даты, которые уже присутствуют в данных
+        for new_date in new_unique_dates:
+                
+            if new_date in old_unique_dates:
+                old_ones.append(pd.to_datetime(new_date))
+
+        if len(old_ones) != 0:
+            min_date_str = min(old_ones).strftime('%Y-%m-%d')
+
+            # Оставляем только те даты, которые не встречаются в новых, если таковые нашлись
+            filtered = old_data[old_data['Дата'] < min_date_str]
+
+            if len(filtered) != 0:
+        
+                # Обновляем таблицу с фактическими данными
+                new = pd.concat([filtered, new_data]).reset_index(drop = True)
+        
+        # В противном случае просто добавляем новые данные в конец старой таблицы
+        else:
+            new = pd.concat([old_data, new_data]).reset_index(drop = True)
+
+        sorted_by_dates = new.sort_values('Дата').reset_index(drop = True)
+
+        full = sorted_by_dates.sort_values(['Дата'], ascending = [True])
+
+        full.reset_index(drop = True)
+
+        dates_unique = full['Дата'].unique()
+
+        res = []
+        for date in dates_unique:
+            t = full[full['Дата'] == date]
+            # Создаем колонку для сортировки на основе времени начала
+            t['sort_key'] = t['Время выхода'].apply(MediascopeParser.sort_time)
+
+            # Сортируем по sort_key
+            final = t.sort_values('sort_key').reset_index(drop = True)
+
+            # Удаляем вспомогательную колонку
+            final = final.drop('sort_key', axis = 1)
+            final['Дата'] = pd.to_datetime(final['Дата'])
+
+            res.append(final)
+
+        self.web_df = pd.concat(res).reset_index(drop = True)
+        # Если нужно вернуть в строковый формат
+        self.web_df['Дата'] =  self.web_df['Дата'].dt.strftime('%Y-%m-%d')
+        self.web_df['Время выхода'] =  self.web_df['Время выхода'].dt.strftime('%H:%M:%S')
+        self.web_df['Время окончания'] =  self.web_df['Время окончания'].dt.strftime('%H:%M:%S')
+        
+        return  self.web_df
+    
+    
+
+    def make_style_of_web_table(self, df: pd.DataFrame, sheet_name: str):
+        """
+            Функция для генерации внешнего вида таблицы с сеткой Mediascope.
+        """
+        column_configs = [
+            {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+            {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+            {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+            {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+            {'header': 'Share', 'width': 11.0, 'format': 'general'},
+            {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+            {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+        ]
+        
+        self.make_style_of_table(
+            df = df,
+            sheet_name = sheet_name,
+            column_configs = column_configs,
+            date_columns = ['Дата']
+        )
 
 
-class MediascopeParser:
-    def __init__():
-        pass
-
-    # TODO
 
 class TVPreprocessing:
     """
         Класс для предобработки файлов с исторической и новыми сетками Федеральных ТВ-каналовс регулярной сеткой
     """
-    def __init__(self, filename: str):
+    def __init__(self, plmrs: pd.DataFrame):
         """
-            filename: str: полный путь/название файла, который будем парсить.
+            plmrs: pd.DataFrame: новая сетка Mediascope, которую нужно спарсить.
         """
-        self.filename = filename
-        self.plmrs = None
-        self.palomars_adjusted = None
+        self.plmrs = plmrs
 
 
     @staticmethod
@@ -315,13 +693,14 @@ class TVPreprocessing:
                 plmrs: причёсанный DataFrame с исторической сеткой.
         """
         #Чтение файла с данными
-        self.plmrs = pd.read_excel(self.filename, index_col = 0)
+        df = self.plmrs.copy()
+        #self.plmrs = pd.read_excel(self.filename)
     
         columns_with_time = [start_time_col, end_time_col]
         
         #Конвертация в формат даты столбцов со слотами
         def process_column(col):
-            series = self.plmrs[col].astype(str)
+            series = df[col].astype(str)
             converted = series.apply(TVPreprocessing.convert_time)
             return pd.to_datetime(converted, format = '%H:%M:%S', errors = 'coerce')
 
@@ -331,23 +710,23 @@ class TVPreprocessing:
 
         # Обновляем DataFrame
         for i, col in enumerate(columns_with_time):
-            self.plmrs[col] = results[i]
+            df[col] = results[i]
 
         #Вычисление длительности каждой программы. результат записывается в отдельный столбец
-        self.plmrs['Длительность, мин'] = np.abs(np.round((self.plmrs[start_time_col] - self.plmrs[end_time_col]) / np.timedelta64(1, 'm')))
-        self.plmrs['Длительность, мин'] = self.plmrs['Длительность, мин'].astype(int)
+        df['Длительность, мин'] = np.abs(np.round((df[start_time_col] - df[end_time_col]) / np.timedelta64(1, 'm')))
+        df['Длительность, мин'] = df['Длительность, мин'].astype(int)
     
         #В столбцах с временем выхода и окончания программы оставляем только время
         for i in range(len(columns_with_time)):
-            self.plmrs[columns_with_time[i]] = self.plmrs[columns_with_time[i]].dt.time
-        return self.plmrs
+            df[columns_with_time[i]] = df[columns_with_time[i]].dt.time
+        return df
     
 
-    def _palomars_convert_time(self, df) -> pd.DataFrame:
+    def _palomars_round_time(self, df) -> pd.DataFrame:
         """
             Функция для округления времени слотов программ в исторической сетке Palomars для какого-то конкретного дня
         """
-        mars = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
+        mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
         mars['Дата'] = pd.to_datetime(mars['Дата'])
         
         # Округляем время до минут
@@ -355,7 +734,7 @@ class TVPreprocessing:
         mars['Время выхода_1min'] = share_calc.round_time('Время выхода')
         mars['Время окончания_1min'] = share_calc.round_time('Время окончания')
         
-        mars_new = mars[['Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+        mars_new = mars[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
         mars_new.rename(columns = {'Время выхода_1min': 'Время выхода', 'Время окончания_1min': 'Время окончания'}, inplace = True)
         
         # Создаем копию оригинального столбца
@@ -368,7 +747,7 @@ class TVPreprocessing:
         # Переименовываем колонки для наглядности
         mars_new.rename(columns = {'Время выхода': 'Время выхода_старое', 'Время выхода_новое': 'Время выхода'}, inplace = True)
         
-        palomars = mars_new[['Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
+        palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
         self.palomars_adjusted = TVShareCalculator(palomars).adjust_hour_start()
         
         # Эфирные сутки всегда начинаются с 05:00:00
@@ -397,16 +776,16 @@ class TVPreprocessing:
             Returns:
                 data: pd.DataFrame: Датафрейм с новой рассчитанной долей
         """
-        self.plmrs = self.parse_Palomars(start_time_col, end_time_col)
+        df = self.parse_Palomars(start_time_col, end_time_col)
 
-        if self.plmrs.empty:
+        if df.empty:
             raise ValueError('Данные с исторической сеткой из БД Mediascope отсутствуют или не были загружены!')
         
         # 2. Проверяем наличие обязательных колонок
         required_columns = [date_col, start_time_col, end_time_col, 'Share', 'Название программы']
-        missing_cols = [col for col in required_columns if col not in self.plmrs.columns]
+        missing_cols = [col for col in required_columns if col not in df.columns]
         if missing_cols:
-            raise ValueError(f"Отсутствуют обязательные колонки: {missing_cols}")
+            raise ValueError(f'Отсутствуют обязательные колонки: {missing_cols}')
 
         # Список для хранения конвертированных ДатаФреймов
         results_list = []
@@ -415,16 +794,16 @@ class TVPreprocessing:
         shares = {}
 
         # Отбор уникальных дат для анализа
-        dates_unique = self.plmrs[date_col].unique()
+        dates_unique = df[date_col].unique()
 
         for date in dates_unique:
 
             try:
 
                 df = self.plmrs[self.plmrs[date_col] == date].reset_index(drop = True)
-                auedience = weighted_auedience[weighted_auedience['Date'] == date].reset_index(drop = True)
+                auedience = weighted_auedience[weighted_auedience[date_col] == date].reset_index(drop = True)
 
-                plmrs_new = self._palomars_convert_time(df)
+                plmrs_new = self._palomars_round_time(df)
                 res, share = TVShareCalculator(plmrs_new).calculate_weighted_share(auedience)
                 
                 results_list.append(res)
@@ -461,65 +840,49 @@ class TVPreprocessing:
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
 
         return general_result, shares
-    
+        
 
-    def make_plmrs_style_of_table(self, folder_path: str, output_df: pd.DataFrame, sheet_name: str):
+    def make_plmrs_style_of_table(self, folder_path: str, df: pd.DataFrame, sheet_name: str):
         """
             Функция для генерации внешнего вида таблицы с сеткой Mediascope.
-            Args:
-                filepath: путь к файлу, в который будем сохранять итоговый результат
-                output_df: DataFrame, который будем стилизировать
-                sheet_name: имя листа, на который это будет записываться.
-            Returns:
-                Стилизированная таблица в файле xlsx
         """
-        with pd.ExcelWriter(folder_path, 
-                        date_format = '%Y-%m-%d',
-                        datetime_format = '%Y-%m-%d',
-                        engine = 'xlsxwriter') as writer:
-            
-            output_df.to_excel(writer, index = None)
-            workbook = writer.book
-            worksheet = writer.sheets[sheet_name]
+        # Создаем временный парсер для использования общего метода
+        temp_parser = BaseParser(folder_path)
         
-            #Стиль шапки таблицы
-            header_format = workbook.add_format({'bold': True,
-                                                'text_wrap': True, #перенос текста
-                                                'align': 'center', #выравнение текста в ячейке
-                                                'align': 'vcenter', #выравнение текста в ячейке
-                                                'center_across': True
-                                                })
-            
-            #Стиль тела таблицы для Канала, Месяца
-            table_fmt = workbook.add_format({'bold': False, 'align': 'center', 'border': 0})
-            
-            worksheet.write('A1', 'Дата', header_format)
-            worksheet.write('B1', 'Название программы', header_format)
-            worksheet.write('C1', 'Время выхода', header_format)
-            worksheet.write('D1', 'Время окончания', header_format)
-            worksheet.write('E1', 'Share', header_format)
-            worksheet.write('F1', 'Share_weighted', header_format)
-            worksheet.write('G1', 'Жанр', header_format)
-            worksheet.write('H1', 'День недели', header_format)
-            worksheet.set_column('A:A', 13.0, table_fmt)
-            worksheet.set_column('B:B', 70.0, table_fmt)
-            worksheet.set_column('C:C', 14.0, table_fmt)
-            worksheet.set_column('D:D', 14.0, table_fmt)
-            worksheet.set_column('E:E', 9.0, table_fmt)
-            worksheet.set_column('F:F', 13.0, table_fmt)
-            worksheet.set_column('G:G', 35.0, table_fmt)
-            worksheet.set_column('H:H', 11.0, table_fmt)
+        column_configs = [
+            {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+            {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+            {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+            {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+            {'header': 'Share', 'width': 11.0, 'format': 'general'},
+            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+            {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+            {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+        ]
+        
+        temp_parser.make_style_of_table(
+            df = df,
+            sheet_name = sheet_name,
+            column_configs = column_configs,
+            date_columns = ['Дата']
+        )
 
 
-class VIMBGridProcessor:
+
+class VIMBGridProcessor(BaseParser):
     """
         Класс для парсинга сеток VIMB (Сводная таблица)
     """
+    
     def __init__(self, folder_path: str):
         """
-            Атрибуты:
+            Инициализация парсера VIMB.
+            
+            Args:
                 folder_path: путь к файлам с новыми сетками ТВ-программ.
         """
+        super().__init__(folder_path)
         self.folder_path = folder_path
     
 
@@ -977,48 +1340,25 @@ class VIMBGridProcessor:
                 
             except Exception as backup_error:
                 print(f'Критическая ошибка при создании резервной копии: {backup_error}')
-
     
 
-    def make_vimbs_style_of_table(self, output_df, sheet_name):
+
+    def make_vimbs_style_of_table(self, df: pd.DataFrame, sheet_name: str):
         """
             Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
-            Args:
-                filepath: путь к файлу, в который будем сохранять итоговый результат
-                output_df: DataFrame, который будем стилизировать
-                sheet_name: имя листа, на который это будет записываться.
-            Returns:
-                Стилизированная таблица в файле xlsx
         """
-        with pd.ExcelWriter(self.folder_path, 
-                        date_format = '%Y-%m-%d',
-                        datetime_format = '%Y-%m-%d',
-                        engine = 'xlsxwriter') as writer:
-            
-            output_df.to_excel(writer, index = None)
-            workbook = writer.book
-            worksheet = writer.sheets[sheet_name]
+        column_configs = [
+            {'header': 'Дата', 'width': 14.0, 'format': 'date'},
+            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+            {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
+            {'header': 'Прод-ть', 'width': 14.0, 'format': 'general'},
+            {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
+            {'header': 'День недели', 'width': 12.0, 'format': 'general'}
+        ]
         
-            #Стиль шапки таблицы
-            header_format = workbook.add_format({'bold': True,
-                                                'text_wrap': True, #перенос текста
-                                                'align': 'center', #выравнение текста в ячейке
-                                                'align': 'vcenter', #выравнение текста в ячейке
-                                                'center_across': True
-                                                })
-            
-            #Стиль тела таблицы для Канала, Месяца
-            table_fmt = workbook.add_format({'bold': False, 'align': 'center', 'border': 0})
-            
-            worksheet.write('A1', 'Дата', header_format)
-            worksheet.write('B1', 'Время выхода', header_format)
-            worksheet.write('C1', 'Время окончания', header_format)
-            worksheet.write('D1', 'Прод-ть', header_format)
-            worksheet.write('E1', 'Название программы', header_format)
-            worksheet.write('F1', 'День недели', header_format)
-            worksheet.set_column('A:A', 14.0, table_fmt)
-            worksheet.set_column('B:B', 14.0, table_fmt)
-            worksheet.set_column('C:C', 14.2, table_fmt)
-            worksheet.set_column('D:D', 14.0, table_fmt)
-            worksheet.set_column('E:E', 72.0, table_fmt)
-            worksheet.set_column('F:F', 12.0, table_fmt)
+        self.make_style_of_table(
+            df = df,
+            sheet_name = sheet_name,
+            column_configs = column_configs,
+            date_columns = ['Дата']
+        )

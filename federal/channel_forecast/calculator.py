@@ -37,7 +37,7 @@ class TVShareCalculator:
                     total_tv_audience: pd.DataFrame,
                     rating_col: str = 'Auedience',
                     timeslot_col: str = 'TimeSlot',
-                    date_col: str = 'Date'
+                    date_col: str = 'Дата'
                 ) -> pd.DataFrame:
         """
             Рассчитывает веса слотов на основе данных о TotalTVAudience.
@@ -369,7 +369,7 @@ class TVShareCalculator:
                 coefficient = np.sum(coeffs)
                 df.at[i, 'Share_weighted'] = share * coefficient
 
-        res = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+        res = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
         #res.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
         # Расчёт суммарной доли по дню
         share_sum = np.sum(list(res['Share_weighted']))

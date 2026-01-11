@@ -52,12 +52,12 @@ class BaseDataService:
         Базовый класс для устранения дублирования кода
     """
     @staticmethod
-    def _build_common_params(date_filter, company_filter, basedemo_filter, regions_id, targets,
+    def _build_timeband_common_params(date_filter, company_filter, basedemo_filter, regions_id, targets,
                            time_filter, statistics, slices, sortings, options,
                            location_filter, weekday_filter, daytype_filter, 
                            targetdemo_filter, add_city_to_basedemo_from_region, add_city_to_targetdemo_from_region):
         """
-            Построение общих параметров для задач
+            Построение общих параметров для задач типа TimeBand
         """
         # ПОЛНОЕ КОПИРОВАНИЕ ВСЕХ ПАРАМЕТРОВ
         safe_regions_id = copy.deepcopy(regions_id)
@@ -192,6 +192,66 @@ class BaseDataService:
                                 add_city_to_basedemo_from_region = add_city_to_basedemo_from_region,
                                 add_city_to_targetdemo_from_region = add_city_to_targetdemo_from_region)
             return task
+    
+
+    @staticmethod
+    def _build_simple_common_params(
+        date_filter, company_filter, basedemo_filter, 
+        weekday_filter, daytype_filter, location_filter,
+        targetdemo_filter, break_filter, ad_filter, 
+        program_filter, slices, statistics, sortings, options
+        ):
+    
+        """
+            Построение общих параметров для задач типа Simple
+        """
+        safe_params = {
+            'date_filter': copy.deepcopy(date_filter) if date_filter is not None else None,
+            'company_filter': copy.deepcopy(company_filter) if company_filter is not None else None,
+            'basedemo_filter': copy.deepcopy(basedemo_filter) if basedemo_filter is not None else None,
+            'weekday_filter': copy.deepcopy(weekday_filter) if weekday_filter is not None else None,
+            'daytype_filter': copy.deepcopy(daytype_filter) if daytype_filter is not None else None,
+            'location_filter': copy.deepcopy(location_filter) if location_filter is not None else None,
+            'targetdemo_filter': copy.deepcopy(targetdemo_filter) if targetdemo_filter is not None else None,
+            'break_filter': copy.deepcopy(break_filter) if break_filter is not None else None,
+            'ad_filter': copy.deepcopy(ad_filter) if ad_filter is not None else None,
+            'program_filter': copy.deepcopy(program_filter) if program_filter is not None else None,
+            'slices': copy.deepcopy(slices) if slices is not None else None,
+            'statistics': copy.deepcopy(statistics) if statistics is not None else None,
+            'sortings': copy.deepcopy(sortings) if sortings is not None else None,
+            'options': copy.deepcopy(options) if options is not None else None    
+        }
+
+        task = mtask.build_simple_task(
+                            date_filter = safe_params['date_filter'], 
+                            weekday_filter = safe_params['weekday_filter'], 
+                            daytype_filter = safe_params['daytype_filter'], 
+                            company_filter = safe_params['company_filter'], 
+                            location_filter = safe_params['location_filter'],
+                            basedemo_filter = safe_params['basedemo_filter'], 
+                            targetdemo_filter = safe_params['targetdemo_filter'],
+                            program_filter = safe_params['program_filter'], 
+                            break_filter = safe_params['break_filter'], 
+                            ad_filter = safe_params['ad_filter'], 
+                            slices = safe_params['slices'], 
+                            statistics = safe_params['statistics'], 
+                            sortings = safe_params['sortings'], 
+                            options = safe_params['options'])
+
+        return task
+    
+
+    @staticmethod
+    def _execute_simple_tasks(tasks):
+        """
+            Метод для отправки задач типа Simple
+        """
+        # Отправляем задание на расчет и ждем выполнения
+        task_simple = mtask.wait_task(mtask.send_simple_task(tasks))
+
+        # Получаем результат
+        df = mtask.result2table(mtask.get_result(task_simple))
+        return df
 
 
     @staticmethod

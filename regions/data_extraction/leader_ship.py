@@ -171,7 +171,7 @@ class LeaderShipDataExtractor:
             group_tasks = {}
 
             for i, company in enumerate(config['companies']):
-                task = BaseDataService._build_common_params(
+                task = BaseDataService._build_timeband_common_params(
                     date_filter = date_filter,
                     company_filter = company,
                     basedemo_filter = config['basedemos'][i],

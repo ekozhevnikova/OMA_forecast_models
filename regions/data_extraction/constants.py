@@ -193,12 +193,42 @@ class Constants:
                 DATE_FILTER_FULL_MONTH = [(start_of_prev_month, stop_of_prev_month)]
 
                 ################## ГЕНЕРАЦИЯ ПЕРИОДА: ФАКТ ТЕКУЩЕГО МЕСЯЦА ##################
-                DATE_FILTER_FACT_MONTH = [(start_of_prev_month, stop_of_prev_month)]
+                curr_month = current_date.month
+                #curr_year = current_date.month
+                # Генерация начала текущего месяца
+                start_of_curr_month = f'{current_date.year}-{curr_month:02d}-01'
+
+                if local_time.hour < 12:
+                    date_stop = datetime.now() + timedelta(days = -3)
+                    last_fact_date = date_stop.strftime('%Y-%m-%d')
+                    DATE_FILTER_FACT_MONTH = [(start_of_curr_month, last_fact_date)]
+                
+                else:
+                    date_stop = datetime.now() + timedelta(days = -2)
+                    last_fact_date = date_stop.strftime('%Y-%m-%d')
+                    DATE_FILTER_FACT_MONTH = [(start_of_curr_month, last_fact_date)]
+
+                #DATE_FILTER_FACT_MONTH = [(start_of_prev_month, stop_of_prev_month)]
 
                 ################## ГЕНЕРАЦИЯ ПЕРИОДА: от 1го числа прошлого месяца до факта текущего месяца ##################
-                two_months_ago_year, two_months_ago_month = get_previous_month_date(2)
-                start_of_2_months_ago = f'{two_months_ago_year}-{two_months_ago_month:02d}-01'
-                DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_2_months_ago, stop_of_prev_month)]
+
+                prev_year, prev_month = get_previous_month_date(1)
+                # Генерация начала текущего месяца
+                start_of_prev_month = f'{prev_year}-{prev_month:02d}-01'
+                
+                if local_time.hour < 12:
+                    date_stop = datetime.now() + timedelta(days = -3)
+                    last_fact_date = date_stop.strftime('%Y-%m-%d')
+                    DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_prev_month, last_fact_date)]
+
+                else:
+                    date_stop = datetime.now() + timedelta(days = -2)
+                    last_fact_date = date_stop.strftime('%Y-%m-%d')
+                    DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_prev_month, last_fact_date)]
+
+                #two_months_ago_year, two_months_ago_month = get_previous_month_date(2)
+                #start_of_2_months_ago = f'{two_months_ago_year}-{two_months_ago_month:02d}-01'
+                #DATE_FILTER_PREV_TO_FACT_MONTH = [(start_of_2_months_ago, stop_of_prev_month)]
 
             # Если текущий месяц НЕ Январь
             elif today.month != 1 and today.day <= 10:
