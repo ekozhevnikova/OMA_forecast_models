@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
-from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 
 import warnings
@@ -118,11 +118,17 @@ class BaseParser:
                 int: количество секунд для сортировки
         """
         try:
+            # Парсим время
             h, m, s = map(int, time_str.split(':'))
+            
+            # Если время до 05:00, добавляем 24 часа
             if h < 5:
                 h += 24
+            
             return h * 3600 + m * 60 + s
+        
         except (ValueError, AttributeError):
+            # Если возникла ошибка, возвращаем 0
             return 0
 
     
@@ -655,32 +661,6 @@ class TVPreprocessing:
         return f'{hours:02d}{rest}'
 
 
-    @staticmethod
-    def get_sort_key(time_str: str) -> int:
-        """
-            Преобразует время в числовое значение для сортировки от 05:00.
-            
-            Args:
-                time_str: время в формате 'HH:MM:SS'
-            
-            Returns:
-                int: количество секунд для сортировки
-        """
-        try:
-            # Парсим время
-            h, m, s = map(int, time_str.split(':'))
-            
-            # Если время до 05:00, добавляем 24 часа
-            if h < 5:
-                h += 24
-            
-            return h * 3600 + m * 60 + s
-        
-        except (ValueError, AttributeError):
-            # Если возникла ошибка, возвращаем 0
-            return 0
-
-
     def parse_Palomars(self, start_time_col: str = 'Время выхода', end_time_col: str = 'Время окончания') -> pd.DataFrame:
         """
             Функция для парсинга файла с исторической сеткой Palomars.
@@ -824,7 +804,7 @@ class TVPreprocessing:
         for date in dates_unique:
             t = combined_result[combined_result[date_col] == date]
 
-            t['sort_key'] = t[start_time_col].apply(TVPreprocessing.get_sort_key)
+            t['sort_key'] = t[start_time_col].apply(BaseParser.get_sort_key)
 
             final = t.sort_values('sort_key').reset_index(drop = True)
 
@@ -964,6 +944,10 @@ class VIMBGridProcessor(BaseParser):
             Returns:
                 combined: pd.DataFrame: фулл-таблица с новыми сетками с сортировкой по дате и слоту от 05:00-29:00.
         """
+        # Проверяем, что путь действительно существует
+        if not os.path.exists(self.folder_path):
+            raise FileNotFoundError(f'Указанный путь {self.folder_path} не существует!')
+
         xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
 
         files = []
@@ -1001,7 +985,7 @@ class VIMBGridProcessor(BaseParser):
             for date in dates_unique:
                 t = data[data[date_column] == date]
         
-                t['sort_key'] = t[time_column].apply(TVPreprocessing.get_sort_key)
+                t['sort_key'] = t[time_column].apply(BaseParser.get_sort_key)
         
                 final = t.sort_values('sort_key').reset_index(drop = True)
         
@@ -1124,7 +1108,7 @@ class VIMBGridProcessor(BaseParser):
         for date in dates_unique:
             t = vimb_new[vimb_new['Дата'] == date]
 
-            t['sort_key'] = t['Время выхода'].apply(TVPreprocessing.get_sort_key)
+            t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
 
             final = t.sort_values('sort_key').reset_index(drop = True)
 
@@ -1285,7 +1269,7 @@ class VIMBGridProcessor(BaseParser):
             self.folder_path = file_path # Добавляем путь для сохранения
 
             self.make_vimbs_style_of_table(
-                output_df = new_cleaned, 
+                df = new_cleaned, 
                 sheet_name = 'Sheet1'
             )
             
@@ -1314,7 +1298,7 @@ class VIMBGridProcessor(BaseParser):
             self.check_start__and__end_day(df_no_duplicates)
 
             self.make_vimbs_style_of_table(
-                output_df = df_no_duplicates, 
+                df = df_no_duplicates, 
                 sheet_name = 'Sheet1'
             )
 
@@ -1333,7 +1317,7 @@ class VIMBGridProcessor(BaseParser):
                 self.folder_path = file_path
 
                 self.make_vimbs_style_of_table(
-                    output_df = web_new, 
+                    df = web_new, 
                     sheet_name = 'Sheet1'
                 )
                 print(f'Создан новый файл с предоставленными данными.')

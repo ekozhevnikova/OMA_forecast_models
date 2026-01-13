@@ -12,19 +12,28 @@ from OMA_tools.federal.channel_forecast.grid_preprocessing import *
 
 class ChannelAnalysisMaster:
     """
-        Класс, в котором реализованы пайплайны для запуска ML-моделей, а также некоторые вспомогательные фичи.
+        Класс, в котором реализованы пайплайны для выгрузки данных из БД Mediascope, 
+        а также обновление исторической сетки VIMB, освовываясь на отчете Размещение/Сводная таблица.
+
+        !!! В А Ж Н О !!!
+        Класс работает только для конкретного канала!
     """
     def __init__(
         self, date_filter: list,
         company_filter: str, basedemo_filter: str,
         auedience_file: str, web_file: str, 
-        weighted_share_file: str):
+        weighted_share_file: str,
+        new_vimb_grids: str,
+        hist_vimb_file: str
+        ):
 
         """
             Атрибуты класса
-            auedience_file: str: Полный путь к файлу с Total TV Auedience для какого-то конкретного канала
-            web_file: str: Полный путь к файлу с исторической сеткой Mediascope для какого-то конкретного канала
-            weighted_share_file: str: Полный путь к файлу со взвешенной долей и исторической сеткой Mediascope для какого-то конкретного канала
+                auedience_file: str: Полный путь к файлу с Total TV Auedience для какого-то конкретного канала.
+                web_file: str: Полный путь к файлу с исторической сеткой Mediascope для какого-то конкретного канала.
+                weighted_share_file: str: Полный путь к файлу со взвешенной долей и исторической сеткой Mediascope для какого-то конкретного канала.
+                new_vimb_grids: Полный путь к файлам с новыми сетками для какого-то конкретного канала.
+                hist_vimb_file: Полный путь к файлу с исторической сеткой VIMB для какого-то конкретного канала.
             
         """
         self.date_filter = date_filter
@@ -33,7 +42,8 @@ class ChannelAnalysisMaster:
         self.auedience_file = auedience_file
         self.web_file = web_file
         self.weighted_share_file = weighted_share_file
-        #self.vimb_file = vimb_file
+        self.new_vimb_grids = new_vimb_grids
+        self.hist_vimb_file = hist_vimb_file
     
 
     def auedience_pipeline(self):
@@ -106,6 +116,18 @@ class ChannelAnalysisMaster:
         return updated
     
 
+    def vimb_web_pipeline(self):
+        """
+            Пайплайн для обновления исторической сетки VIMB.
+        """
+        # 1. Составление таблицы с новой сеткой
+        combined = VIMBGridProcessor(self.new_vimb_grids).parse_new_vimb_grids()
+
+        # 2. Обновление файла с историческими данными
+        VIMBGridProcessor(self.hist_vimb_file).update_vimb_file(combined)
+
+    
+
     def unified_pipeline(self):
         """
             Объединенный пайплайн из всех выгрузок.
@@ -118,5 +140,8 @@ class ChannelAnalysisMaster:
 
         # 3. Расчет взвешенных долей через веса слотов и обновление файла с исторической сеткой.
         weighted_shares = self.plmrs_web_pipeline(web_new)
+
+        # 4. Обновление сетки VIMB
+        self.vimb_web_pipeline()
 
         return weighted_shares

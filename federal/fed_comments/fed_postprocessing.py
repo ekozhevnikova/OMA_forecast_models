@@ -25,28 +25,7 @@ class Federal_Postprocessing:
         formatted_months = [month + year_formatted for month in months]
         self.df[column_name_with_month] = self.df[column_name_with_month].replace(list(self.df[column_name_with_month]), formatted_months)
         return self.df
-    
-
-    #def clean_comments_from_new_ones(self, comments_filepath):
-    #    """
-    #        Функция для зачистки только что добавленных комментариев. Используется для генерации накопленных изменений за период.
-    #        Args:
-    #            comments_filepath: Путь к файлу с Комментариями
-    #            Здесь подразумевается, что self.df: Свежие комментарии с изменениями по дням. (именно от них будем зачищать файл Комментарии.xlsx)
-    #        Returns:
-    #            result: зачищенный DataFrame от новых комментариев.
-    #    """
-    #    comments = pd.read_excel(comments_filepath)
-#
-    #    cols = ['Канал', 'Месяц', 'Дата', 'Изменение GRP']
-    #    # Устанавливаем составной индекс
-    #    df_indexed = comments.set_index(cols)
-    #    b_indexed = self.df.set_index(cols)
-    #    
-    #    # Фильтруем строки, которых нет в B
-    #    result = comments[~df_indexed.index.isin(b_indexed.index)]
-    #    return result
-    
+        
 
     def clean_comments_from_new_ones(self, comments_filepath):
         """
