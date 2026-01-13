@@ -755,7 +755,7 @@ class Federal_Processing:
     def comments_per_period(start_date: str, 
                             data,
                             comments_filepath_init: str, 
-                            criteria = 0.55):
+                            criteria = 0.6):
         """
             Функция для написания Накопленных Комментариев за определенный Период, начиная с какой-то даты
             Args:

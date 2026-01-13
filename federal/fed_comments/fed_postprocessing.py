@@ -27,6 +27,27 @@ class Federal_Postprocessing:
         return self.df
     
 
+    #def clean_comments_from_new_ones(self, comments_filepath):
+    #    """
+    #        Функция для зачистки только что добавленных комментариев. Используется для генерации накопленных изменений за период.
+    #        Args:
+    #            comments_filepath: Путь к файлу с Комментариями
+    #            Здесь подразумевается, что self.df: Свежие комментарии с изменениями по дням. (именно от них будем зачищать файл Комментарии.xlsx)
+    #        Returns:
+    #            result: зачищенный DataFrame от новых комментариев.
+    #    """
+    #    comments = pd.read_excel(comments_filepath)
+#
+    #    cols = ['Канал', 'Месяц', 'Дата', 'Изменение GRP']
+    #    # Устанавливаем составной индекс
+    #    df_indexed = comments.set_index(cols)
+    #    b_indexed = self.df.set_index(cols)
+    #    
+    #    # Фильтруем строки, которых нет в B
+    #    result = comments[~df_indexed.index.isin(b_indexed.index)]
+    #    return result
+    
+
     def clean_comments_from_new_ones(self, comments_filepath):
         """
             Функция для зачистки только что добавленных комментариев. Используется для генерации накопленных изменений за период.
@@ -36,15 +57,29 @@ class Federal_Postprocessing:
             Returns:
                 result: зачищенный DataFrame от новых комментариев.
         """
-        comments = pd.read_excel(comments_filepath)
 
-        cols = ['Канал', 'Месяц', 'Дата', 'Изменение GRP']
-        # Устанавливаем составной индекс
-        df_indexed = comments.set_index(cols)
-        b_indexed = self.df.set_index(cols)
+        data = self.df.copy()
+
+        comments = pd.read_excel(comments_filepath)
         
-        # Фильтруем строки, которых нет в B
-        result = comments[~df_indexed.index.isin(b_indexed.index)]
+        cols = ['Канал', 'Месяц', 'Дата', 'Изменение GRP']
+
+        for df in [comments, data]:
+            if 'Дата' in df.columns:
+                df['Дата'] = pd.to_datetime(df['Дата'], errors = 'coerce').dt.date
+        
+        # Используем merge для анти-объединения
+        merged = pd.merge(
+            comments,
+            data[cols],
+            on = cols,
+            how = 'left',
+            indicator = True
+        )
+        
+        # Оставляем только строки, которые есть только в comments
+        result = merged[merged['_merge'] == 'left_only'].drop('_merge', axis = 1)
+        
         return result
 
     
