@@ -11,7 +11,8 @@ from concurrent.futures import ThreadPoolExecutor
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
-#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from OMA_tools.io_data.operations import File, Table, Dict_Operations
+from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 
 import warnings
@@ -241,6 +242,153 @@ class BaseParser:
             if freeze_panes:
                 worksheet.freeze_panes(1, 0)
 
+
+class ShareParser(BaseParser):
+    """
+        Класс для предобработки и постобработки файла с фактическими показателями долей для всех каналов федерального ТВ(!!!)
+    """
+    def __init__(self, filepath: str, channels_id_file: str):
+        self.filepath = filepath
+        self.channels_id_file = channels_id_file
+
+        super().__init__(filepath)
+
+        # Вызываем ensure_file_exists с нужными колонками
+        self._ensure_file_exists(
+            [
+                'Дата', 'ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'НТВ', 'РЕН ТВ', 
+                'ПЯТЫЙ КАНАЛ', 'ТНТ', 'СТС', 'ДОМАШНИЙ', 'ТВ-3', 'ПЯТНИЦА', 
+                'РОССИЯ 24', 'ТВ ЦЕНТР', 'КАРУСЕЛЬ', 'ЗВЕЗДА', 'МУЗ ТВ', 
+                'СУББОТА', 'СТС LOVE', 'ТНТ 4', 'МАТЧ ТВ', 'ЧЕ', 'Ю',
+                'СОЛНЦЕ', '2X2', 'МИР', 'СПАС'
+
+           ])
+
+
+    def share_by_days(
+        self, date_filter, company_filter, 
+        statistics = ['Share'], basedemo_filter = None,
+        time_filter = TIME_FILTER,
+        options = OPTIONS,
+        weekday_filter = WEEKDAY_FILTER, daytype_filter = DAYTYPE_FILTER, 
+        targetdemo_filter = TARGETDEMO_FILTER, location_filter = LOCATION_FILTER,
+        slices = ['researchDate', 'tvCompanyName'],
+        sortings = {'researchDate': 'ASC', 'tvCompanyName': 'ASC'},
+        targets = {
+            'ВСЕ 14-59':'age >= 14 AND age <= 59',
+            'ВСЕ 18+':'age >= 18',
+            'ВСЕ 14-44':'age >= 14 AND age <= 44',
+            'ВСЕ 25-59':'age >= 25 AND age <= 59',
+            'ВСЕ 10-45':'age >= 10 AND age <= 45',
+            'ВСЕ 11-34':'age >= 11 AND age <= 34',
+            'ВСЕ 22-55':'age >= 22 AND age <= 55',
+            'Ж 25-59':'age >= 25 AND age <= 59 AND sex = 2',
+            'ВСЕ 25-49':'age >= 25 AND age <= 49',
+            'Ж 14-44':'age >= 14 AND age <= 44 AND sex = 2',
+            'ВСЕ 4-45':'age >= 4 AND age <= 45',
+            'М 14-59':'age >= 14 AND age <= 59 AND sex = 1',
+            'ВСЕ 18-44':'age >= 18 AND age <= 44',
+            'Ж 18-45':'age >= 18 AND age <= 45 AND sex = 2'
+        },
+
+    ):
+        # Формируем задачи в формате json
+        tasks = BaseDataService._build_timeband_common_params(
+                                                        date_filter = date_filter, company_filter = company_filter, 
+                                                        basedemo_filter = basedemo_filter, regions_id = None,          # работаем в Федеральной Базе
+                                                        targets = targets, time_filter = time_filter, 
+                                                        statistics = statistics, slices = slices, 
+                                                        sortings = sortings, options = options,
+                                                        location_filter = location_filter, weekday_filter = weekday_filter,
+                                                        daytype_filter = daytype_filter, targetdemo_filter = targetdemo_filter,
+                                                        add_city_to_basedemo_from_region = False,   # работаем в Федеральной Базе
+                                                        add_city_to_targetdemo_from_region = False  # работаем в Федеральной Базе
+                                                    )
+        # Отправляем задачи на расчет
+        df = BaseDataService._execute_tasks(tasks)
+
+        df.rename(columns = {'tvCompanyName': 'Channel'}, inplace = True)
+        df['Channel'] = df['Channel'].apply(lambda x: x.removesuffix(' (СЕТЕВОЕ ВЕЩАНИЕ)'))
+        df = df.drop(['prj_name'], axis = 1)
+        
+        #res = pd.merge(self.channels, df, on = 'Channel', how = 'inner')
+        res_data = pd.pivot_table(df, values = ['Share'],
+                                    index = ['researchDate'], 
+                                    columns = ['Channel'])
+        res_data = res_data.rename_axis(None, axis = 0)
+        res_data.columns = res_data.columns.droplevel(0)
+        res_data.reset_index(inplace = True)
+        res_data = res_data.rename(columns = {'index': 'Дата', 'Channel': ' '})
+        res_data['Дата'] = res_data['Дата'].apply(lambda x: pd.to_datetime(x))
+
+        columns = [
+                    'Дата', 'ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'НТВ', 'РЕН ТВ', 
+                    'ПЯТЫЙ КАНАЛ', 'ТНТ', 'СТС', 'ДОМАШНИЙ', 'ТВ-3', 'ПЯТНИЦА', 
+                    'РОССИЯ 24', 'ТВ ЦЕНТР', 'КАРУСЕЛЬ', 'ЗВЕЗДА', 'МУЗ ТВ', 
+                    'СУББОТА', 'СТС LOVE', 'ТНТ 4', 'МАТЧ ТВ', 'ЧЕ', 'Ю',
+                    'СОЛНЦЕ', '2X2', 'МИР', 'СПАС'
+
+            ]
+        data_final = res_data[columns]
+        return data_final
+    
+
+    def make_style_of_share_table(self, df: pd.DataFrame, sheet_name: str):
+        """
+            Функция для генерации внешнего вида таблицы с сеткой Mediascope.
+        """
+        channels = [
+            'Дата',
+            'ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'НТВ', 'РЕН ТВ', 'ПЯТЫЙ КАНАЛ',
+            'ТНТ', 'СТС', 'ДОМАШНИЙ', 'ТВ-3', 'ПЯТНИЦА', 'РОССИЯ 24',
+            'ТВ ЦЕНТР', 'КАРУСЕЛЬ', 'ЗВЕЗДА', 'МУЗ ТВ', 'СУББОТА',
+            'СТС LOVE', 'ТНТ 4', 'МАТЧ ТВ', 'ЧЕ', 'Ю', 'СОЛНЦЕ',
+            '2X2', 'МИР', 'СПАС'
+        ]
+
+        column_configs = [
+            {
+                'header': channel,
+                'width': 12.0 if channel == 'Дата' else 16.0,
+                'format': 'date' if channel == 'Дата' else 'general'
+            }
+            for channel in channels
+        ]
+        
+        self.make_style_of_table(
+            df = df,
+            sheet_name = sheet_name,
+            column_configs = column_configs,
+            date_columns = ['Дата']
+        )
+
+
+    def share_pipeline(self, date_filter):
+        """
+            Пайплайн для выгрузки и обновления файла с показателями Долей по дням
+        """
+        # 1. Чтение ID каналов и списка каналов
+        data = pd.read_excel(self.channels_id_file)
+        data_ = np.array(data['ID']).tolist()
+        self.data_id = list(map(lambda x: str(x), data_))
+
+        # 2. Задаем ID телекомпаний для запуска расчета
+        company_filter = f'tvCompanyId IN ({", ".join(self.data_id)})'
+
+        # 3. Выгрузка данных из БД
+        new_data = self.share_by_days(date_filter, company_filter)
+
+        # 4. Обновление таблицы
+        old_data = pd.read_excel(self.filepath, sheet_name = 'History')
+        old_data['Дата'] = pd.to_datetime(old_data['Дата'])
+
+        updated = Table.update_table(old_data, new_data, 'Дата')
+        
+        # 5. Приведение даты к строковому формату
+        updated['Дата'] = updated['Дата'].dt.strftime('%Y-%m-%d')
+
+        # 6. Обновление файла с фактическими данными
+        self.make_style_of_share_table(updated, 'History')
 
 
 class AuedienceParser(BaseParser):
