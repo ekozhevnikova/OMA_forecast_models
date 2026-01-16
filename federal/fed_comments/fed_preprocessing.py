@@ -328,7 +328,8 @@ class Federal_Preprocessing:
                     KUS_forecast = pd.read_excel(file_path, sheet_name = 'было-стало', skiprows = 5, nrows = 3)
                     
                     # Вычленяем год из файла
-                    forecast_year = int(re.findall(r'\d+', KUS_forecast['Unnamed: 13'].loc[0])[0])
+                    #forecast_year = int(re.findall(r'\d+', KUS_forecast['Unnamed: 13'].loc[0])[0])
+                    forecast_year = int(re.findall(r'\d+', KUS_forecast.columns[13])[0])
                     
                     if desired_year == forecast_year:
                         print(f"Найден подходящий файл KUS: {file}")
