@@ -4,6 +4,7 @@ from typing import Tuple, Optional, List, Dict, Callable
 from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
 from difflib import SequenceMatcher
+from OMA_tools.federal.channel_forecast.core.simple_models import *
 import traceback
 traceback.print_exc()
 
@@ -673,6 +674,129 @@ class TVScheduleProcessor:
         return result
 
 
-class PipelineProcessor:
-    def __init__(self):
-        pass
+class MonthlyShareAnalyzer:
+    """
+    (!!!) ВАЖНО (!!!) Работает для какого-то конкретного месяца и года!
+        Класс по расчёту месячной доли через TTV и количество дней в месяце. 
+
+        Итоговая доля считается как TVR_summ (будни) + TVR_summ (выходные) / TVR_summ (за месяц), где
+
+        TVR_summ (будни) = Средняя доля будние * TTV (будни) * Кол-во будних дней в месяце
+        TVR_summ (выходные) = Средняя доля выходные * TTV (выходные) * Кол-во выходные дней в месяце
+        TVR_summ (за месяц) = TTV (за месяц) * Кол-во дней в месяце
+    """
+    def __init__(self, year: int, month: str, bca: str, forecast_df: pd.DataFrame, holidays_file: str):
+        self.year = year
+        self.month = month
+        self.bca = bca
+        self.forecast_df = forecast_df
+        self.holidays_file = holidays_file
+
+
+    def calculate_ttv(
+        self,
+        ttv_filepath: str, 
+        need_columns: list
+        ):
+        """
+            Метод для чтения файла с TTV.
+        """
+        # 1. Чтение файла
+        try:
+            ttv = pd.read_excel(
+                    ttv_filepath, 
+                    sheet_name = 'Для шаблонов',
+                    skiprows = 3,
+                    nrows = 39
+                )
+            
+        except FileNotFoundError:
+            raise FileNotFoundError(f'Файл не найден: {ttv_filepath}')
+
+        # 2. Отбор нужных колонок
+        df_ttv = ttv[[self.year] + need_columns].copy()
+        
+        df_ttv.rename(columns = {'Unnamed: 2': 'Месяц'}, inplace = True)
+        
+        # 3. Отбор анализируемого месяца
+        month_clean = str(self.month).strip()
+        month_mask = df_ttv['Месяц'].str.lower() == month_clean.lower()
+        
+        ttv_filtered = df_ttv[month_mask].reset_index(drop = True)
+
+        # 4. Поиск TTV за весь месяц, за будние дни, за выходные дни
+        try:
+            full_ttv = ttv_filtered.iloc[0]      # за весь месяц
+            weekday_ttv = ttv_filtered.iloc[1]   # за будние дни
+            weekend_ttv = ttv_filtered.iloc[2]   # за выходные дни
+        except IndexError as e:
+            raise ValueError(f"Недостаточно строк данных для месяца '{self.month}': {str(e)}")
+
+
+        # 5. Запись в словарь интересующих данных
+        result = {
+            'итого': full_ttv[self.bca],
+            'будни': weekday_ttv[self.bca],
+            'выходные': weekend_ttv[self.bca]
+        }
+        return result
+    
+
+    def calculate_monthly_share(self, ttv_dict: dict):
+        """
+            Метод для расчета месячной доли 
+        """
+        # 1. Считаем праздники России
+        work_saturdays, all_holidays = PrimitiveModel.build_russian_holidays(self.holidays_file)
+
+        # 2. Определение типа дня
+        self.df['Тип дня'] = self.df['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
+
+        # 3. Отбор будних и выходных дней
+        weekdays = self.df[self.df['Тип дня'] == 'Будни'].reset_index(drop = True)
+        weekends = self.df[self.df['Тип дня'] == 'Выходной'].reset_index(drop = True)
+
+        # 4. Подсчет средней доли будних и выходных дней
+        mean_share_weekdays = np.mean(list(weekdays['Share']))
+        mean_share_weekend = np.mean(list(weekends['Share']))
+
+        # 5. Подсчет количества будних, выходных и количества дней в месяце
+        count_weekends = (self.df['Тип дня'] == 'Выходной').sum()
+        count_weekdays = (self.df['Тип дня'] == 'Будни').sum()
+        n_days = count_weekends + count_weekdays
+
+        TVR_summ = {
+            'итого': ttv_dict['итого'] * n_days,
+            'будни': mean_share_weekdays * ttv_dict['будни'] * count_weekdays,
+            'выходные': mean_share_weekend * ttv_dict['выходные'] * count_weekends
+            }
+
+        share_per_month = (TVR_summ['будни'] + TVR_summ['выходные']) / TVR_summ['итого']
+        return share_per_month
+    
+
+    def fit_calculate(self, ttv_filepath: str, need_columns: list):
+        """
+            Пайплайн для расчета
+        """
+        unique_dates = self.forecast_df['Дата'].unique()
+
+        shares = {}
+        for date in unique_dates:
+            df = self.forecast_df[self.forecast_df['Дата'] == date].reset_index(drop = True)
+            
+            # Расчёт суммарной доли по дню
+            shares[date] = np.sum(list(df['Share_weighted']))
+        
+        self.df = pd.DataFrame({
+            'Дата': pd.to_datetime(list(shares.keys())),
+            'Share': list(shares.values())
+        })
+
+        # Сортировка по дате (если нужно)
+        self.df = self.df.sort_values('Дата').reset_index(drop = True)
+
+        ttv = self.calculate_ttv(ttv_filepath, need_columns)
+        share_per_month = self.calculate_monthly_share(ttv)
+        return share_per_month
+
