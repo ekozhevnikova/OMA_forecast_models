@@ -84,13 +84,13 @@ class PrimitiveModel:
     
 
     @staticmethod
-    def get_day_type(date, holidays: list, worling_saturdays: list):
+    def get_day_type(date, holidays: list, working_saturdays: list):
         date_str = datetime.strftime(date, '%Y-%m-%d')
         
         date_obj = datetime.strptime(date_str, '%Y-%m-%d')
         weekday = date_obj.weekday()
         
-        if date_str in worling_saturdays:
+        if date_str in working_saturdays:
             return 'Будни'
             
         elif date_str in holidays:

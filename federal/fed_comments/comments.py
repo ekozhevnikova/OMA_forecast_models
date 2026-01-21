@@ -273,11 +273,11 @@ class Federal_Comments:
             TVR = old_data['TTV'] * old_data['Share'] / 100
             tvr = new_data['КУС'] * TVR
     
-        #Если поменялись Объемы
-        elif changed_statistic == 'Т Общие':
-            delta_V = (new_data['Т Общие'] / old_data['Т Общие']) - 1.0
-            delta_GRP = old_data['GRP ТП НРА'] * delta_V
-            return round(delta_GRP)
+        ##Если поменялись Объемы
+        #elif changed_statistic == 'Т Общие':
+        #    delta_V = (new_data['Т Общие'] / old_data['Т Общие']) - 1.0
+        #    delta_GRP = old_data['GRP ТП НРА'] * delta_V
+        #    return round(delta_GRP)
     
         #Если поменялись Телемагазины
         elif changed_statistic == 'GRP Телемагазины':
@@ -387,8 +387,8 @@ class Federal_Comments:
                 GRP = (old_data['Т Общие'] * tvr) / 20
                 GRP_NRA = GRP - old_data['GRP Телемагазины'] - old_data['GRP СП']
             
-                
         delta_GRP = GRP_NRA -  old_data['GRP ТП НРА']
+        #print(channel, month, changed_statistic, GRP_NRA, old_data['GRP ТП НРА'], delta_GRP)
         return round(delta_GRP)
 
 

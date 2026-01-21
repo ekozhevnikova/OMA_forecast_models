@@ -6,7 +6,7 @@ import shutil
 import glob
 from pathlib import Path
 import xlsxwriter
-from typing import Tuple, Dict, Optional
+from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
@@ -14,6 +14,7 @@ locale.setlocale(locale.LC_ALL, 'ru_RU')
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
 #from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
+from OMA_tools.federal.channel_forecast.core.content_matching import Find_Similarity
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -1494,3 +1495,139 @@ class VIMBGridProcessor(BaseParser):
             column_configs = column_configs,
             date_columns = ['Дата']
         )
+
+
+class ProgramMatcher:
+    """
+        Класс для сопоставления телепрограмм из разных источников: Mediascope и VIMB.
+        Обеспечивает нормализацию названий программ и поиск временных совпадений.
+    """
+    def __init__(self, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
+        """
+        Инициализация ProgramMatcher
+        
+        Args:
+            palomars_grid: историческая сетка Mediascope.
+            vimb_grid: историческая сетка VIMB.
+        """
+        self.palomars_grid = palomars_grid
+        self.vimb_grid = vimb_grid
+
+
+    @staticmethod
+    def find_common_base_names(names: List[str])  -> Dict[str, str]:
+        """
+            Находит базовые названия программ, заменяя длинные варианты на короткие.
+
+            Args:
+                names: Список названий программ
+                
+            Returns:
+                Словарь маппинга {длинное_название: базовое_название}
+        """
+        # Уникальные названия
+        unique_names = sorted(set(names), key = len)
+        mapping = {}
+        
+        # Сначала создаем маппинг для каждого названия на себя
+        for name in unique_names:
+            mapping[name] = name
+        
+        # Ищем подстроки
+        for i, short_name in enumerate(unique_names):
+            for long_name in unique_names[i + 1:]:
+                # Если короткое название является подстрокой длинного
+                if short_name in long_name:
+                    mapping[long_name] = short_name
+        
+        return mapping
+
+
+    def match_vimb_with_palomars_grids(self, minutes = 10):
+
+        vimb_full = self.vimb_grid.copy()
+        plmrs = self.palomars_grid.copy()
+
+        # Отбираем уникальные даты в сетке VIMB
+        dates_unique = vimb_full['Дата'].unique()
+
+        result_webs = {}
+        for target_date in dates_unique:
+
+            # Отбор конкретной даты в ВИМБ
+            vimb = vimb_full[vimb_full['Дата'] == target_date].reset_index(drop = True)
+
+            # Отбираем дату, которую будем анализировать
+            palomars = plmrs[plmrs['Дата'] == target_date].reset_index(drop = True)
+            
+            #Программы в Palomars
+            plmrs_modified, data_plmrs = Find_Similarity.clean_text(palomars, 'Название программы')
+            plmrs_modified_ = list(set(plmrs_modified))
+            
+            #Программы в VIMB
+            vimb_modified, vimb_cleaned = Find_Similarity.clean_text(vimb, 'Название программы')
+            vimb_modified_ = list(set(vimb_modified))
+            
+            # Делаем поиск по схожим программам
+            similar = Find_Similarity(plmrs_modified_, vimb_modified_, data_plmrs, vimb_cleaned)
+            result = similar.comparison(min_similarity = 0.5)
+            features_dict = similar.generate_similar_features(result, False)
+            
+            # Заменяем названия передач, если какие-то не совпадают
+            df = result[result['similarity'].round(5) != 1.00000]
+            
+            programs_replace = {}
+            for i in range(len(df)):
+                programs_replace[df.iloc[i]['Программа Palomars']] = df.iloc[i]['Программа VIMB']
+                
+            data_plmrs['program_name'].replace(programs_replace, inplace = True)
+            
+            # Находим базовые названия программ. Производим замену
+            base_names = ProgramMatcher.find_common_base_names(data_plmrs['program_name'].tolist())
+            data_plmrs['Базовое_название'] = data_plmrs['program_name'].map(base_names)
+            
+            # Оставляем только нужные столбцы для анализа
+            Pal = data_plmrs[['Дата', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted']]
+            
+            Pal.rename(columns = 
+                    {
+                        'Базовое_название': 'Название программы', 
+                        'Share_weighted': 'Share'
+                    }, 
+                    inplace = True)
+            Pal['Название программы'] = Pal['Название программы'].str.lower()
+
+            
+            VIMB = vimb[['Дата', 'program_name', 'Время выхода', 'Время окончания']]
+            VIMB.rename(columns = {'program_name': 'Название программы'}, inplace = True)
+
+            VIMB_init = VIMB.copy()
+            Pal_init = Pal.copy()
+
+            result = TVScheduleProcessor(VIMB_init, Pal_init).find_matches(minutes)
+
+            result_webs[target_date] = result
+            
+        webs_converted = pd.concat(result_webs.values(), ignore_index = True)
+
+        webs_converted['Дата'] = pd.to_datetime(webs_converted['Дата'])
+        sorted_webs = webs_converted.sort_values('Дата').reset_index(drop = True)
+        
+        res = []
+        for date in dates_unique:
+            date_dt = pd.to_datetime(date)
+            
+            t = sorted_webs[sorted_webs['Дата'] == date_dt]
+
+            t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
+
+            final = t.sort_values('sort_key').reset_index(drop = True)
+
+            final = final.drop('sort_key', axis = 1)
+            res.append(final)
+        
+        general_result = pd.concat(res).reset_index(drop = True)
+        general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
+        general_result.rename(columns = {'Share': 'Share_weighted'}, inplace = True)
+        
+        return general_result
