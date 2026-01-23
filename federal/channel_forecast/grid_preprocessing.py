@@ -1497,19 +1497,23 @@ class VIMBGridProcessor(BaseParser):
         )
 
 
-class ProgramMatcher:
+class ProgramMatcher(BaseParser):
     """
         Класс для сопоставления телепрограмм из разных источников: Mediascope и VIMB.
         Обеспечивает нормализацию названий программ и поиск временных совпадений.
     """
-    def __init__(self, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
+    def __init__(self, folder_path: str, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
         """
         Инициализация ProgramMatcher
         
         Args:
-            palomars_grid: историческая сетка Mediascope.
-            vimb_grid: историческая сетка VIMB.
+            folder_path: str: путь к файлу с данными.
+            palomars_grid:  str:историческая сетка Mediascope.
+            vimb_grid: str: историческая сетка VIMB.
         """
+        super().__init__(folder_path)
+
+        self.folder_path = folder_path
         self.palomars_grid = palomars_grid
         self.vimb_grid = vimb_grid
 
@@ -1571,7 +1575,7 @@ class ProgramMatcher:
             # Делаем поиск по схожим программам
             similar = Find_Similarity(plmrs_modified_, vimb_modified_, data_plmrs, vimb_cleaned)
             result = similar.comparison(min_similarity = 0.5)
-            features_dict = similar.generate_similar_features(result, False)
+            #features_dict = similar.generate_similar_features(result, False)
             
             # Заменяем названия передач, если какие-то не совпадают
             df = result[result['similarity'].round(5) != 1.00000]
@@ -1629,5 +1633,121 @@ class ProgramMatcher:
         general_result = pd.concat(res).reset_index(drop = True)
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
         general_result.rename(columns = {'Share': 'Share_weighted'}, inplace = True)
+
+        general_result['Share_weighted'] = general_result['Share_weighted'].round(6)
         
         return general_result
+    
+
+    def update_file(self, web_new):
+        """
+            Функция для обновления файла с сетками ТВ-программ VIMB.
+        """
+        if len(web_new) == 0:
+            print('Ошибка! Вы пытаетесь сохранить пустой DataFrame!')
+
+        # Проверяем существование файла
+        file_path = Path(self.folder_path)
+        
+        if not file_path.exists():
+            print(f'Файл {file_path} не найден. Создаем новый файл...')
+            
+            # Подготавливаем данные для записи
+            new_cleaned = web_new.copy()
+            
+            # Приводим все к строковому типу и обрезаем пробелы
+            for col in new_cleaned.columns:
+                new_cleaned[col] = new_cleaned[col].astype(str).str.strip()
+            
+            # Создаем Excel файл с форматированием
+            self.folder_path = file_path # Добавляем путь для сохранения
+
+            self.style_of_table(
+                df = new_cleaned, 
+                sheet_name = 'Sheet1'
+            )
+            
+            print(f'Создан новый файл: {file_path}')
+        
+        # Файл существует - читаем и обновляем
+        try:
+            new = web_new.copy()
+            # Читаем существующие данные
+            old_web = pd.read_excel(self.folder_path)
+
+            # Приводим даты к единому формату
+            for col in new.columns:
+                new[col] = new[col].astype(str).str.strip()
+                old_web[col] = old_web[col].astype(str).str.strip()
+            
+            full = pd.concat([old_web, new]).reset_index(drop = True)
+
+            df_no_duplicates = full.drop_duplicates(
+                subset = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
+                keep = 'first'
+            )
+            print(f'Удалено {len(full) - len(df_no_duplicates)} дубликатов.')
+
+            # Проверяем границы дней
+            #(df_no_duplicates)
+
+            self.style_of_table(
+                df = df_no_duplicates, 
+                sheet_name = 'Sheet1'
+            )
+
+        except Exception as e:
+            print(f'Ошибка при обновлении файла: {e}')
+        
+
+            # Создаем резервную копию и новый файл
+            try:
+                backup_path = file_path.with_suffix('-копия.xlsx')
+                if file_path.exists():
+                    shutil.copy2(file_path, backup_path)
+                    print(f'Создана резервная копия: {backup_path}')
+                
+                # Создаем новый файл с web_new данными
+                self.folder_path = file_path
+
+                self.style_of_table(
+                    df = web_new, 
+                    sheet_name = 'Sheet1'
+                )
+                print(f'Создан новый файл с предоставленными данными.')
+                
+            except Exception as backup_error:
+                print(f'Критическая ошибка при создании резервной копии: {backup_error}')
+    
+
+    def style_of_table(self, df: pd.DataFrame, sheet_name: str):
+        """
+            Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
+        """
+        column_configs = [
+            {'header': 'Дата', 'width': 14.0, 'format': 'date'},
+            {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
+            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+            {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
+            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'}
+        ]
+        
+        self.make_style_of_table(
+            df = df,
+            sheet_name = sheet_name,
+            column_configs = column_configs,
+            date_columns = ['Дата']
+        )
+    
+
+    def pipeline(self):
+        """
+            Пайплайн по совмещению сеток между собой.
+        """
+        # 1. Сопоставляем сетки между собой
+        result_webs = self.match_vimb_with_palomars_grids()
+
+        # 2. Обновляем/создаем файл с фактическими данными
+        self.update_file(result_webs)
+
+        return result_webs

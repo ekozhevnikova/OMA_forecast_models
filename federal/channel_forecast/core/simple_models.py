@@ -254,6 +254,7 @@ class PrimitiveModel:
             df['Тип дня'] = df['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
             # 0 - Будни, 1 - Выходные
             df['Тип дня'] = LabelEncoder().fit_transform(df['Тип дня'])
+
             tmp_df = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'День недели', 'Тип дня', 'Share']]
             
             # 2. Отбор исторических данных, начиная с 2021 г
@@ -431,17 +432,16 @@ class PrimitiveModel:
         plmrs['Дата'] = pd.to_datetime(plmrs['Дата'])
         #not_found = result[result['Программа Palomars'] == 0].reset_index()
 
-        not_found_programs = list(new_programs['Программа VIMB'])
+        not_found_programs = list(new_programs['Название программы'].unique())
 
         res_not_found = {}
+
         for new_pr in not_found_programs:
+
             # 1. Отбор по программе
-            df = vimb.copy()
-            df['Flag'] = vimb['program_name'].str.contains(new_pr)  
-            analysis = df.loc[(df['Flag'] == True)]
-            
-            tmp_df = analysis[['Дата', 'program_name', 'Время выхода', 'Время окончания', 'День недели']].reset_index(drop = True)
-            tmp_df.rename(columns = {'program_name': 'Название программы'}, inplace = True)
+            analysis = new_programs[new_programs['Название программы'] == new_pr].reset_index(drop = True)
+
+            tmp_df = analysis[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'День недели']].reset_index(drop = True)
             
             tmp_df['Дата'] = pd.to_datetime(tmp_df['Дата'])
             
@@ -469,16 +469,13 @@ class PrimitiveModel:
             last_4_weeks['Тип дня'] = last_4_weeks['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
             # 0 - Будни, 1 - Выходные
             last_4_weeks['Тип дня'] = last_4_weeks['Тип дня'].map(day_type_mapping)
-            # Конвертация столбца Время выхода в строку
-            last_4_weeks['Время выхода'] = last_4_weeks['Время выхода'].apply(lambda x: x.strftime('%H:%M:%S') if pd.notnull(x) else x)
-            
-            # Конвертация столбца Время выхода в строку
-            historical_data['Время выхода'] = historical_data['Время выхода'].apply(lambda x: x.strftime('%H:%M:%S') if pd.notnull(x) else x)
+
 
             future_data = tmp_df.copy()
 
             # Группируем future_data по уникальным комбинациям
             combinations = future_data[['Время выхода', 'День недели', 'Тип дня']].drop_duplicates()
+
             for idx, row in combinations.iterrows():
                 slot = row['Время выхода']
                 day = row['День недели']

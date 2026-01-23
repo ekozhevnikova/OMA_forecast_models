@@ -775,7 +775,7 @@ class MonthlyShareAnalyzer:
         return share_per_month
     
 
-    def fit_calculate(self, ttv_filepath: str, need_columns: list):
+    def fit_calculate(self, ttv_filepath: str, target_column: str, need_columns: list):
         """
             Пайплайн для расчета
         """
@@ -786,7 +786,7 @@ class MonthlyShareAnalyzer:
             df = self.forecast_df[self.forecast_df['Дата'] == date].reset_index(drop = True)
             
             # Расчёт суммарной доли по дню
-            shares[date] = np.sum(list(df['Share_weighted']))
+            shares[date] = np.sum(list(df[target_column]))
         
         self.df = pd.DataFrame({
             'Дата': pd.to_datetime(list(shares.keys())),

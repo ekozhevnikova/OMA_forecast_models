@@ -66,25 +66,112 @@ class Find_Similarity:
                 result.append(name)
                 df.loc[df['Название программы'] == program, 'program_name'] = name
         return result, df
+    
+
+    #@staticmethod
+    #def clean_text(df, column_name):
+    #    """
+    #    Простая и надежная версия функции зачистки текста
+    #    """
+    #    result = []
+    #    set_of_programs = list(set(list(df[column_name])))
+    #    
+    #    df['program_name'] = ''
+    #    
+    #    for program in set_of_programs:
+    #        name = program.strip()
+    #        extracted_name = name
+    #        
+    #        # Шаг 1: Ищем последние скобки
+    #        if '(' in name and ')' in name:
+    #            open_idx = name.rfind('(')
+    #            close_idx = name.rfind(')')
+    #            
+    #            if open_idx < close_idx:
+    #                bracket_content = name[open_idx + 1:close_idx].strip()
+    #                
+    #                # Шаг 2: Ищем кавычки в содержимом скобок
+    #                quote_start = -1
+    #                quote_end = -1
+    #                
+    #                # Проверяем разные типы кавычек
+    #                if '"' in bracket_content:
+    #                    quote_start = bracket_content.find('"')
+    #                    quote_end = bracket_content.rfind('"')
+    #                elif '«' in bracket_content and '»' in bracket_content:
+    #                    quote_start = bracket_content.find('«')
+    #                    quote_end = bracket_content.find('»')
+    #                
+    #                # Шаг 3: Извлекаем содержимое
+    #                if quote_start != -1 and quote_end != -1 and quote_end > quote_start:
+    #                    # Берем содержимое кавычек
+    #                    extracted_name = bracket_content[quote_start + 1:quote_end].strip()
+    #                else:
+    #                    # Берем все содержимое скобок
+    #                    extracted_name = bracket_content
+    #        
+    #        # Шаг 4: Убираем префиксы
+    #        prefixes = ['Х/ф', 'х/ф', 'Х/ф ', 'х/ф ', 'Сериал', 'сериал', 'Фильм', 'фильм']
+    #        for prefix in prefixes:
+    #            if extracted_name.startswith(prefix):
+    #                extracted_name = extracted_name[len(prefix):].lstrip(':').lstrip().lstrip('-').lstrip()
+    #                break
+    #        
+    #        # Шаг 5: Очищаем текст
+    #        name_cleaned = Find_Similarity.preprocess_text(extracted_name)
+    #        
+    #        result.append(name_cleaned)
+    #        df.loc[df[column_name] == program, 'program_name'] = name_cleaned
+    #    
+    #    return result, df
 
     
+    #@staticmethod
+    #def preprocess_text(text: str):
+    #    """
+    #        Функция предобработки текста. Текст приводится к нижнему регистру, удаляются спец символы, пунктуация и пробелы.
+    #        Args:
+    #            text: str: Текст типа данных строка
+    #        Returns:
+    #            text_delete_tab: причёсанный текст
+    #    """
+    #    # Приводим к нижнему регистру
+    #    text_lowered = text.lower()
+    #    # Удаляем специальные символы, оставляем только буквы и пробелы
+    #    text_cleaned = re.sub(r'[^а-яёa-z\s]', '', text_lowered)
+    #    # Удаляем пунктуацию
+    #    text_delete_punc = re.sub(r'[^\w\s]', '', text_cleaned) 
+    #    # Удаляем лишние пробелы
+    #    text_delete_tab = re.sub(r'\s+', ' ', text_delete_punc).strip()
+    #    return text_delete_tab
+
+    
+
     @staticmethod
     def preprocess_text(text: str):
         """
-            Функция предобработки текста. Текст приводится к нижнему регистру, удаляются спец символы, пунктуация и пробелы.
-            Args:
-                text: str: Текст типа данных строка
-            Returns:
-                text_delete_tab: причёсанный текст
+        Функция предобработки текста. Текст приводится к нижнему регистру, 
+        удаляются спец символы, пунктуация и пробелы.
+        
+        Args:
+            text: str: Текст типа данных строка
+        
+        Returns:
+            text_delete_tab: причёсанный текст
         """
+        if not text or not isinstance(text, str):
+            return ""
+        
         # Приводим к нижнему регистру
         text_lowered = text.lower()
-        # Удаляем специальные символы, оставляем только буквы и пробелы
-        text_cleaned = re.sub(r'[^а-яёa-z\s]', '', text_lowered)
-        # Удаляем пунктуацию
-        text_delete_punc = re.sub(r'[^\w\s]', '', text_cleaned) 
+        
+        # Удаляем все, кроме букв, цифр, пробелов и точки (для чисел с точкой)
+        # Можно добавить другие нужные символы: [^а-яёa-z0-9.\s]
+        text_cleaned = re.sub(r'[^а-яёa-z0-9.\s]', '', text_lowered)
+        
         # Удаляем лишние пробелы
-        text_delete_tab = re.sub(r'\s+', ' ', text_delete_punc).strip()
+        text_delete_tab = re.sub(r'\s+', ' ', text_cleaned).strip()
+        
         return text_delete_tab
 
 
@@ -250,8 +337,6 @@ class Find_Similarity:
             palomars = plmrs_analysis.loc[plmrs_analysis['Название программы'] == program_plrms]
             full_data = pd.concat([palomars, vimb_df]).reset_index(drop = True)
             full_data['Дата'] = pd.to_datetime(full_data['Дата'])
-            #print(TimeSeriesTransformer.find_missing_dates(list(full_data['Дата'])))
-            #full_data_new = TimeSeriesTransformer.create_reverse_dates_from_target(full_data, 'Дата', 'Share')
             dict_analysis[program_plrms] = full_data
 
         if print_df:
