@@ -287,6 +287,17 @@ class Federal_Postprocessing:
         
         # Читаем существующие данные
         comments = pd.read_excel(filepath)
+
+        comments = comments[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+
+        comments = comments.astype({
+            'Канал': 'str', 
+            'Месяц': 'str', 
+            'Изменение GRP': 'float64', 
+            'Порог': 'float64', 
+            'Доп столбец': 'str', 
+            'Комментарий': 'str'
+            })
         
         # Приводим даты к единому формату
         comments['Дата'] = pd.to_datetime(comments['Дата'], dayfirst = True, errors = 'coerce')

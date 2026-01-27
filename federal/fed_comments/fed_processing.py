@@ -775,16 +775,30 @@ class Federal_Processing:
         #Изменения начинаем смотреть с даты начала периода + 1 (если период 2 - 9 мая, то изменения начинаем смотреть с 3 мая.)
         start_date = pd.to_datetime(start_date, format = '%Y-%m-%d')
         start_date_modified = start_date + datetime.timedelta(days = 1)
-        #start_date_modified = start_date_modified.strftime('%Y-%m-%d')
 
         #Чтение исходного файла с Комментариями
         try:
             comments = pd.read_excel(comments_filepath_init)
+
+            # Оставляем только нужные столбцы
+            comments = comments[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+
+            comments = comments.astype({
+                'Канал': 'str', 
+                'Месяц': 'str', 
+                'Изменение GRP': 'float64', 
+                'Порог': 'float64', 
+                'Доп столбец': 'str', 
+                'Комментарий': 'str'
+                })
+            
             comments['Дата'] = pd.to_datetime(comments['Дата'], dayfirst = True, errors = 'coerce')
             comments.sort_values(by = ['Дата'], inplace = True)
             comments.set_index('Дата', inplace = True)
+
         except FileExistsError:
             print('Файл с Комментариями не найден. Пожалуйста, вставьте его в соответствующую папку!')
+
 
         date_of_start = start_date_modified
         #Если в файле с Комментариями нет подходящей даты для начала отсчета изменений.
@@ -874,127 +888,5 @@ class Federal_Processing:
                         continue
                 else:
                     res_updated.at[i, 'Комментарий'] = ''
+
             return res_updated
-        
-    
-    @staticmethod
-    def print_warning_comments(data, problem_channels, type_of_comments: str):
-        """
-            Функция для написания финальных ВОРНИНГОВ для накопленных изменений за период.
-            С помощью данной функции можно понять, для каких каналов стоит дописать причины или наоборот написать причины САМОСТОЯТЕЛЬНО.
-            Args:
-                channels_not_exist: Словарь из каналов, для которых не нашлось релевантных причин для объяснения изменений. Ключ: Месяц, Значение: Канал.
-                channels_not_enough_reasons: Словарь из каналов, которые нуждаются в дополнительных комментариях по изменению инвентаря. Ключ: Месяц, Значение: Канал.
-                type_of_comments: by days или summ
-            Returns:
-                Комментарии-ворнинги
-        """
-        def support_func_per_comment(dict_1, dict_2, comment):
-            """
-                Вспомогательная функция для вывода комментариев в консоль.
-            """
-            for month, channel in list(dict_1.items()):
-                    # Проверяем, существует ли ключ во втором словаре
-                    if month in dict_2:
-                        # Оставляем только те значения, которые есть во втором словаре
-                        dict_1[month] = [value for value in dict_1[month] if value in dict_2[month]]
-                    else:
-                        # Если ключа нет во втором словаре, можем удалить его из dict1
-                        del dict_1[month]
-
-            #Написание комментария для каналов, для которых не нашлось причин и требуется написать комментарий самостоятельно
-            if all(value in [] for value in dict_1.values()):
-                print('')
-            else:
-                for month, channels in dict_1.items():
-                    if channels == []:
-                        print('')
-                    else:
-                        morph = pmrph.MorphAnalyzer()
-                        month_ = morph.parse(month)[0].inflect({'loct'}).word.capitalize()
-                        print(comment + f' для: {", ".join(list(channels))} в {month_}.' + Color.END, end = '\n\n')
-
-
-        #Вывод комментариев для изменений по дням
-        if type_of_comments == 'by days':
-            not_enough_reasons = []
-            not_found = []
-            not_found_smi = []
-            for i in range(len(data)):
-                channel = data.iloc[i]['Канал']
-                limit = data.iloc[i]['Порог']
-                comment = data.iloc[i]['Комментарий']
-                if not pd.isnull(comment):
-                    numbers = re.findall(r'\b\d+\b', comment)
-                    numbers_int = []
-                    for item in numbers:
-                        numbers_int.append(int(item))
-                    if np.abs(np.sum(numbers_int)) < limit:
-                        not_enough_reasons.append(channel)
-                else:
-                    not_found.append(channel)
-
-            if len(not_enough_reasons) != 0:
-                print(Color.BOLD + Color.GREEN + f'Требуется дописать причины для {", ".join(set(not_enough_reasons))}.' + Color.END, end = '\n\n')
-            else:
-                print('')
-
-            if len(not_found) != 0:
-                print(Color.BOLD + Color.RED + 'Требуется ' + \
-                      Color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + Color.END + Color.BOLD + Color.RED + \
-                      f' написать комментарий для: {", ".join(set(not_found))}.' + Color.END, end = '\n\n')
-            else:
-                print('')
-
-            if len(not_enough_reasons) == 0 and len(not_found) == 0:
-                print('')
-
-        #Вывод комментариев для накопленных изменений
-        elif type_of_comments == 'summ':
-            channels = list(data['Канал'])
-            data_ = data.copy()
-
-            months_init = list(data['Месяц'])
-            months_new = []
-            for old_month in months_init:
-                month_new = str(old_month).split('\'')[0].title()
-                months_new.append(month_new)
-            data_['Месяц'] = data_['Месяц'].replace(months_init, months_new)
-
-            #Группируем по месяцу и собираем каналы в списки
-            months__and__channels = data_.groupby('Месяц')['Канал'].apply(list).to_dict()
-#
-            #################################### ДЛЯ НЕ НАЙДЕННЫХ КАНАЛОВ ####################################
-            channels_not_exist = problem_channels['Channel not exist']
-            if len(channels_not_exist) > 1:
-                channels_not_exist_new = Dict_Operations(channels_not_exist).rename_items_in_dict(channel_names_init)
-                support_func_per_comment(channels_not_exist_new, 
-                            months__and__channels, 
-                            Color.BOLD + Color.RED + 'Требуется написать комментарий ' + \
-                                Color.UNDERLINE + 'САМОСТОЯТЕЛЬНО' + Color.END + Color.BOLD + Color.RED)
-            else:
-                print('')
-            
-            #################################### ДЛЯ НЕ НАЙДЕННЫХ КАНАЛОВ СМИ ################################
-            channels_not_found_smi = problem_channels['SMI not']
-            if len(channels_not_found_smi) > 1:
-                channels_not_exist_smi = Dict_Operations(channels_not_found_smi).rename_items_in_dict(channel_names_init)
-                support_func_per_comment(channels_not_exist_smi, 
-                            months__and__channels, 
-                            Color.BOLD + Color.PURPLE + 'Не найдено данных от ' + Color.UNDERLINE + 'СМИ' + Color.END + ' ' + \
-                                Color.BOLD + Color.PURPLE)
-            else:
-                print('')
-            
-            #################################### ДЛЯ КАНАЛОВ, ДЛЯ КОТОРЫХ НАЙДЕНО НЕДОСТАТОЧНО ПРИЧИН ########
-            channels_not_enough_reasons = problem_channels['Not enough reasons']
-            if len(channels_not_enough_reasons) > 1:
-                channels_not_enough_reasons_new = Dict_Operations(channels_not_enough_reasons).rename_items_in_dict(channel_names_init)
-                support_func_per_comment(channels_not_enough_reasons_new, 
-                            months__and__channels, 
-                            Color.BOLD + Color.GREEN + 'Найдено ' + Color.UNDERLINE + 'НЕДОСТАТОЧНО' + \
-                                Color.END + Color.BOLD + Color.GREEN + ' причин')
-            else:
-                print('')
-        else:
-            print(Color.BOLD + Color.RED + 'ПЕРЕМЕННАЯ type_of_comments ДОЛЖНА БЫТЬ ЛИБО by days, либо summ' + Color.END)
