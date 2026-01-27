@@ -515,6 +515,7 @@ class Federal_Comments:
                     if statistic == 'Share':
                         old = np.round(old_data['Share'], 2)
                         new = np.round(new_data['Share'], 2)
+                        print(channel, ', ', month, ', ', old, ', ', new)
                         if reasons_dict['Share'] > 0:
                             comments[statistic] = f'Рост доли с {old} до {new}.'
                         else:

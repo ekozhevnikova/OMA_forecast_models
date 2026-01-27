@@ -817,12 +817,16 @@ class Federal_Processing:
         
 
         res = []
+
         for i in range(len(data)):
+
             channel = data.iloc[i]['Канал']
             month = data.iloc[i]['Месяц']
             delta_grp_summ = data.iloc[i]['Изменение GRP']
+
             #Отбор значений только по интересующему каналу и месяцу
             df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
+
             if not df.empty:
                 delta = list(df['Изменение GRP'])
                 delta_cleaned = []
@@ -846,6 +850,8 @@ class Federal_Processing:
 
         if len(res) == 0:
             return res
+        
+
         else:
             result = pd.concat(res)
             # Применяем функцию к DataFrame и создаем новую колонку
@@ -861,9 +867,11 @@ class Federal_Processing:
 
             #Удаляем дублирующиеся комментарии за период. Оставляем нужные.
             for i in range(len(res_updated)):
+
                 channel = res_updated.iloc[i]['Канал']
                 month = res_updated.iloc[i]['Месяц']
                 comments_per_week = res_updated.iloc[i]['Комментарий']
+
                 if not pd.isna(comments_per_week):
                     comment_per_week_splitted = comments_per_week.split('. ')
 
@@ -890,3 +898,4 @@ class Federal_Processing:
                     res_updated.at[i, 'Комментарий'] = ''
 
             return res_updated
+    

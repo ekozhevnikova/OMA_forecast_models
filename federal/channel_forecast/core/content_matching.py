@@ -5,7 +5,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 import re
 import nltk
 from nltk.corpus import stopwords
-from OMA_tools.io_data.time_series import TimeSeriesTransformer
 
 import warnings
 warnings.filterwarnings('ignore')

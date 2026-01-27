@@ -12,7 +12,7 @@ import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
-#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.federal.channel_forecast.core.content_matching import Find_Similarity
 
@@ -63,7 +63,7 @@ class BaseParser:
         """
         if not os.path.exists(self.filepath):
             if default_columns is None:
-                print('Список колонок не передан! Пожалуйста, исправьте!')
+                print('⚠️ Список колонок не передан! Пожалуйста, исправьте!')
             
             # Создаем пустой DataFrame с указанными колонками
             empty_df = pd.DataFrame(columns = default_columns)
@@ -72,13 +72,13 @@ class BaseParser:
             directory = os.path.dirname(self.filepath)
             if directory and not os.path.exists(directory):
                 os.makedirs(directory, exist_ok = True)
-                print(f'Создана директория: {directory}')
+                print(f'📥 Создана директория: {directory}')
             
             # Сохраняем пустой файл
             with pd.ExcelWriter(self.filepath, engine = 'xlsxwriter') as writer:
                 empty_df.to_excel(writer, sheet_name = 'Sheet1', index = False)
             
-            print(f'Создан новый файл: {self.filepath}')
+            print(f'📁 Создан новый файл: {self.filepath}')
 
     
     def _get_column_letter(self, col_idx: int) -> str:
@@ -777,15 +777,24 @@ class MediascopeParser(BaseParser):
 
 
 
-class TVPreprocessing:
+class TVPreprocessing(BaseParser):
     """
         Класс для предобработки файлов с исторической и новыми сетками Федеральных ТВ-каналовс регулярной сеткой
     """
-    def __init__(self, plmrs: pd.DataFrame):
+    def __init__(self, filepath: str, plmrs: pd.DataFrame):
         """
             plmrs: pd.DataFrame: новая сетка Mediascope, которую нужно спарсить.
         """
         self.plmrs = plmrs
+        self.filepath = filepath
+
+        super().__init__(filepath)
+
+        # Вызываем ensure_file_exists с нужными колонками
+        self._ensure_file_exists([
+            'Канал', 'Дата', 'Название программы', 'Время выхода', 
+            'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
+        ])
 
 
     @staticmethod
@@ -968,16 +977,15 @@ class TVPreprocessing:
 
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
 
+        general_result = general_result[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+
         return general_result, shares
         
 
-    def make_plmrs_style_of_table(self, folder_path: str, df: pd.DataFrame, sheet_name: str):
+    def make_plmrs_style_of_table(self, df: pd.DataFrame, sheet_name: str):
         """
             Функция для генерации внешнего вида таблицы с сеткой Mediascope.
         """
-        # Создаем временный парсер для использования общего метода
-        temp_parser = BaseParser(folder_path)
-        
         column_configs = [
             {'header': 'Канал', 'width': 24.0, 'format': 'general'},
             {'header': 'Дата', 'width': 12.0, 'format': 'date'},
@@ -990,7 +998,7 @@ class TVPreprocessing:
             {'header': 'День недели', 'width': 14.0, 'format': 'general'}
         ]
         
-        temp_parser.make_style_of_table(
+        self.make_style_of_table(
             df = df,
             sheet_name = sheet_name,
             column_configs = column_configs,
