@@ -1407,10 +1407,18 @@ class VIMBGridProcessor(BaseParser):
         except Exception as e:
             print(f'Ошибка конвертации дат: {e}')
 
-        # Проверка, что каждый день начинается в 05:00:00 и заканчивается в 05:00:00
-        dates_unique = df_check[date_column].unique()
+        # Проверка, что каждый день начинается в 05:00:00 и заканчивается в 05:00:00, за исключением первого и последнего дня в датафрейме
+        # даты в том порядке, как они идут в датафрейме
+        dates_unique = df_check[date_column].drop_duplicates().tolist()
+
+        first_date = dates_unique[0]
+        last_date = dates_unique[-1]
 
         for date in dates_unique:
+
+            # пропускаем первую и последнюю дату
+            if date == first_date or date == last_date:
+                continue
 
             table = df_check[df_check['Дата'] == date]
             start = table[table['Время выхода'] == '05:00:00']
@@ -1419,9 +1427,8 @@ class VIMBGridProcessor(BaseParser):
             if len(start) == 0 and len(table) != 1:
                 print(f'⚠️ Для {date} не найдена стартовая программа дня.')
 
-            elif len(stop) == 0  and len(table) != 1:
+            elif len(stop) == 0 and len(table) != 1:
                 print(f'⚠️ Для {date} не найдена кульминационная программа дня.')
-    
 
     def update_vimb_file(self, web_new):
         """
