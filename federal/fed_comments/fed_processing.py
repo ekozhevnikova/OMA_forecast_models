@@ -865,6 +865,11 @@ class Federal_Processing:
             res_updated.rename(columns = {'Объединение': 'Доп столбец'}, inplace = True)
             res_updated = res_updated.reset_index(drop = True)
 
+
+            current_start = 0
+            current_end = 0
+            hist_start = 0
+            hist_end = 0
             #Удаляем дублирующиеся комментарии за период. Оставляем нужные.
             for i in range(len(res_updated)):
 
@@ -884,16 +889,71 @@ class Federal_Processing:
                                     
                         if check_comments():
                             list_of_comments = [item.split('. ') for item in comments]
-
+                        
                             #Получаем вложенный список
-                            nested_list = list_of_comments[0]
+                            nested_list = [item for sublist in list_of_comments for item in sublist]
                         
                             #Удаляем элементы из первого списка, если они содержатся во втором
                             result_list = [item for item in comment_per_week_splitted if item not in nested_list]
-                            
+                        
+                            # 2. Корректировка комментариев по изменению доли. Работаем с очищенным от дубликатов списком!
+                            current_parts = [p.strip() for p in str(comment_per_week_splitted).split('. ') if p.strip()]
+                            hist_parts = [p.strip() for p in str(comments).split('. ') if p.strip()]
+                        
+                            new_comment = ''
+                            # Извлекаем числа из комментариев с изменениями долей
+                            for current_part in current_parts:
+                                for hist_part in hist_parts:
+                                    
+                                    #share_values = {}
+                                    # Если это комментарий о доле
+                                    if 'доли' in current_part and 'доли' in hist_part:
+                        
+                                        #######################################################################
+                                        # Извлекаем числа из суммарного комментария за период
+                                        current_match = re.search(r'с\s+([\d.]+)\s+до\s+([\d.]+)', current_part)
+                        
+                                        # Очищаем строки от лишних точек
+                                        start_str = current_match.group(1).rstrip('.')
+                                        end_str = current_match.group(2).rstrip('.')
+                        
+                                        # Приводим к типу данных float
+                                        current_start = float(start_str)
+                                        current_end = float(end_str)
+                                        
+                                        #######################################################################
+                                        
+                                        # Извлекаем числа из суммарного комментария за период
+                                        hist_match = re.search(r'с\s+([\d.]+)\s+до\s+([\d.]+)', hist_part)
+                        
+                                        # Очищаем строки от лишних точек
+                                        start_hist_str = hist_match.group(1).rstrip('.')
+                                        end_hist_str = hist_match.group(2).rstrip('.')
+                        
+                                        # Приводим к типу данных float
+                                        hist_start = float(start_hist_str)
+                                        hist_end = float(end_hist_str)
+                        
+                                    if 'Снижение' in current_part and 'Снижение' in hist_part:
+                                        # Проверяем значения долей
+                                        if current_start == hist_start:
+                                            new_comment = f'Снижение доли с {hist_end} до {current_end}.'
+                        
+                                    if 'Рост' in current_part and 'Рост' in hist_part:
+                                        # Проверяем значения долей
+                                        if current_start == hist_start:
+                                            new_comment = f'Рост доли с {hist_end} до {current_end}.'
+                                            
+                            # 2. Ищем все комментарии о долях. Заменяем комментарии в result_list
+                            share_pattern = r'(Рост|Снижение)\s+доли\s+с\s+([\d.]+)\s+до\s+([\d.]+)\.?'
+                            for c in range(len(result_list)):
+                                match = re.search(share_pattern, result_list[c])
+                                if match:
+                                    # Обновляем комментарий по доле
+                                    result_list[c] = new_comment
+                                    
+                            # Обновляем комментарий для канала
                             res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
-                    else:
-                        continue
                 else:
                     res_updated.at[i, 'Комментарий'] = ''
 
