@@ -11,10 +11,10 @@ from concurrent.futures import ThreadPoolExecutor
 import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
-from OMA_tools.io_data.operations import File, Table, Dict_Operations
-#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
-from OMA_tools.federal.channel_forecast.calculator import *
-from OMA_tools.federal.channel_forecast.core.content_matching import Find_Similarity
+from io_data.operations import File, Table, Dict_Operations
+# from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from federal.channel_forecast.calculator import *
+from federal.channel_forecast.core.content_matching import Find_Similarity
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -92,7 +92,16 @@ class BaseParser:
             col_idx = col_idx // 26 - 1
         return col_letter
 
-    
+# ================================================================================================================
+    @staticmethod
+    def format_timedelta(td: pd.Timedelta) -> str:
+        total_seconds = int(td.total_seconds())
+        hours = total_seconds // 3600
+        minutes = (total_seconds % 3600) // 60
+        seconds = total_seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+# ================================================================================================================
     @staticmethod
     def format_time(time_int: int) -> str:
         """
@@ -1036,38 +1045,45 @@ class VIMBGridProcessor(BaseParser):
         # Вычленяем день недели
         data['День недели'] = data['Дата'].dt.strftime('%A').str.capitalize()
 
-
+        # в timedelta для расчетов
         data['Время выхода_'] = pd.to_timedelta(data['Время выхода'].astype(str))
-        data['Время выхода'] = data['Время выхода_'].apply(
-            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
-        )
-
         data['Прод-ть_'] = pd.to_timedelta(data['Прод-ть'].astype(str))
-        data['Прод-ть'] = data['Прод-ть_'].apply(
-            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
-        )
 
-        # Считаем время окончания
+        # расчет времени окончания
         data['Время окончания _'] = data['Время выхода_'] + data['Прод-ть_']
 
-        # Если время окончания превышает 24 часа, корректируем отображение
+        # Маска для перепрыгивания на следующий день
+        time_mask = (data['Время выхода_'] >= pd.Timedelta(hours=5)) & \
+                    (data['Время выхода_'] < pd.Timedelta(hours=6))
+
+        # Смотрим "следующую дату" в файле
+        next_date = data['Дата'].shift(-1)
+        # Смотрим "предыдующую дату" в файле
+        prev_date = data['Дата'].shift(1)
+        # Основная маска: не последняя строка файла, текущая дата != следующая
+        adjust_mask_main = time_mask & (data.index != data.index[-1]) & (data['Дата'] != next_date)
+        # Для последней строки файла: проверяем только с предыдущей датой
+        adjust_mask_last = (time_mask & (data.index == data.index[-1]) & (data['Дата'] == prev_date))
+
+        adjust_mask = adjust_mask_main | adjust_mask_last
+        data.loc[adjust_mask, 'Дата'] = data.loc[adjust_mask, 'Дата'] + pd.Timedelta(days=1)
+
+
+        data['Время выхода'] = data['Время выхода_'].apply(self.format_timedelta)
+        data['Прод-ть'] = data['Прод-ть_'].apply(self.format_timedelta)
         data['Время окончания'] = data['Время окончания _'].apply(
-            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+            lambda x: self.format_timedelta(x % pd.Timedelta(days=1))
         )
+        data['Дата'] = data['Дата'].dt.strftime('%Y-%m-%d')
 
         # Оставляем только нужные столбцы
         VIMB = data[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели']]
 
         # Преобразуем столбец 'Дата' в datetime
         VIMB['Дата'] = pd.to_datetime(VIMB['Дата'])
-
-        # Создаем маску и увеличиваем дату
-        time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
-        VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
-        
         VIMB['День недели'] = VIMB['Дата'].dt.strftime('%A').str.capitalize()
 
-        # Если нужно вернуть в строковый формат
+         # Если нужно вернуть в строковый формат
         VIMB['Дата'] = VIMB['Дата'].dt.strftime('%Y-%m-%d')
 
         #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
@@ -1097,7 +1113,12 @@ class VIMBGridProcessor(BaseParser):
         if not os.path.exists(self.folder_path):
             raise FileNotFoundError(f'Указанный путь {self.folder_path} не существует!')
 
-        xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
+        # xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
+        # Ищем файлы во всех подпапках
+        xlsx_files = glob.glob(
+            os.path.join(self.folder_path, '**', file_format),
+            recursive=True
+        )
 
         files = []
         # Перебираем найденные файлы и читаем их
@@ -1106,7 +1127,7 @@ class VIMBGridProcessor(BaseParser):
                 # Читаем файл в DataFrame
                 vimb = self.parse_VIMB(file_path)
                 files.append(vimb)
-        
+
             except Exception as e:
                 print(f'Ошибка при чтении файла {file_path}: {e}\n')
 
@@ -1116,36 +1137,47 @@ class VIMBGridProcessor(BaseParser):
 
         # Устанавливаем правильные сортировки для столбцов с датой и временем начала программы
         full_vimb[date_column] = pd.to_datetime(full_vimb[date_column])
-        sorted_vimb = full_vimb.sort_values(date_column).reset_index(drop = True)
-        
-        # Создаем столбец с Месяцем
-        sorted_vimb['Месяц'] = sorted_vimb[date_column].dt.month
-        sorted_vimb[date_column] = sorted_vimb[date_column].dt.strftime('%Y-%m-%d')
-        
-        months_unique = sorted_vimb['Месяц'].unique()
-        
-        result = {}
-        for month in months_unique:
-            df = sorted_vimb[sorted_vimb['Месяц'] == month].reset_index(drop = True)
-            data = df.drop('Месяц', axis = 1)
-            
-            dates_unique = data[date_column].unique()
-            res = []
-            for date in dates_unique:
-                t = data[data[date_column] == date]
-        
-                t['sort_key'] = t[time_column].apply(BaseParser.get_sort_key)
-        
-                final = t.sort_values('sort_key').reset_index(drop = True)
-        
-                final = final.drop('sort_key', axis = 1)
-                res.append(final)
-            
-            general_result = pd.concat(res).reset_index(drop = True)
-        
-            result[month] = general_result
 
-        result_df = pd.concat(result.values(), ignore_index = True)
+        # Убрала сортировку по месяцам
+        full_vimb['sort_key'] = full_vimb[time_column].apply(BaseParser.get_sort_key)
+
+        result_df = (
+            full_vimb
+            .sort_values([date_column, 'sort_key'])
+            .drop(columns='sort_key')
+            .reset_index(drop=True)
+        )
+
+        # sorted_vimb = full_vimb.sort_values(date_column).reset_index(drop = True)
+        #
+        # # Создаем столбец с Месяцем
+        # sorted_vimb['Месяц'] = sorted_vimb[date_column].dt.month
+        # sorted_vimb[date_column] = sorted_vimb[date_column].dt.strftime('%Y-%m-%d')
+        #
+        # months_unique = sorted_vimb['Месяц'].unique()
+        #
+        # result = {}
+        # for month in months_unique:
+        #     df = sorted_vimb[sorted_vimb['Месяц'] == month].reset_index(drop = True)
+        #     data = df.drop('Месяц', axis = 1)
+        #
+        #     dates_unique = data[date_column].unique()
+        #     res = []
+        #     for date in dates_unique:
+        #         t = data[data[date_column] == date]
+        #
+        #         t['sort_key'] = t[time_column].apply(BaseParser.get_sort_key)
+        #
+        #         final = t.sort_values('sort_key').reset_index(drop = True)
+        #
+        #         final = final.drop('sort_key', axis = 1)
+        #         res.append(final)
+        #
+        #     general_result = pd.concat(res).reset_index(drop = True)
+        #
+        #     result[month] = general_result
+        #
+        # result_df = pd.concat(result.values(), ignore_index = True)
 
         vimb = result_df.copy()
 
