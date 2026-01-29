@@ -229,7 +229,7 @@ class Federal_Comments:
             elif attribute == 'GRP СП':
                 if channel in SPECIAL_GRP_SP_THRESHOLDS:
                     delta = delta_SP(month, channel)
-                    if delta >= SPECIAL_GRP_SP_THRESHOLDS[channel]:
+                    if np.abs(delta) >= SPECIAL_GRP_SP_THRESHOLDS[channel]:
                         reasons.append('GRP СП')
                 elif check_value(attribute, value, COMMON_THRESHOLDS['GRP СП']):
                     reasons.append('GRP СП')
@@ -388,7 +388,6 @@ class Federal_Comments:
                 GRP_NRA = GRP - old_data['GRP Телемагазины'] - old_data['GRP СП']
             
         delta_GRP = GRP_NRA -  old_data['GRP ТП НРА']
-        #print(channel, month, changed_statistic, GRP_NRA, old_data['GRP ТП НРА'], delta_GRP)
         return round(delta_GRP)
 
 
@@ -441,7 +440,6 @@ class Federal_Comments:
                         #Рассматривается отдельно ситуация с СП. Если СП < 0 => КР растет; если СП > 0 => КР падает.
                         if statistic == 'GRP СП' or statistic == 'GRP ТП канала' or statistic == 'GRP Телемагазины':
                             if value * delta_grp < 0:
-                                #print(Channel, value, delta_grp, date, forecast_new)
                                 result_contributors[statistic] = value
                         else:
                             if value * delta_grp > 0:
@@ -565,12 +563,12 @@ class Federal_Comments:
                         else:
                             comments[statistic] = f'Снижение прогноза СП.'
         
-                    elif statistic == 'Т Общие' and channel == 'КАРУСЕЛЬ':
-                        val = reasons_dict['Т Общие']
-                        if val > 0:
-                            comments[statistic] = f'Дооткрытие рекламных объемов {val} GRP.'
-                        else:
-                            comments[statistic] = f'Сокращение рекламных объемов {(-1) * val} GRP.'
+                    #elif statistic == 'Т Общие' and channel == 'КАРУСЕЛЬ':
+                    #    val = reasons_dict['Т Общие']
+                    #    if val > 0:
+                    #        comments[statistic] = f'Дооткрытие рекламных объемов {val} GRP.'
+                    #    else:
+                    #        comments[statistic] = f'Сокращение рекламных объемов {(-1) * val} GRP.'
                 comment_per_channel[channel] = comments
                 comments_per_month[month] = comment_per_channel       
         #Генерация комментариев по шаблонам
