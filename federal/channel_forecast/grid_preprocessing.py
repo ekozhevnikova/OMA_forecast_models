@@ -35,6 +35,7 @@ ADD_CITY_TO_TARGETDEMO_FROM_REGION = False  # работаем в Федерал
 BREAK_FILTER = None
 AD_FILTER = None
 PROGRAM_FILTER = 'programDuration >= 300'
+MIN_GAP = pd.Timedelta(minutes=1)
 #############################################################################################
 
 class BaseParser:
@@ -1013,15 +1014,18 @@ class VIMBGridProcessor(BaseParser):
         Класс для парсинга сеток VIMB (Сводная таблица)
     """
     
-    def __init__(self, folder_path: str):
+    def __init__(self, folder_path: str, special_dates=None):
+
         """
             Инициализация парсера VIMB.
             
             Args:
                 folder_path: путь к файлам с новыми сетками ТВ-программ.
+                special_dates: набор дат для которых разрешён разрыв при смене дня (профилактика)
         """
         super().__init__(folder_path)
         self.folder_path = folder_path
+        self.special_dates = special_dates or set()
     
 
     def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows = 1):
@@ -1068,7 +1072,53 @@ class VIMBGridProcessor(BaseParser):
         adjust_mask = adjust_mask_main | adjust_mask_last
         data.loc[adjust_mask, 'Дата'] = data.loc[adjust_mask, 'Дата'] + pd.Timedelta(days=1)
 
+        # Обрабатываем отсутствие кульминационных программ и дни профилактики
+        rows_to_add = []
 
+        for i in range(len(data) - 1):
+
+            cur = data.iloc[i]
+            nxt = data.iloc[i + 1]
+
+            cur_date = cur['Дата']
+            next_date = nxt['Дата']
+
+            # Только смена дня
+            if cur_date != next_date:
+
+                # Особая дата (профилактика) — пропускаем
+                if cur_date.normalize() in self.special_dates:
+                    print(
+                        f"🛑 {cur_date.date()} – профилактика"
+                    )
+                    continue
+
+                end_time = cur['Время окончания _']
+                next_start = nxt['Время выхода_']
+
+                gap = next_start - end_time
+
+                # Допустимый разрыв до 1 минуты
+                if gap > MIN_GAP:
+                    print(
+                        f"Автозаполнение: {cur_date.date()} "
+                        f"{end_time} → {next_start}"
+                    )
+
+                    new_row = cur.copy()
+
+                    new_row['Время выхода_'] = end_time
+                    new_row['Прод-ть_'] = gap
+                    new_row['Время окончания _'] = next_start
+
+                    rows_to_add.append(new_row)
+
+        if rows_to_add:
+            data = pd.concat([data, pd.DataFrame(rows_to_add)], ignore_index=True)
+        # Сортировка
+        data = data.sort_values(['Дата', 'Время выхода_']).reset_index(drop=True)
+
+        #Преобразуем дату
         data['Время выхода'] = data['Время выхода_'].apply(self.format_timedelta)
         data['Прод-ть'] = data['Прод-ть_'].apply(self.format_timedelta)
         data['Время окончания'] = data['Время окончания _'].apply(
@@ -1147,7 +1197,6 @@ class VIMBGridProcessor(BaseParser):
             .drop(columns='sort_key')
             .reset_index(drop=True)
         )
-
         # sorted_vimb = full_vimb.sort_values(date_column).reset_index(drop = True)
         #
         # # Создаем столбец с Месяцем
@@ -1408,7 +1457,6 @@ class VIMBGridProcessor(BaseParser):
             print(f'Ошибка конвертации дат: {e}')
 
         # Проверка, что каждый день начинается в 05:00:00 и заканчивается в 05:00:00, за исключением первого и последнего дня в датафрейме
-        # даты в том порядке, как они идут в датафрейме
         dates_unique = df_check[date_column].drop_duplicates().tolist()
 
         first_date = dates_unique[0]
