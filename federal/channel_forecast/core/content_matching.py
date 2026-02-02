@@ -125,53 +125,53 @@ class Find_Similarity:
     #    return result, df
 
     
-    #@staticmethod
-    #def preprocess_text(text: str):
-    #    """
-    #        Функция предобработки текста. Текст приводится к нижнему регистру, удаляются спец символы, пунктуация и пробелы.
-    #        Args:
-    #            text: str: Текст типа данных строка
-    #        Returns:
-    #            text_delete_tab: причёсанный текст
-    #    """
-    #    # Приводим к нижнему регистру
-    #    text_lowered = text.lower()
-    #    # Удаляем специальные символы, оставляем только буквы и пробелы
-    #    text_cleaned = re.sub(r'[^а-яёa-z\s]', '', text_lowered)
-    #    # Удаляем пунктуацию
-    #    text_delete_punc = re.sub(r'[^\w\s]', '', text_cleaned) 
-    #    # Удаляем лишние пробелы
-    #    text_delete_tab = re.sub(r'\s+', ' ', text_delete_punc).strip()
-    #    return text_delete_tab
-
-    
-
     @staticmethod
     def preprocess_text(text: str):
         """
-        Функция предобработки текста. Текст приводится к нижнему регистру, 
-        удаляются спец символы, пунктуация и пробелы.
-        
-        Args:
-            text: str: Текст типа данных строка
-        
-        Returns:
-            text_delete_tab: причёсанный текст
+            Функция предобработки текста. Текст приводится к нижнему регистру, удаляются спец символы, пунктуация и пробелы.
+            Args:
+                text: str: Текст типа данных строка
+            Returns:
+                text_delete_tab: причёсанный текст
         """
-        if not text or not isinstance(text, str):
-            return ""
-        
         # Приводим к нижнему регистру
         text_lowered = text.lower()
-        
-        # Удаляем все, кроме букв, цифр, пробелов и точки (для чисел с точкой)
-        # Можно добавить другие нужные символы: [^а-яёa-z0-9.\s]
-        text_cleaned = re.sub(r'[^а-яёa-z0-9.\s]', '', text_lowered)
-        
+        # Удаляем специальные символы, оставляем только буквы и пробелы
+        text_cleaned = re.sub(r'[^а-яёa-z\s]', '', text_lowered)
+        # Удаляем пунктуацию
+        text_delete_punc = re.sub(r'[^\w\s]', '', text_cleaned) 
         # Удаляем лишние пробелы
-        text_delete_tab = re.sub(r'\s+', ' ', text_cleaned).strip()
-        
+        text_delete_tab = re.sub(r'\s+', ' ', text_delete_punc).strip()
         return text_delete_tab
+
+    
+
+    #@staticmethod
+    #def preprocess_text(text: str):
+    #    """
+    #    Функция предобработки текста. Текст приводится к нижнему регистру, 
+    #    удаляются спец символы, пунктуация и пробелы.
+    #    
+    #    Args:
+    #        text: str: Текст типа данных строка
+    #    
+    #    Returns:
+    #        text_delete_tab: причёсанный текст
+    #    """
+    #    if not text or not isinstance(text, str):
+    #        return ""
+    #    
+    #    # Приводим к нижнему регистру
+    #    text_lowered = text.lower()
+    #    
+    #    # Удаляем все, кроме букв, цифр, пробелов и точки (для чисел с точкой)
+    #    # Можно добавить другие нужные символы: [^а-яёa-z0-9.\s]
+    #    text_cleaned = re.sub(r'[^а-яёa-z0-9.\s]', '', text_lowered)
+    #    
+    #    # Удаляем лишние пробелы
+    #    text_delete_tab = re.sub(r'\s+', ' ', text_cleaned).strip()
+    #    
+    #    return text_delete_tab
 
 
     def compare_uneven_lists_tfidf(self, preprocess = True):
@@ -225,7 +225,7 @@ class Find_Similarity:
                              Если схожие элементы не найдены, то заполняем similarity нулями.
         """
         similarity_matrix = self.compare_uneven_lists_tfidf()
-        
+    
         # Собираем все пары выше порога
         pairs = []
         for i in range(len(self.List)):
@@ -234,14 +234,14 @@ class Find_Similarity:
                     pairs.append((i, j, similarity_matrix[i, j]))
         
         # Сортируем по убыванию схожести
-        pairs.sort(key = lambda x: x[2], reverse = True)
+        pairs.sort(key=lambda x: x[2], reverse=True)
 
         if print_in_console:
             #Вывод ТОП N схожих пар в консоль
             print(f"Топ - {top_n} наиболее похожих пар:")
             print("-" * 80)
             
-            for i, match in enumerate(pairs[: top_n]):
+            for i, match in enumerate(pairs[:top_n]):
                 print(f"{i + 1}. Схожесть: {match['similarity']:.3f}")
                 print(f"   Список 1: '{match['text1']}'")
                 print(f"   Список 2: '{match['text2']}'")
@@ -249,7 +249,7 @@ class Find_Similarity:
         
         # Ограничиваем количество пар если нужно
         if max_pairs:
-            pairs = pairs[: max_pairs]
+            pairs = pairs[:max_pairs]
         
         # Форматируем результаты
         results = []
@@ -262,34 +262,65 @@ class Find_Similarity:
                 f'index_{column_name_second}': j
             })
         data = pd.DataFrame(results)
-    
+        
         programs = list(set(data[f'Программа {column_name_second}']))
-        #Удаляем дубликаты. Оставляем только те программы из дублец, для которых найдено максимальное сходство
+        
+        # Удаляем дубликаты. Оставляем только те программы из дубликатов, для которых найдено максимальное сходство
         cleaned_results = []
         for i in range(len(programs)):
             df = data.loc[data[f'Программа {column_name_second}'] == programs[i]]
-            #Если найдена только одна строка без дубликатов, то значит для программы скорее всего нашлось точное соответствие
             if len(df) == 1:
                 cleaned_results.append(df)
-            #Если найдено несколько похожих программ для выбранной, то оставляем только максимально похожую
             else:
                 cleaned_results.append(df.loc[df['similarity'] == max(list(df['similarity']))])
-        final = pd.concat(cleaned_results)
         
-        #Встречаются ситуации, когда показатель similarity одинаковыйи выбрать максимальный не удается. 
-        #Например, программа посчитала "Красавчик" == "Красавчик" и "Красавчик 2" == "Красавчик"
-        #Воспользуемся удалением дубликатов
-        data_unique = final.drop_duplicates(subset = [f'Программа {column_name_second}', 'similarity'], 
-                                            keep = 'first').reset_index(drop = True)
+        final = pd.concat(cleaned_results) if cleaned_results else pd.DataFrame()
         
-        #Программы, для которых не нашлось похожих, в столбец схожести пишем 0
-        programs_found = list(data_unique[f'Программа {column_name_second}'])
+        # Встречаются ситуации, когда показатель similarity одинаковый и выбрать максимальный не удается
+        data_unique = final.drop_duplicates(
+            subset=[f'Программа {column_name_second}', 'similarity'], 
+            keep='first'
+        ).reset_index(drop=True) if not final.empty else pd.DataFrame()
+        
+        # Программы, для которых не нашлось похожих, в столбец схожести пишем 0
+        programs_found = list(data_unique[f'Программа {column_name_second}']) if not data_unique.empty else []
         programs_not_found = []
+        
         for i in range(len(self.small_list)):
             if self.small_list[i] not in programs_found:
                 programs_not_found.append(self.small_list[i])
-                data_unique.loc[len(data_unique) + 1] = [0, self.small_list[i], 0.0, 0, 0]
-        return data_unique
+                new_row = {
+                    f'Программа {column_name_first}': 0,
+                    f'Программа {column_name_second}': self.small_list[i],
+                    'similarity': 0.0,
+                    f'index_{column_name_first}': 0,
+                    f'index_{column_name_second}': 0
+                }
+                
+                if data_unique.empty:
+                    data_unique = pd.DataFrame([new_row])
+                else:
+                    data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index=True)
+        
+        # ДОБАВЛЕННАЯ ПРОВЕРКА: все ли программы нашли соответствия
+        all_programs_matched = len(programs_not_found) == 0
+        
+        # Вывод информации о результатах сопоставления
+        print(f"\n=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
+        print(f"Всего программ для поиска: {len(self.small_list)}")
+        print(f"Найдено соответствий (similarity >= {min_similarity}): {len(programs_found)}")
+        print(f"Не найдено соответствий: {len(programs_not_found)}")
+        
+        if programs_not_found:
+            print(f"Программы без соответствий: {programs_not_found}")
+        
+        if all_programs_matched:
+            print("✓ УСПЕХ: Для всех программ найдены соответствия (хотя бы с минимальной схожестью)")
+        else:
+            print("⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
+        
+        # Возвращаем и DataFrame, и флаг успешности
+        return data_unique, all_programs_matched
     
 
     def generate_similar_features(self, similarity_df, print_df = False) -> dict:
