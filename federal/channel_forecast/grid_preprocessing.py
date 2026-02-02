@@ -1078,6 +1078,8 @@ class VIMBGridProcessor(BaseParser):
         # Если нужно вернуть в строковый формат
         VIMB['Дата'] = VIMB['Дата'].dt.strftime('%Y-%m-%d')
 
+        VIMB = VIMB[~VIMB['Название программы'].str.contains('р/б', case = False, na = False)]
+
         #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
         if 'Камеди клаб' in list(VIMB['Название программы']):
             VIMB['Название программы'].replace('Камеди клаб', 'Комеди Клаб', inplace = True)
