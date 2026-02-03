@@ -199,6 +199,8 @@ class TextPreprocessor:
         """
             Отдельный поток для стандартной обработки скобок/кавычек.
         """
+        if text == 'фильм, фильм, фильм':
+            return 'фильм'
         # --- НОВЫЙ БЛОК: Обработка мультфильмов со списком в скобках ---
         # Например: 'Мультфильмы (M/ф "Братья Лю"; M/ф "На задней парте"; M/ф "Кошкин дом"; M/ф "Муравьишка-хвастунишка"; M/ф "Тайна далекого острова")'
         # Проверяем, является ли строка списком мультфильмов в скобках
@@ -219,9 +221,12 @@ class TextPreprocessor:
         
         # 2. Проверка на специальные имена
         if text.lower() in (name.lower() for name in self.SPECIAL_NAMES):
-            return self._clean_special_chars(
-                self._remove_year_conditions(text)
-        )
+            new_str = self._clean_special_chars(self._remove_year_conditions(text))
+            if new_str == 'мультфильмы':
+                return 'мультфильм'
+
+            else:
+                return new_str
 
         # --- Основная обработка по типам ---
     
@@ -281,6 +286,8 @@ class TextPreprocessor:
             [unique_list.append(x) for x in parts if x not in unique_list]
             res_str = " ".join(unique_list)
 
+            if res_str == ',':
+                print(program)
             
             result.append(res_str)
             df.loc[df['Название программы'] == program, 'program_name'] = res_str
@@ -366,19 +373,8 @@ class CosineSimilarity:
                     pairs.append((i, j, similarity_matrix[i, j]))
         
         # Сортируем по убыванию схожести
-        pairs.sort(key=lambda x: x[2], reverse=True)
-
-        if print_in_console:
-            #Вывод ТОП N схожих пар в консоль
-            print(f"Топ - {top_n} наиболее похожих пар:")
-            print("-" * 80)
-            
-            for i, match in enumerate(pairs[:top_n]):
-                print(f"{i + 1}. Схожесть: {match['similarity']:.3f}")
-                print(f"   Список 1: '{match['text1']}'")
-                print(f"   Список 2: '{match['text2']}'")
-                print()
-        
+        pairs.sort(key = lambda x: x[2], reverse = True)
+ 
         # Ограничиваем количество пар если нужно
         if max_pairs:
             pairs = pairs[:max_pairs]
@@ -410,8 +406,8 @@ class CosineSimilarity:
         
         # Встречаются ситуации, когда показатель similarity одинаковый и выбрать максимальный не удается
         data_unique = final.drop_duplicates(
-            subset=[f'Программа {column_name_second}', 'similarity'], 
-            keep='first'
+            subset = [f'Программа {column_name_second}', 'similarity'], 
+            keep = 'first'
         ).reset_index(drop=True) if not final.empty else pd.DataFrame()
         
         # Программы, для которых не нашлось похожих, в столбец схожести пишем 0
@@ -460,11 +456,12 @@ class CosineSimilarity:
         # ДОБАВЛЕННАЯ ПРОВЕРКА: все ли программы нашли соответствия
         all_programs_matched = len(programs_not_found) == 0
         
-        # Вывод информации о результатах сопоставления
-        print(f"\n=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
-        print(f"Всего программ для поиска: {len(self.small_list)}")
-        print(f"Найдено соответствий (similarity >= {min_similarity}): {len(programs_found)}")
-        print(f"Не найдено соответствий: {len(programs_not_found)}")
+        if print_in_console:
+            # Вывод информации о результатах сопоставления
+            print(f"\n=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
+            print(f"Всего программ для поиска: {len(self.small_list)}")
+            print(f"Найдено соответствий (similarity >= {min_similarity}): {len(programs_found)}")
+            print(f"Не найдено соответствий: {len(programs_not_found)}")
         
         if programs_not_found:
             print(f"Программы без соответствий: {programs_not_found}")
@@ -530,3 +527,34 @@ class CosineSimilarity:
                 print(f'{program}: длина DataFrame {len(data)}')
                 print('#########################')
         return dict_analysis
+    
+
+
+
+
+
+
+"""
+text_prepr = TextPreprocessor()
+
+# 1. Программы в Palomars
+plmrs_prgms, data_plmrs = text_prepr.clean_text(palomars_init, 'Название программы')
+# Сет из уникальных программ Паломарса
+plmrs_uniq_progs = list(set(plmrs_prgms))
+
+# 2. Программы в VIMB
+vimb_prgms, vimb = text_prepr.clean_text(vimb_init, 'Название программы')
+# Сет из уникальных программ ВИМБа
+vimb_uniq_progs = list(set(vimb_prgms))
+
+
+similar = CosineSimilarity(plmrs_uniq_progs, vimb_uniq_progs, data_plmrs, vimb)
+
+# Читаем данные из справочника
+vocabulary = pd.read_excel(f'{prefix}Справочники/Справочник.xlsx', sheet_name = 'СТС LOVE')
+
+
+result, matched_programs = similar.comparison(vocabulary, min_similarity = 0.5)
+
+result_df = result[result['similarity'] != 0.00000].reset_index(drop = True)
+"""

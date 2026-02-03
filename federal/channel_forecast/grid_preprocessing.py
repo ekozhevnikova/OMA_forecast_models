@@ -1092,6 +1092,9 @@ class VIMBGridProcessor(BaseParser):
             stop_words = ['это надо знать', 'распаковка', 'экодело', 'открывариум']
             pattern = '|'.join(stop_words)
             VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
+        
+        elif self.channel_name == '2X2':
+            VIMB = VIMB[~VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)]
 
         # Для канала ТНТ4 заменяем название Камеди клаб на Комеди Клаб
         #if self.channel_name == 'ТНТ4':
