@@ -3,35 +3,247 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
-import nltk
-from nltk.corpus import stopwords
+#import nltk
+#from nltk.corpus import stopwords
 
 import warnings
 warnings.filterwarnings('ignore')
 
 # Скачиваем стоп-слова если нужно
-nltk.download('stopwords')
+#nltk.download('stopwords')
 
 
-class Find_Similarity:
+class TextPreprocessor:
     """
-        Класс для поиска схожих ТВ-программ с помощью векторизатора TF-IDF
+        Класс для предобработки названий телепрограмм.
+        Отвечает только за чистку и нормализацию названий.
     """
-    def __init__(self, List, small_list, df_big, small_df):
-        """
-            List: список, в котором будем искать похожие элементы.
-            small_list: лист, для которого будем искать похожие элементы в списке List.
-            df_big: Датафрейм с историческими данными
-            small_df: Новый датафрейм, для которого будем искать схожие элементы
-        """
-        self.List = List
-        self.small_list = small_list
-        self.df_big = df_big
-        self.small_df = small_df
 
+    def __init__(self):
+        # КОНСТАНТЫ
+
+        # Удаляем обратный слеш и другие специальные символы
+        self.SPECIAL_CHARS_TO_REMOVE = [
+                '\\', '/', '|', ':', ';', '*', '?', '<', '>', '~', '`',
+                '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '+', 
+                '=', '[', ']', '{', '}', '-', '№'
+            ]
+        
+        # Список из ограничений по возрасту
+        self.YEAR_CONDITIONS = ['0+', '6+', '12+']
+
+        # Список специальных названий
+        self.SPECIAL_NAMES = {
+            'сериал', 'комедийный сериал', 'художественный фильм', 'мультфильм', 'мультфильмы', 'мультфильм 0+'
+            }
+
+        # Список из стоп-слов
+        self.STOP_WORDS = {
+            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'х/ф', 'm/ф', 'р/б'
+        }
+
+
+    def _clean_special_chars(self, text: str):
+        """
+            Удаляет специальные символы из текста.
+        """
+        cleaned = text
+        for char in self.SPECIAL_CHARS_TO_REMOVE:
+            cleaned = cleaned.replace(char, '')
+        
+        # Убираем лишние пробелы, которые могли появиться после удаления символов
+        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        
+        # Удаляем точки, запятые и другие знаки препинания в конце строки
+        cleaned = re.sub(r'[.,;:!?\-_]+$', '', cleaned).strip()
+        
+        # Удаляем двойные и одинарные кавычки (если остались)
+        cleaned = cleaned.replace('"', '').replace("'", '')
+        
+        return cleaned
+
+
+    def _normalize_match(self, match):
+        """
+            Нормализует текст внутри скобок в строке, удаляя лишние пробелы вокруг содержимого скобок.
+        """
+        # Содержимое скобок
+        content = match.group(1).strip()  # убираем пробелы с обеих сторон
+        return f'({content})'
+
+
+    def _extract_and_clean_title(self, text: str):
+        """
+            Извлекает и очищает название из текста, заключенного в кавычки, а если кавычек нет - удаляет скобки.
+        """
+        # Используем нежадный поиск для нахождения первых кавычек
+        match = re.search(r'"([^"]*(?:"[^"]*"[^"]*)*)"', text)
+        if match:
+            title = match.group(1)
+            # Удаляем все кавычки внутри названия
+            title = title.replace('"', '')
+            title = re.sub(r'\s+', ' ', title).strip()
+            return title
+        return re.sub(r'[()]', ' ', text)
     
-    @staticmethod
-    def clean_text(df, column_name):
+
+    def _replace_whole_word(self, text: str, old_word: str, new_word: str):
+        """
+            Заменяет подстроки. Например "Комеди Клаб" -> "Камеди Клаб"
+        """
+        # Используем регулярное выражение с границами слов
+        pattern = r'\b' + re.escape(old_word) + r'\b'
+        return re.sub(pattern, new_word, text)
+
+
+    def _remove_stop_words(self, text: str) -> str:
+        """
+            Удаляет стоп-слова из текста.
+        """
+        result = text
+        for stop_word in self.STOP_WORDS:
+            # Заменяем только целые слова
+            pattern = r'\b' + re.escape(stop_word) + r'\b'
+            result = re.sub(pattern, '', result, flags = re.IGNORECASE)
+        return result
+
+
+    def _remove_year_conditions(self, text: str) -> str:
+        """
+            Удаляет годовые ограничения из текста.
+        """
+        result = text
+        for condition in self.YEAR_CONDITIONS:
+            result = result.replace(condition, "")
+        return result.strip()
+
+
+    def _process_brackets_no_quotes(self, text: str) -> str:
+        """
+            Обработка текста со скобками, но без кавычек.
+        """
+        # 1. Находим все пары скобок и их содержимое
+        pattern = r'\(([^)]+)\)'
+        # Применяем нормализацию ко всем скобкам (удаляем пробелы после первой скобки и перед второй скобкой)
+        normalized = re.sub(pattern, self._normalize_match, text)
+        
+        # 2. Заменяем скобки на пробелы
+        text_simplified = re.sub(r'[()]', ' ', normalized)
+        
+        # 3. Убираем лишние пробелы
+        text_simplified = re.sub(r'\s+', ' ', text_simplified)
+        
+        # 4. Убираем пробелы вначале и в конце строки
+        text_simplified = text_simplified.strip()
+        
+        # 5. Удаляем стоп-слова
+        new_str = self._remove_stop_words(text_simplified)
+        
+        # 6. Удаляем годовые условия
+        new_str = self._remove_year_conditions(new_str)
+        return self._clean_special_chars(new_str)
+
+
+    def _process_brackets_with_quotes(self, text: str) -> str:
+        """
+            Обработка текста со скобками и кавычками.
+        """
+        # 1. Находим все пары скобок и их содержимое
+        pattern = r'\(([^)]+)\)'
+        # Применяем нормализацию ко всем скобкам (удаляем пробелы после первой скобки и перед второй скобкой)
+        simplified = re.sub(pattern, self._normalize_match, text)
+        
+        # 2. Удаляем стоп-слова
+        result = self._remove_stop_words(simplified)
+        
+        # 3. Удаляем лишние пробелы
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        # 4. Удаляем скобки
+        result = re.sub(r'[()]', ' ', result)
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        # 5. Извлекаем текст из кавычек
+        result = self._extract_and_clean_title(result)
+        
+        # 6. Удаляем годовые условия
+        result = self._remove_year_conditions(result)
+        
+        return self._clean_special_chars(result)
+    
+
+    def _process_simple_text(self, text: str) -> str:
+        """
+            Обработка простого текста без скобок и кавычек.
+        """
+        result = text
+    
+        # 1. Удаляем стоп-слова
+        result = self._remove_stop_words(result)
+        
+        # 2. Проверяем, не остался ли только стоп-слово
+        result = result.strip()
+        if result.lower() in (word.lower() for word in self.STOP_WORDS):
+            result = ""
+        
+        # 3. Нормализуем пробелы
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        # 4. Удаляем годовые условия
+        result = self._remove_year_conditions(result)
+        
+        return self._clean_special_chars(result)
+
+
+    def preprocess_text(self, text: str):
+        """
+            Отдельный поток для стандартной обработки скобок/кавычек.
+        """
+        # --- НОВЫЙ БЛОК: Обработка мультфильмов со списком в скобках ---
+        # Например: 'Мультфильмы (M/ф "Братья Лю"; M/ф "На задней парте"; M/ф "Кошкин дом"; M/ф "Муравьишка-хвастунишка"; M/ф "Тайна далекого острова")'
+        # Проверяем, является ли строка списком мультфильмов в скобках
+        # Паттерн: Название + (M/ф "фильм1"; M/ф "фильм2"; ...)
+        # 1. Проверка на список мультфильмов/фильмов в скобках
+        if re.search(r'(?:мультфильмы|фильмы|сериалы)\s*\([^)]*(?:M/ф|х/ф|фильм|сериал)[^)]*\)', 
+                    text, re.IGNORECASE):
+            # Определяем тип по первому слову
+            first_word = text.split()[0].lower()
+            if 'мультфильм' in first_word:
+                return 'мультфильм'
+            elif 'сериал' in first_word:
+                return 'сериал'
+            elif 'фильм' in first_word:
+                return 'фильм'
+            else:
+                return first_word
+        
+        # 2. Проверка на специальные имена
+        if text.lower() in (name.lower() for name in self.SPECIAL_NAMES):
+            return self._clean_special_chars(
+                self._remove_year_conditions(text)
+        )
+
+        # --- Основная обработка по типам ---
+    
+        has_brackets = '(' in text and ')' in text      # есть скобки
+        has_quotes = '"' in text                        # есть кавычки
+        
+        if has_brackets and not has_quotes:
+
+            # Случай 1: Скобки без кавычек
+            return self._process_brackets_no_quotes(text)
+        
+        elif has_brackets and has_quotes:
+            # Случай 2: Скобки с кавычками
+            return self._process_brackets_with_quotes(text)
+        
+        else:
+            # Случай 3: Нет ни скобок, ни кавычек
+            return self._process_simple_text(text)
+    
+
+
+    def clean_text(self, df, column_name):
         """
             Функция зачистки текста, избавление от пунктуации и лишних элементов. Например, если изначально было
             название 'Комедийный сериал (Сериал "Универ")' -> 'Универ'	
@@ -51,171 +263,91 @@ class Find_Similarity:
         df['program_name'] = ''
 
         for program in set_of_programs:
-            if '"' in program:
-                # Разделяем по кавычкам и берем второй элемент (между кавычками)
-                parts = program.split('"')
-                if len(parts) >= 3:
-                    name = parts[1].strip()
-                    name_cleaned = Find_Similarity.preprocess_text(name)
-                    result.append(name_cleaned)
-                    df.loc[df['Название программы'] == program, 'program_name'] = name_cleaned
-            else:
-                # Если кавычек нет, добавляем название как есть
-                name = Find_Similarity.preprocess_text(program)
-                result.append(name)
-                df.loc[df['Название программы'] == program, 'program_name'] = name
+
+            original = program
+            # Заменяем букву ё на е при необходимости
+            text = original.lower().replace('ё', 'е')
+
+            # Умышленно заменяем 'комеди' на 'камеди'
+            if 'комеди' in text:
+                text = self._replace_whole_word(text, 'комеди', 'камеди')
+                
+            new_str = self.preprocess_text(text)
+
+            # Сначала нормализуем: удаляем точки и скобки
+            cleaned = new_str.replace(".", "").replace("(", "").replace(")", "")
+            parts = cleaned.split()
+            unique_list = []
+            [unique_list.append(x) for x in parts if x not in unique_list]
+            res_str = " ".join(unique_list)
+
+            
+            result.append(res_str)
+            df.loc[df['Название программы'] == program, 'program_name'] = res_str
+
         return result, df
-    
 
-    #@staticmethod
-    #def clean_text(df, column_name):
-    #    """
-    #    Простая и надежная версия функции зачистки текста
-    #    """
-    #    result = []
-    #    set_of_programs = list(set(list(df[column_name])))
-    #    
-    #    df['program_name'] = ''
-    #    
-    #    for program in set_of_programs:
-    #        name = program.strip()
-    #        extracted_name = name
-    #        
-    #        # Шаг 1: Ищем последние скобки
-    #        if '(' in name and ')' in name:
-    #            open_idx = name.rfind('(')
-    #            close_idx = name.rfind(')')
-    #            
-    #            if open_idx < close_idx:
-    #                bracket_content = name[open_idx + 1:close_idx].strip()
-    #                
-    #                # Шаг 2: Ищем кавычки в содержимом скобок
-    #                quote_start = -1
-    #                quote_end = -1
-    #                
-    #                # Проверяем разные типы кавычек
-    #                if '"' in bracket_content:
-    #                    quote_start = bracket_content.find('"')
-    #                    quote_end = bracket_content.rfind('"')
-    #                elif '«' in bracket_content and '»' in bracket_content:
-    #                    quote_start = bracket_content.find('«')
-    #                    quote_end = bracket_content.find('»')
-    #                
-    #                # Шаг 3: Извлекаем содержимое
-    #                if quote_start != -1 and quote_end != -1 and quote_end > quote_start:
-    #                    # Берем содержимое кавычек
-    #                    extracted_name = bracket_content[quote_start + 1:quote_end].strip()
-    #                else:
-    #                    # Берем все содержимое скобок
-    #                    extracted_name = bracket_content
-    #        
-    #        # Шаг 4: Убираем префиксы
-    #        prefixes = ['Х/ф', 'х/ф', 'Х/ф ', 'х/ф ', 'Сериал', 'сериал', 'Фильм', 'фильм']
-    #        for prefix in prefixes:
-    #            if extracted_name.startswith(prefix):
-    #                extracted_name = extracted_name[len(prefix):].lstrip(':').lstrip().lstrip('-').lstrip()
-    #                break
-    #        
-    #        # Шаг 5: Очищаем текст
-    #        name_cleaned = Find_Similarity.preprocess_text(extracted_name)
-    #        
-    #        result.append(name_cleaned)
-    #        df.loc[df[column_name] == program, 'program_name'] = name_cleaned
-    #    
-    #    return result, df
 
-    
-    @staticmethod
-    def preprocess_text(text: str):
+
+
+class CosineSimilarity:
+    """
+        Класс для поиска схожих ТВ-программ с помощью TF-IDF.
+        Отвечает только за сравнение и анализ схожести.
+    """
+    def __init__(
+            self, 
+            List: list, 
+            small_list: list, 
+            df_big: pd.DataFrame, 
+            small_df: pd.DataFrame, 
+            preprocessor = None
+            ):
         """
-            Функция предобработки текста. Текст приводится к нижнему регистру, удаляются спец символы, пунктуация и пробелы.
             Args:
-                text: str: Текст типа данных строка
-            Returns:
-                text_delete_tab: причёсанный текст
+                preprocessor: экземпляр TextPreprocessor (или None для использования по умолчанию)
         """
-        # Приводим к нижнему регистру
-        text_lowered = text.lower()
-        # Удаляем специальные символы, оставляем только буквы и пробелы
-        text_cleaned = re.sub(r'[^а-яёa-z\s]', '', text_lowered)
-        # Удаляем пунктуацию
-        text_delete_punc = re.sub(r'[^\w\s]', '', text_cleaned) 
-        # Удаляем лишние пробелы
-        text_delete_tab = re.sub(r'\s+', ' ', text_delete_punc).strip()
-        return text_delete_tab
+        self.preprocessor = preprocessor or TextPreprocessor()
+        self.vectorizer = TfidfVectorizer()
 
+        self.List = List
+        self.small_list = small_list
+        self.df_big = df_big
+        self.small_df = small_df
     
 
-    #@staticmethod
-    #def preprocess_text(text: str):
-    #    """
-    #    Функция предобработки текста. Текст приводится к нижнему регистру, 
-    #    удаляются спец символы, пунктуация и пробелы.
-    #    
-    #    Args:
-    #        text: str: Текст типа данных строка
-    #    
-    #    Returns:
-    #        text_delete_tab: причёсанный текст
-    #    """
-    #    if not text or not isinstance(text, str):
-    #        return ""
-    #    
-    #    # Приводим к нижнему регистру
-    #    text_lowered = text.lower()
-    #    
-    #    # Удаляем все, кроме букв, цифр, пробелов и точки (для чисел с точкой)
-    #    # Можно добавить другие нужные символы: [^а-яёa-z0-9.\s]
-    #    text_cleaned = re.sub(r'[^а-яёa-z0-9.\s]', '', text_lowered)
-    #    
-    #    # Удаляем лишние пробелы
-    #    text_delete_tab = re.sub(r'\s+', ' ', text_cleaned).strip()
-    #    
-    #    return text_delete_tab
-
-
-    def compare_uneven_lists_tfidf(self, preprocess = True):
+    def compare_lists(self, preprocess: bool = True):
         """
-            Сравнивает все элементы первого списка со всеми элементами второго списка, считается косинусное сходство для
-            каждой пары. 
-            Args:
-                preprocess: Флаг: если True -> используем функцию preprocess_text, если False -> не используем функцию preprocess_text
-            Returns:
-                numpy.ndarray: Матрица схожести shape (len(list1), len(list2))
+            Сравнивает два списка текстов.
         """
         if preprocess:
-            processed_list1 = [Find_Similarity.preprocess_text(text) for text in self.List]
-            processed_list2 = [Find_Similarity.preprocess_text(text) for text in self.small_list]
+            processed_list1 = [self.preprocessor.preprocess_text(text) for text in self.List]
+            processed_list2 = [self.preprocessor.preprocess_text(text) for text in self.small_list]
         else:
             processed_list1 = self.List
             processed_list2 = self.small_list
         
-        # Объединяем все тексты
         all_texts = processed_list1 + processed_list2
+        tfidf_matrix = self.vectorizer.fit_transform(all_texts)
         
-        # Создаем и обучаем TF-IDF векторзатор
-        vectorizer = TfidfVectorizer()
-        tfidf_matrix = vectorizer.fit_transform(all_texts)
+        tfidf_list1 = tfidf_matrix[:len(processed_list1)]
+        tfidf_list2 = tfidf_matrix[len(processed_list1):]
         
-        # Разделяем матрицу
-        tfidf_list1 = tfidf_matrix[: len(processed_list1)]
-        tfidf_list2 = tfidf_matrix[len(processed_list1): ]
-        
-        # Сравниваем все со всеми
-        similarity_matrix = cosine_similarity(tfidf_list1, tfidf_list2)
-        return similarity_matrix
+        return cosine_similarity(tfidf_list1, tfidf_list2)
 
 
     def comparison(self, 
+                   vocabulary: pd.DataFrame,
                    column_name_first: str = 'Palomars',
                    column_name_second: str = 'VIMB',
-                   min_similarity: float = 0.2, 
+                   min_similarity: float = 0.5, 
                    top_n: int = 10, 
                    max_pairs = None, 
                    print_in_console = False):
         """
             Сравнение массивов с фильтрацией.
             Args:
+                vocabulary: pd.DataFrame: таблица-справочник для сопоставления программ.
                 min_similarity: порог минимальной схожести.
                 top_n: максимальное количество схожих пар, выводимых на экран. По дефолту 10.
                 max_pairs: ограничение на максимальное количество схожих пар. Если None, то игнорируем этот параметр.
@@ -224,7 +356,7 @@ class Find_Similarity:
                 data_unique: DataFrame, в котором приведены максимально схожие элементы в соответствии с порогом min_similarity. 
                              Если схожие элементы не найдены, то заполняем similarity нулями.
         """
-        similarity_matrix = self.compare_uneven_lists_tfidf()
+        similarity_matrix = self.compare_lists()
     
         # Собираем все пары выше порога
         pairs = []
@@ -300,7 +432,30 @@ class Find_Similarity:
                 if data_unique.empty:
                     data_unique = pd.DataFrame([new_row])
                 else:
-                    data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index=True)
+                    data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index = True)
+        
+        # Отбираем найденные программы
+        found_programs = data_unique[data_unique['similarity'] != 0.00000].reset_index(drop = True)
+
+        # Отбираем ненайденные программы
+        not_found = data_unique[data_unique['similarity'] == 0.00000].reset_index(drop = True)
+
+        # Пытаемся найти совпадающие программы, основываясь на данных справочника
+        not_found_updated = pd.merge(not_found, vocabulary, on = 'Программа VIMB', how = 'left')
+        not_found_updated = not_found_updated[['Программа', 'Программа VIMB', 'similarity_new', 'index_Palomars', 'index_VIMB']]
+        not_found_updated.rename(columns = {'Программа': 'Программа Palomars', 'similarity_new': 'similarity'}, inplace = True)
+        not_found_updated = not_found_updated.fillna(0)
+
+        result_df = pd.concat([found_programs, not_found_updated]).reset_index(drop = True)
+
+        # Отбираем финальные программы без соответствия
+        result_not_found = result_df[result_df['similarity'] == 0.00000].reset_index(drop = True)
+        programs_not_found = list(result_not_found['Программа VIMB'])
+
+        # Отбираем финальные программы c соответствием
+        result_found = result_df[result_df['similarity'] != 0.00000].reset_index(drop = True)
+        programs_found = list(result_found['Программа VIMB'])
+
         
         # ДОБАВЛЕННАЯ ПРОВЕРКА: все ли программы нашли соответствия
         all_programs_matched = len(programs_not_found) == 0
@@ -322,6 +477,7 @@ class Find_Similarity:
         # Возвращаем и DataFrame, и флаг успешности
         return data_unique, all_programs_matched
     
+
 
     def generate_similar_features(self, similarity_df, print_df = False) -> dict:
         """
