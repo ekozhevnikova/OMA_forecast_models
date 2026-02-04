@@ -1022,7 +1022,7 @@ class VIMBGridProcessor(BaseParser):
         Класс для парсинга сеток VIMB (Сводная таблица)
     """
     
-    def __init__(self, folder_path: str, special_dates=None):
+    def __init__(self, folder_path: str, special_dates=None, channel_name: str):
 
         """
             Инициализация парсера VIMB.
@@ -1034,6 +1034,7 @@ class VIMBGridProcessor(BaseParser):
         super().__init__(folder_path)
         self.folder_path = folder_path
         self.special_dates = special_dates or set()
+        self.channel_name = channel_name
 
 
     def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows = 1):
@@ -1149,11 +1150,29 @@ class VIMBGridProcessor(BaseParser):
          # Если нужно вернуть в строковый формат
         VIMB['Дата'] = VIMB['Дата'].dt.strftime('%Y-%m-%d')
 
+        # Убираем строки, которые содержат Р/Б. Применительно с детским каналам
         VIMB = VIMB[~VIMB['Название программы'].str.contains('р/б', case = False, na = False)]
 
-        #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
-        if 'Камеди клаб' in list(VIMB['Название программы']):
-            VIMB['Название программы'].replace('Камеди клаб', 'Комеди Клаб', inplace = True)
+        # Для канала Карусель удаляем программы "Новости", "Погода"
+        if self.channel_name == 'КАРУСЕЛЬ':
+            VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
+
+        # Для канала СТС Лав удаляем программы "это надо знать", "распаковка", "экодело"
+        elif self.channel_name == 'СТС LOVE':
+            # список из программ, которые не нужны. Возможно, это реклама
+            stop_words = ['это надо знать', 'распаковка', 'экодело', 'открывариум']
+            pattern = '|'.join(stop_words)
+            VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
+
+        elif self.channel_name == '2X2':
+            VIMB = VIMB[~VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)]
+
+        # Для канала ТНТ4 заменяем название Камеди клаб на Комеди Клаб
+        #if self.channel_name == 'ТНТ4':
+        #    #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
+        #    if 'Камеди клаб' in list(VIMB['Название программы']):
+        #        VIMB['Название программы'].replace('Камеди клаб', 'Комеди Клаб', inplace = True)
+
         return VIMB
 
 
@@ -1525,7 +1544,8 @@ class VIMBGridProcessor(BaseParser):
             )
             
             print(f'Создан новый файл: {file_path}')
-        
+            return
+
         # Файл существует - читаем и обновляем
         try:
             new = web_new.copy()
@@ -1667,15 +1687,15 @@ class ProgramMatcher(BaseParser):
             palomars = plmrs[plmrs['Дата'] == target_date].reset_index(drop = True)
             
             #Программы в Palomars
-            plmrs_modified, data_plmrs = Find_Similarity.clean_text(palomars, 'Название программы')
+            plmrs_modified, data_plmrs = CosineSimilarity.clean_text(palomars, 'Название программы')
             plmrs_modified_ = list(set(plmrs_modified))
             
             #Программы в VIMB
-            vimb_modified, vimb_cleaned = Find_Similarity.clean_text(vimb, 'Название программы')
+            vimb_modified, vimb_cleaned = CosineSimilarity.clean_text(vimb, 'Название программы')
             vimb_modified_ = list(set(vimb_modified))
             
             # Делаем поиск по схожим программам
-            similar = Find_Similarity(plmrs_modified_, vimb_modified_, data_plmrs, vimb_cleaned)
+            similar = CosineSimilarity(plmrs_modified_, vimb_modified_, data_plmrs, vimb_cleaned)
             result = similar.comparison(min_similarity = 0.5)
             #features_dict = similar.generate_similar_features(result, False)
             
