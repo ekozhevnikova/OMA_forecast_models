@@ -1079,52 +1079,57 @@ class VIMBGridProcessor(BaseParser):
 
         adjust_mask = adjust_mask_main | adjust_mask_last
         data.loc[adjust_mask, 'Дата'] = data.loc[adjust_mask, 'Дата'] + pd.Timedelta(days=1)
-
-        # Обрабатываем отсутствие кульминационных программ и дни профилактики
         rows_to_add = []
 
-        for i in range(len(data) - 1):
+        def has_gap(end_time, next_start, min_gap=MIN_GAP):
+            return next_start - end_time > min_gap
 
+        for i in range(len(data) - 1):
             cur = data.iloc[i]
             nxt = data.iloc[i + 1]
 
             cur_date = cur['Дата']
             next_date = nxt['Дата']
 
-            # Только смена дня
-            if cur_date != next_date:
+            end_time = cur['Время окончания _']
+            next_start = nxt['Время выхода_']
 
-                # Особая дата (профилактика) — пропускаем
-                if cur_date.normalize() in self.special_dates:
-                    print(
-                        f"🛑 {cur_date.date()} – профилактика"
-                    )
-                    continue
+            if not has_gap(end_time, next_start):
+                continue
 
-                end_time = cur['Время окончания _']
-                next_start = nxt['Время выхода_']
+            # Обнаруживаем пропуски программ внутри дня
+            if cur_date == next_date:
+                print(
+                    f"⚠️ Пропуск в сетке: {cur_date.date()} | "
+                    f"{end_time} → {next_start} | "
+                    f"разрыв {next_start - end_time}"
+                )
+                continue
 
-                gap = next_start - end_time
+            # Обнаруживаем отсутствие кульминационных программ дня (и профилактику)
+            if cur_date.normalize() in self.special_dates:
+                print(f"🛑 {cur_date.date()} – профилактика")
+                continue
 
-                # Допустимый разрыв до 1 минуты
-                if gap > MIN_GAP:
-                    print(
-                        f"Автозаполнение: {cur_date.date()} "
-                        f"{end_time} → {next_start}"
-                    )
+            print(
+                f"🛠 Автозаполнение: {cur_date.date()} | "
+                f"{end_time} → {next_start} | "
+                f"разрыв {next_start - end_time}"
+            )
 
-                    new_row = cur.copy()
+            new_row = cur.copy()
+            new_row['Время выхода_'] = end_time
+            new_row['Прод-ть_'] = next_start - end_time
+            new_row['Время окончания _'] = next_start
 
-                    new_row['Время выхода_'] = end_time
-                    new_row['Прод-ть_'] = gap
-                    new_row['Время окончания _'] = next_start
-
-                    rows_to_add.append(new_row)
+            rows_to_add.append(new_row)
 
         if rows_to_add:
-            data = pd.concat([data, pd.DataFrame(rows_to_add)], ignore_index=True)
-        # Сортировка
-        data = data.sort_values(['Дата', 'Время выхода_']).reset_index(drop=True)
+            data = (
+                pd.concat([data, pd.DataFrame(rows_to_add)], ignore_index=True)
+                .sort_values(['Дата', 'Время выхода_'])
+                .reset_index(drop=True)
+            )
 
         #Преобразуем дату
         data['Время выхода'] = data['Время выхода_'].apply(self.format_timedelta)
@@ -1304,7 +1309,7 @@ class VIMBGridProcessor(BaseParser):
                 'Дата': current_date,
                 'Время выхода': time_start,
                 'Время окончания': '04:59:59',
-                'Прод-ть': VIMBGridProcessor.calculate_duration(time_start, '04:59:59'),
+                'Прод-ть': VIMBGridProcessor.calculate_duration(time_start, end_time_new),
                 'Название программы': pr_name,
                 'День недели': current_weekday,
                 'original_index': idx_orig
