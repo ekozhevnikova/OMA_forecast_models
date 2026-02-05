@@ -3,6 +3,7 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import re
+from fuzzywuzzy import fuzz, process
 #import nltk
 #from nltk.corpus import stopwords
 
@@ -34,12 +35,13 @@ class TextPreprocessor:
 
         # Список специальных названий
         self.SPECIAL_NAMES = {
-            'сериал', 'комедийный сериал', 'художественный фильм', 'мультфильм', 'мультфильмы', 'мультфильм 0+'
+            'сериал', 'комедийный сериал', 'художественный фильм', 'документальный фильм',
+            'мультфильм', 'мультфильмы', 'мультфильм 0+', 'худ. фильм',
             }
 
         # Список из стоп-слов
         self.STOP_WORDS = {
-            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'х/ф', 'm/ф', 'р/б'
+            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'х/ф', 'm/ф', 'р/б',
         }
 
 
@@ -199,8 +201,16 @@ class TextPreprocessor:
         """
             Отдельный поток для стандартной обработки скобок/кавычек.
         """
-        if text == 'фильм, фильм, фильм':
-            return 'фильм'
+        # Специальная обработка для "Мультфильм (M/ф "Фильм, фильм, фильм.")"
+        if 'фильм, фильм, фильм' in text.lower():
+            # Убираем точку в конце если есть
+            if text.lower().endswith('фильм, фильм, фильм.")'):
+                return 'фильм, фильм, фильм'
+            elif text.lower().endswith('фильм, фильм, фильм)'):
+                return 'фильм, фильм, фильм'
+            else:
+                return 'фильм, фильм, фильм'
+            
         # --- НОВЫЙ БЛОК: Обработка мультфильмов со списком в скобках ---
         # Например: 'Мультфильмы (M/ф "Братья Лю"; M/ф "На задней парте"; M/ф "Кошкин дом"; M/ф "Муравьишка-хвастунишка"; M/ф "Тайна далекого острова")'
         # Проверяем, является ли строка списком мультфильмов в скобках
@@ -224,6 +234,9 @@ class TextPreprocessor:
             new_str = self._clean_special_chars(self._remove_year_conditions(text))
             if new_str == 'мультфильмы':
                 return 'мультфильм'
+            
+            elif new_str == 'худ. фильм':
+                return 'художественный фильм'
 
             else:
                 return new_str
@@ -262,14 +275,22 @@ class TextPreprocessor:
                 result: list 'причёсанных' программ
                 df: обновленный DataFrame с новым столбцом
         """
-        result = []
-        set_of_programs = list(set(list(df[column_name])))
-
+        # Создаем словарь для отслеживания всех обработок
+        processing_dict = {}
+        set_of_programs = list(set(list(df[column_name].dropna())))  # Убираем NaN значения
+        
+        print(f"Всего уникальных названий для обработки: {len(set_of_programs)}")
+        
         df['program_name'] = ''
-
+        
         for program in set_of_programs:
-
+            if not isinstance(program, str):
+                # Преобразуем нестроковые значения в строку
+                program = str(program)
+                
             original = program
+            original_key = original  # Сохраняем оригинал как ключ
+            
             # Заменяем букву ё на е при необходимости
             text = original.lower().replace('ё', 'е')
 
@@ -280,19 +301,47 @@ class TextPreprocessor:
             new_str = self.preprocess_text(text)
 
             # Сначала нормализуем: удаляем точки и скобки
-            cleaned = new_str.replace(".", "").replace("(", "").replace(")", "")
-            parts = cleaned.split()
-            unique_list = []
-            [unique_list.append(x) for x in parts if x not in unique_list]
-            res_str = " ".join(unique_list)
+            if new_str != 'фильм, фильм, фильм':
+                cleaned = new_str.replace(".", "").replace("(", "").replace(")", "")
+                parts = cleaned.split()
+                unique_list = []
+                [unique_list.append(x) for x in parts if x not in unique_list]
+                new_str = " ".join(unique_list)
 
-            if res_str == ',':
+            if new_str == 'документальный':
                 print(program)
             
-            result.append(res_str)
-            df.loc[df['Название программы'] == program, 'program_name'] = res_str
+            # Сохраняем результат обработки в словарь
+            processing_dict[original_key] = {
+                'original': original,
+                'cleaned': new_str,
+                'is_empty': not new_str.strip()
+            }
+            
+            # Присваиваем обработанное значение в DataFrame
+            df.loc[df[column_name] == original_key, 'program_name'] = new_str
+        
+        # Теперь формируем result, гарантируя сохранение порядка и всех элементов
+        result = []
+        failed_parses = []
+        
+        for program in set_of_programs:
+            if not isinstance(program, str):
+                program = str(program)
+                
+            if program in processing_dict:
+                cleaned_value = processing_dict[program]['cleaned']
+                result.append(cleaned_value)
+                
+                if processing_dict[program]['is_empty']:
+                    failed_parses.append(program)
+            else:
+                # На всякий случай, если что-то потерялось
+                result.append('')
+                failed_parses.append(program)
+                print(f"ВНИМАНИЕ: Название '{program}' отсутствует в словаре обработки!")
 
-        return result, df
+        return result, df, processing_dict
 
 
 
@@ -343,28 +392,67 @@ class CosineSimilarity:
         return cosine_similarity(tfidf_list1, tfidf_list2)
 
 
-    def comparison(self, 
-                   vocabulary: pd.DataFrame,
-                   column_name_first: str = 'Palomars',
-                   column_name_second: str = 'VIMB',
-                   min_similarity: float = 0.5, 
-                   top_n: int = 10, 
-                   max_pairs = None, 
-                   print_in_console = False):
+    def _fuzzy_search(self, query: str, choices: list, threshold: int = 80):
         """
-            Сравнение массивов с фильтрацией.
-            Args:
-                vocabulary: pd.DataFrame: таблица-справочник для сопоставления программ.
-                min_similarity: порог минимальной схожести.
-                top_n: максимальное количество схожих пар, выводимых на экран. По дефолту 10.
-                max_pairs: ограничение на максимальное количество схожих пар. Если None, то игнорируем этот параметр.
-                print_in_console: флаг для вывода наиболее схожих пар в консоль. Если True: выводим в консоль. В противном случае нет.
-            Returns
-                data_unique: DataFrame, в котором приведены максимально схожие элементы в соответствии с порогом min_similarity. 
-                             Если схожие элементы не найдены, то заполняем similarity нулями.
+        Поиск лучшего совпадения с использованием fuzzywuzzy.
+        
+        Args:
+            query: строка для поиска.
+            choices: список строк для сравнения.
+            threshold: минимальный порог совпадения (0-100).
+            
+        Returns:
+            tuple: (best_match, score, index) или (None, 0, -1) если совпадений нет.
         """
+        if not choices:
+            return None, 0, -1
+            
+        # Используем fuzzywuzzy для поиска лучшего совпадения
+        result = process.extractOne(
+            query = query,
+            choices = choices,
+            score_cutoff = threshold,
+            scorer = fuzz.token_sort_ratio  # Используем token_sort_ratio для лучшего сравнения
+        )
+        
+        if result:
+            best_match, score = result
+            # Находим индекс лучшего совпадения
+            index = choices.index(best_match) if best_match in choices else -1
+            return best_match, score, index
+        
+        return None, 0, -1
+
+
+    def comparison(self, vocabulary: pd.DataFrame = None,
+               column_name_first: str = 'Palomars',
+               column_name_second: str = 'VIMB',
+               min_similarity: float = 0.5,
+               max_pairs = None,
+               print_in_console = False,
+               use_fuzzy_backup: bool = True,
+               fuzzy_threshold: int = 70,
+               use_vocabulary: bool = False):
+        """
+        Сравнение массивов с фильтрацией и резервным fuzzy matching.
+        
+        Args:
+            vocabulary: таблица-справочник для сопоставления программ. Может быть None.
+            column_name_first: название первой колонки.
+            column_name_second: название второй колонки.
+            min_similarity: порог минимальной схожести для TF-IDF.
+            max_pairs: ограничение на максимальное количество пар.
+            print_in_console: флаг для вывода в консоль.
+            use_fuzzy_backup: использовать ли fuzzy matching для ненайденных программ.
+            fuzzy_threshold: минимальный порог схожести для fuzzy matching (0-100).
+            use_vocabulary: использовать ли справочник для поиска совпадений.
+                
+        Returns:
+            DataFrame с результатами сравнения и флаг успешности.
+        """
+        # Основная логика TF-IDF сравнения
         similarity_matrix = self.compare_lists()
-    
+        
         # Собираем все пары выше порога
         pairs = []
         for i in range(len(self.List)):
@@ -373,8 +461,8 @@ class CosineSimilarity:
                     pairs.append((i, j, similarity_matrix[i, j]))
         
         # Сортируем по убыванию схожести
-        pairs.sort(key = lambda x: x[2], reverse = True)
- 
+        pairs.sort(key=lambda x: x[2], reverse=True)
+        
         # Ограничиваем количество пар если нужно
         if max_pairs:
             pairs = pairs[:max_pairs]
@@ -387,13 +475,15 @@ class CosineSimilarity:
                 f'Программа {column_name_second}': self.small_list[j],
                 'similarity': similarity,
                 f'index_{column_name_first}': i,
-                f'index_{column_name_second}': j
+                f'index_{column_name_second}': j,
+                'method': 'tfidf'
             })
+        
         data = pd.DataFrame(results)
         
-        programs = list(set(data[f'Программа {column_name_second}']))
-        
         # Удаляем дубликаты. Оставляем только те программы из дубликатов, для которых найдено максимальное сходство
+        programs = list(set(data[f'Программа {column_name_second}'])) if not data.empty else []
+        
         cleaned_results = []
         for i in range(len(programs)):
             df = data.loc[data[f'Программа {column_name_second}'] == programs[i]]
@@ -404,10 +494,9 @@ class CosineSimilarity:
         
         final = pd.concat(cleaned_results) if cleaned_results else pd.DataFrame()
         
-        # Встречаются ситуации, когда показатель similarity одинаковый и выбрать максимальный не удается
         data_unique = final.drop_duplicates(
-            subset = [f'Программа {column_name_second}', 'similarity'], 
-            keep = 'first'
+            subset=[f'Программа {column_name_second}', 'similarity'],
+            keep='first'
         ).reset_index(drop=True) if not final.empty else pd.DataFrame()
         
         # Программы, для которых не нашлось похожих, в столбец схожести пишем 0
@@ -417,41 +506,117 @@ class CosineSimilarity:
         for i in range(len(self.small_list)):
             if self.small_list[i] not in programs_found:
                 programs_not_found.append(self.small_list[i])
-                new_row = {
-                    f'Программа {column_name_first}': 0,
-                    f'Программа {column_name_second}': self.small_list[i],
-                    'similarity': 0.0,
-                    f'index_{column_name_first}': 0,
-                    f'index_{column_name_second}': 0
-                }
-                
-                if data_unique.empty:
-                    data_unique = pd.DataFrame([new_row])
-                else:
-                    data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index = True)
         
-        # Отбираем найденные программы
-        found_programs = data_unique[data_unique['similarity'] != 0.00000].reset_index(drop = True)
-
-        # Отбираем ненайденные программы
-        not_found = data_unique[data_unique['similarity'] == 0.00000].reset_index(drop = True)
-
-        # Пытаемся найти совпадающие программы, основываясь на данных справочника
-        not_found_updated = pd.merge(not_found, vocabulary, on = 'Программа VIMB', how = 'left')
-        not_found_updated = not_found_updated[['Программа', 'Программа VIMB', 'similarity_new', 'index_Palomars', 'index_VIMB']]
-        not_found_updated.rename(columns = {'Программа': 'Программа Palomars', 'similarity_new': 'similarity'}, inplace = True)
-        not_found_updated = not_found_updated.fillna(0)
-
-        result_df = pd.concat([found_programs, not_found_updated]).reset_index(drop = True)
-
+        # ДОПОЛНЕНИЕ: Fuzzy matching для ненайденных программ
+        if use_fuzzy_backup and programs_not_found:
+            fuzzy_results = []
+            programs_to_remove = []
+            
+            for program in programs_not_found:
+                # Ищем лучшее совпадение с помощью fuzzy matching
+                best_match, score, index = self._fuzzy_search(
+                    query=program,
+                    choices=self.List,
+                    threshold=fuzzy_threshold
+                )
+                
+                if best_match:
+                    # Находим индекс программы в small_list
+                    small_index = self.small_list.index(program)
+                    
+                    fuzzy_results.append({
+                        f'Программа {column_name_first}': best_match,
+                        f'Программа {column_name_second}': program,
+                        'similarity': score / 100.0,  # Приводим к шкале 0-1
+                        f'index_{column_name_first}': index,
+                        f'index_{column_name_second}': small_index,
+                        'method': 'fuzzy'
+                    })
+                    programs_to_remove.append(program)
+            
+            # Удаляем найденные через fuzzy программы из списка ненайденных
+            for program in programs_to_remove:
+                if program in programs_not_found:
+                    programs_not_found.remove(program)
+            
+            # Добавляем fuzzy результаты к основным
+            if fuzzy_results:
+                fuzzy_df = pd.DataFrame(fuzzy_results)
+                if data_unique.empty:
+                    data_unique = fuzzy_df
+                else:
+                    data_unique = pd.concat([data_unique, fuzzy_df], ignore_index=True)
+        
+        # Добавляем программы, которые так и не нашли (ни TF-IDF, ни fuzzy)
+        for program in programs_not_found:
+            small_index = self.small_list.index(program)
+            new_row = {
+                f'Программа {column_name_first}': 0,
+                f'Программа {column_name_second}': program,
+                'similarity': 0.0,
+                f'index_{column_name_first}': 0,
+                f'index_{column_name_second}': small_index,
+                'method': 'none'
+            }
+            
+            if data_unique.empty:
+                data_unique = pd.DataFrame([new_row])
+            else:
+                data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index=True)
+        
+        # Разделяем найденные и ненайденные программы
+        found_programs = data_unique[data_unique['similarity'] != 0.0].reset_index(drop=True)
+        not_found = data_unique[data_unique['similarity'] == 0.0].reset_index(drop=True)
+        
+        # Используем справочник только если он предоставлен и use_vocabulary=True
+        if use_vocabulary and vocabulary is not None:
+            # Пытаемся найти совпадающие программы, основываясь на данных справочника
+            not_found_updated = pd.merge(
+                not_found, 
+                vocabulary, 
+                on=f'Программа {column_name_second}', 
+                how='left'
+            )
+            
+            # Проверяем наличие необходимых колонок в vocabulary
+            if 'Программа' in not_found_updated.columns and 'similarity_new' in not_found_updated.columns:
+                not_found_updated = not_found_updated[[
+                    'Программа', 
+                    f'Программа {column_name_second}', 
+                    'similarity_new', 
+                    f'index_{column_name_first}', 
+                    f'index_{column_name_second}'
+                ]]
+                not_found_updated.rename(
+                    columns={'Программа': f'Программа {column_name_first}', 'similarity_new': 'similarity'}, 
+                    inplace=True
+                )
+                not_found_updated = not_found_updated.fillna(0)
+            else:
+                # Если колонок нет, оставляем как есть
+                not_found_updated['similarity'] = 0.0
+            
+            # Собираем финальный результат с использованием справочника
+            result_df = pd.concat([found_programs, not_found_updated]).reset_index(drop=True)
+        else:
+            # Если справочник не используется, просто объединяем найденные и ненайденные
+            result_df = pd.concat([found_programs, not_found]).reset_index(drop=True)
+            
+            if not_found.empty:
+                print("Справочник не используется. Ненайденные программы остаются без соответствий.")
+        
         # Отбираем финальные программы без соответствия
-        result_not_found = result_df[result_df['similarity'] == 0.00000].reset_index(drop = True)
-        programs_not_found = list(result_not_found['Программа VIMB'])
-
-        # Отбираем финальные программы c соответствием
-        result_found = result_df[result_df['similarity'] != 0.00000].reset_index(drop = True)
-        programs_found = list(result_found['Программа VIMB'])
-
+        result_not_found = result_df[result_df['similarity'] == 0.0].reset_index(drop=True)
+        programs_not_found = list(result_not_found[f'Программа {column_name_second}'])
+        
+        # Отбираем финальные программы с соответствием
+        result_found = result_df[result_df['similarity'] != 0.0].reset_index(drop=True)
+        programs_found = list(result_found[f'Программа {column_name_second}'])
+        
+        # Анализируем методы поиска
+        tfidf_found = result_found[result_found['method'] == 'tfidf']
+        fuzzy_found = result_found[result_found['method'] == 'fuzzy']
+        vocabulary_found = result_found[result_found['method'].isna()] if not result_found.empty else pd.DataFrame()
         
         # ДОБАВЛЕННАЯ ПРОВЕРКА: все ли программы нашли соответствия
         all_programs_matched = len(programs_not_found) == 0
@@ -460,19 +625,38 @@ class CosineSimilarity:
             # Вывод информации о результатах сопоставления
             print(f"\n=== РЕЗУЛЬТАТЫ СРАВНЕНИЯ ===")
             print(f"Всего программ для поиска: {len(self.small_list)}")
-            print(f"Найдено соответствий (similarity >= {min_similarity}): {len(programs_found)}")
+            print(f"Найдено соответствий: {len(programs_found)}")
+            print(f"  - TF-IDF совпадений (similarity >= {min_similarity}): {len(tfidf_found)}")
+            print(f"  - Fuzzy совпадений (threshold >= {fuzzy_threshold}%): {len(fuzzy_found)}")
+            
+            if use_vocabulary and vocabulary is not None and not vocabulary_found.empty:
+                print(f"  - Совпадений из справочника: {len(vocabulary_found)}")
+            
             print(f"Не найдено соответствий: {len(programs_not_found)}")
+            
+            if not use_vocabulary or vocabulary is None:
+                print("Справочник: НЕ ИСПОЛЬЗУЕТСЯ")
+            else:
+                print("Справочник: используется")
+            
+            if len(fuzzy_found) > 0:
+                print(f"\nНайденные через fuzzy matching:")
+                for idx, row in fuzzy_found.iterrows():
+                    print(f"  • '{row[f'Программа {column_name_second}']}' -> "
+                        f"'{row[f'Программа {column_name_first}']}' "
+                        f"({row['similarity']:.2%})")
+            
+            if programs_not_found:
+                print(f"\nПрограммы без соответствий:")
+                for program in programs_not_found:
+                    print(f"  • {program}")
+            
+            if all_programs_matched:
+                print(f"\n✓ УСПЕХ: Для всех программ найдены соответствия")
+            else:
+                print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
         
-        if programs_not_found:
-            print(f"Программы без соответствий: {programs_not_found}")
-        
-        if all_programs_matched:
-            print("✓ УСПЕХ: Для всех программ найдены соответствия (хотя бы с минимальной схожестью)")
-        else:
-            print("⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
-        
-        # Возвращаем и DataFrame, и флаг успешности
-        return data_unique, all_programs_matched
+        return result_df, all_programs_matched
     
 
 
