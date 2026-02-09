@@ -727,6 +727,27 @@ class Federal_Processing:
         else:
             combined_df = pd.DataFrame()
         return combined_df
+    
+
+    @staticmethod
+    def clean_trailing_dots(comment):
+        """
+        Очищает лишние точки в конце предложений, но сохраняет точки внутри чисел
+        """
+        # Разбиваем на предложения
+        sentences = [s.strip() for s in comment.split('. ') if s.strip()]
+        
+        cleaned_sentences = []
+        for sentence in sentences:
+            # Убираем точки в конце предложения, но сохраняем точки внутри
+            while sentence.endswith('..'):  # Если две точки подряд в конце
+                sentence = sentence[:-1]
+            if sentence.endswith('.'):  # Если одна точка в конце
+                sentence = sentence[:-1]
+            cleaned_sentences.append(sentence)
+        
+        # Собираем обратно в строку
+        return '. '.join(cleaned_sentences) + '.'
                 
 
 
@@ -880,6 +901,11 @@ class Federal_Processing:
                 if not pd.isna(comments_per_week):
                     comment_per_week_splitted = comments_per_week.split('. ')
 
+                    # Если комментарий не разделяется точками с пробелами, оставляем как есть
+                    if len(comment_per_week_splitted) <= 1 and '. ' not in comments_per_week:
+                        # Оставляем комментарий без изменений, если он не разделен точками
+                        continue
+
                     filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
                     if len(filtered_df) != 0:
                         comments = list(filtered_df['Комментарий'])
@@ -899,7 +925,7 @@ class Federal_Processing:
                             # 2. Корректировка комментариев по изменению доли. Работаем с очищенным от дубликатов списком!
                             current_parts = [p.strip() for p in str(comment_per_week_splitted).split('. ') if p.strip()]
                             hist_parts = [p.strip() for p in str(comments).split('. ') if p.strip()]
-                        
+
                             new_comment = ''
                             # Извлекаем числа из комментариев с изменениями долей
                             for current_part in current_parts:
@@ -907,6 +933,7 @@ class Federal_Processing:
                                     
                                     #share_values = {}
                                     # Если это комментарий о доле
+                                    # Если в последних и исторических комментариях встретились сообщения об изменении доли
                                     if 'доли' in current_part and 'доли' in hist_part:
                         
                                         #######################################################################
@@ -934,16 +961,37 @@ class Federal_Processing:
                                         hist_start = float(start_hist_str)
                                         hist_end = float(end_hist_str)
                         
-                                    if 'Снижение' in current_part and 'Снижение' in hist_part:
-                                        # Проверяем значения долей
-                                        if current_start == hist_start:
-                                            new_comment = f'Снижение доли с {hist_end} до {current_end}.'
+                                        if 'Снижение' in current_part and 'Снижение' in hist_part:
+                                            # Проверяем значения долей
+                                            if current_start == hist_start:
+                                                new_comment = f'Снижение доли с {hist_end} до {current_end}'
+                            
+                                        if 'Рост' in current_part and 'Рост' in hist_part:
+                                            # Проверяем значения долей
+                                            if current_start == hist_start:
+                                                new_comment = f'Рост доли с {hist_end} до {current_end}'
+                                    
+                                    # Если только в последних комментариях встретилось сообщение об изменении доли
+                                    elif 'доли' in current_part:
+
+                                        # Извлекаем числа из суммарного комментария за период
+                                        current_match = re.search(r'с\s+([\d.]+)\s+до\s+([\d.]+)', current_part)
+
+                                        # Очищаем строки от лишних точек
+                                        start_str = current_match.group(1).rstrip('.')
+                                        end_str = current_match.group(2).rstrip('.')
                         
-                                    if 'Рост' in current_part and 'Рост' in hist_part:
-                                        # Проверяем значения долей
-                                        if current_start == hist_start:
-                                            new_comment = f'Рост доли с {hist_end} до {current_end}.'
-                                            
+                                        # Приводим к типу данных float
+                                        current_start = float(start_str)
+                                        current_end = float(end_str)
+
+                                        if 'Снижение' in current_part:
+                                            new_comment = f'Снижение доли с {current_start} до {current_end}'
+                                        
+                                        if 'Рост' in current_part:
+                                            new_comment = f'Рост доли с {current_start} до {current_end}'
+                                    
+                            
                             # 2. Ищем все комментарии о долях. Заменяем комментарии в result_list
                             share_pattern = r'(Рост|Снижение)\s+доли\s+с\s+([\d.]+)\s+до\s+([\d.]+)\.?'
                             for c in range(len(result_list)):
@@ -951,9 +999,13 @@ class Federal_Processing:
                                 if match:
                                     # Обновляем комментарий по доле
                                     result_list[c] = new_comment
-                                    
+                            
+                            # Отфильтровываем непустые строки в списке. В противном случае возникнут лишние точки
+                            filtered_list = [item for item in result_list if item.strip()]
+
                             # Обновляем комментарий для канала
-                            res_updated.at[i, 'Комментарий'] = '. '.join(result_list)
+                            comment = '. '.join(filtered_list) + '.'
+                            res_updated.at[i, 'Комментарий'] = Federal_Processing.clean_trailing_dots(comment)
                 else:
                     res_updated.at[i, 'Комментарий'] = ''
 

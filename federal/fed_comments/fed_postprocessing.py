@@ -191,7 +191,14 @@ class Federal_Postprocessing:
                                     comment_splitted = comment.split('. ')
                                     # Фильтруем комментарии
                                     filtered_comments = [comment for comment in comment_splitted if any(possible_smi in comment for possible_smi in possible_comments_smi)]
-                                    result_df.at[j, 'Комментарий'] = '. '.join(filtered_comments)
+                                    if filtered_comments:
+                                        result = '. '.join(filtered_comments)
+                                        
+                                        # Проверяем, есть ли уже точка в конце
+                                        if not result.endswith('.'):
+                                            result += '.'
+                                        
+                                        result_df.at[j, 'Комментарий'] = result
                                 else:
                                     result_df.at[j, 'Комментарий'] = ''
                 else:

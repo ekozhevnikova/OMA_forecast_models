@@ -14,7 +14,7 @@ locale.setlocale(locale.LC_ALL, 'ru_RU')
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
 #from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
-from OMA_tools.federal.channel_forecast.core.content_matching import CosineSimilarity
+from OMA_tools.federal.channel_forecast.core.content_matching import *
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -1095,6 +1095,9 @@ class VIMBGridProcessor(BaseParser):
         
         elif self.channel_name == '2X2':
             VIMB = VIMB[~VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)]
+        
+        elif self.channel_name == 'СОЛНЦЕ':
+            VIMB = VIMB[~VIMB['Название программы'].str.contains('межпрограммный блок ', case = False, na = False)]
 
         # Для канала ТНТ4 заменяем название Камеди клаб на Комеди Клаб
         #if self.channel_name == 'ТНТ4':
@@ -1532,17 +1535,19 @@ class ProgramMatcher(BaseParser):
         Класс для сопоставления телепрограмм из разных источников: Mediascope и VIMB.
         Обеспечивает нормализацию названий программ и поиск временных совпадений.
     """
-    def __init__(self, folder_path: str, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
+    def __init__(self, channel_vocabulary: pd.DataFrame, folder_path: str, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
         """
         Инициализация ProgramMatcher
         
         Args:
+            channel_vocabulary: pd.DataFrame: датафрейм со справочником программ
             folder_path: str: путь к файлу с данными.
             palomars_grid:  str:историческая сетка Mediascope.
             vimb_grid: str: историческая сетка VIMB.
         """
         super().__init__(folder_path)
 
+        self.channel_vocabulary = channel_vocabulary
         self.folder_path = folder_path
         self.palomars_grid = palomars_grid
         self.vimb_grid = vimb_grid
@@ -1593,18 +1598,20 @@ class ProgramMatcher(BaseParser):
 
             # Отбираем дату, которую будем анализировать
             palomars = plmrs[plmrs['Дата'] == target_date].reset_index(drop = True)
+
+            text_prepr = TextPreprocessor()
             
             #Программы в Palomars
-            plmrs_modified, data_plmrs = CosineSimilarity.clean_text(palomars, 'Название программы')
+            plmrs_modified, data_plmrs, not_found_plmrs = text_prepr.clean_text(palomars, 'Название программы')
             plmrs_modified_ = list(set(plmrs_modified))
             
             #Программы в VIMB
-            vimb_modified, vimb_cleaned = CosineSimilarity.clean_text(vimb, 'Название программы')
+            vimb_modified, vimb_cleaned, not_found_vimb = text_prepr.clean_text(vimb, 'Название программы')
             vimb_modified_ = list(set(vimb_modified))
             
             # Делаем поиск по схожим программам
             similar = CosineSimilarity(plmrs_modified_, vimb_modified_, data_plmrs, vimb_cleaned)
-            result = similar.comparison(min_similarity = 0.5)
+            result, matched = similar.comparison(self.channel_vocabulary, min_similarity = 0.5, use_vocabulary = True)
             #features_dict = similar.generate_similar_features(result, False)
             
             # Заменяем названия передач, если какие-то не совпадают

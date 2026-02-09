@@ -41,7 +41,7 @@ class TextPreprocessor:
 
         # Список из стоп-слов
         self.STOP_WORDS = {
-            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'х/ф', 'm/ф', 'р/б',
+            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'мультсериал',  'огр', 'х/ф', 'm/ф', 'р/б',
         }
 
 
@@ -231,6 +231,7 @@ class TextPreprocessor:
         
         # 2. Проверка на специальные имена
         if text.lower() in (name.lower() for name in self.SPECIAL_NAMES):
+
             new_str = self._clean_special_chars(self._remove_year_conditions(text))
             if new_str == 'мультфильмы':
                 return 'мультфильм'
@@ -279,7 +280,7 @@ class TextPreprocessor:
         processing_dict = {}
         set_of_programs = list(set(list(df[column_name].dropna())))  # Убираем NaN значения
         
-        print(f"Всего уникальных названий для обработки: {len(set_of_programs)}")
+        #print(f"Всего уникальных названий для обработки: {len(set_of_programs)}")
         
         df['program_name'] = ''
         
@@ -307,9 +308,6 @@ class TextPreprocessor:
                 unique_list = []
                 [unique_list.append(x) for x in parts if x not in unique_list]
                 new_str = " ".join(unique_list)
-
-            if new_str == 'документальный':
-                print(program)
             
             # Сохраняем результат обработки в словарь
             processing_dict[original_key] = {
@@ -339,7 +337,7 @@ class TextPreprocessor:
                 # На всякий случай, если что-то потерялось
                 result.append('')
                 failed_parses.append(program)
-                print(f"ВНИМАНИЕ: Название '{program}' отсутствует в словаре обработки!")
+                #print(f"ВНИМАНИЕ: Название '{program}' отсутствует в словаре обработки!")
 
         return result, df, processing_dict
 
@@ -656,7 +654,7 @@ class CosineSimilarity:
             else:
                 print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
         
-        return result_df, all_programs_matched
+        return result_df, programs_not_found
     
 
 

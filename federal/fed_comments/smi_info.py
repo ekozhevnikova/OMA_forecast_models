@@ -480,6 +480,7 @@ class SMI_info:
         df['Дата'] = pd.to_datetime(df['Дата'])
         df['Дата из СМИ'] = pd.to_datetime(df['Дата из СМИ'])
 
+
         # Группируем по 'Канал', 'Месяц' и объединяем комментарии
         if flag_by_days:
             df_result = df[
@@ -505,6 +506,7 @@ class SMI_info:
 
         #Объединение комментариев, если тексты одинаковые
         text_init = list(df_result_cleaned['Комментарий'])
+
         # Применяем функцию к нашему списку
         df_result_cleaned = SMI_info.merge_identical_rows(df_result_cleaned)
         #df_result_cleaned['Комментарий'] = df_result_cleaned['Комментарий'].replace(text_init, text_updated)
