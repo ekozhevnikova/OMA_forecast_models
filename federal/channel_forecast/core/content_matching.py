@@ -41,7 +41,7 @@ class TextPreprocessor:
 
         # Список из стоп-слов
         self.STOP_WORDS = {
-            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'мультсериал',  'огр', 'х/ф', 'm/ф', 'р/б',
+            'анимационный', 'мультфильм', 'сериал', 'художественный', 'фильм', 'мультсериал',  'огр', 'х/ф', 'm/ф', 'р/б'
         }
 
 
@@ -216,7 +216,7 @@ class TextPreprocessor:
         # Проверяем, является ли строка списком мультфильмов в скобках
         # Паттерн: Название + (M/ф "фильм1"; M/ф "фильм2"; ...)
         # 1. Проверка на список мультфильмов/фильмов в скобках
-        if re.search(r'(?:мультфильмы|фильмы|сериалы)\s*\([^)]*(?:M/ф|х/ф|фильм|сериал)[^)]*\)', 
+        if re.search(r'(?:мультфильмы|мультфильм|фильмы|сериалы)\s*\([^)]*(?:M/ф|х/ф|фильм|сериал)[^)]*\)', 
                     text, re.IGNORECASE):
             # Определяем тип по первому слову
             first_word = text.split()[0].lower()
@@ -301,6 +301,7 @@ class TextPreprocessor:
                 
             new_str = self.preprocess_text(text)
 
+
             # Сначала нормализуем: удаляем точки и скобки
             if new_str != 'фильм, фильм, фильм':
                 cleaned = new_str.replace(".", "").replace("(", "").replace(")", "")
@@ -309,6 +310,15 @@ class TextPreprocessor:
                 [unique_list.append(x) for x in parts if x not in unique_list]
                 new_str = " ".join(unique_list)
             
+
+            if new_str == 'анимационный':
+                print(program)
+            
+
+            if new_str == '':
+                print(program)
+            
+    
             # Сохраняем результат обработки в словарь
             processing_dict[original_key] = {
                 'original': original,

@@ -1070,9 +1070,11 @@ class VIMBGridProcessor(BaseParser):
         # Преобразуем столбец 'Дата' в datetime
         VIMB['Дата'] = pd.to_datetime(VIMB['Дата'])
 
-        # Создаем маску и увеличиваем дату
-        time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
-        VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
+        # Не на всех каналах эфирные сутки начинаются в 05:00:00. Поэтому нужна дополнительная конвертация на + 1 день
+        # Создаем маску и увеличиваем дату 
+        if self.channel_name in ['2X2', 'ТНТ4', 'МАТЧ ТВ', 'СТС LOVE', 'СУББОТА']:
+            time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
+            VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
         
         VIMB['День недели'] = VIMB['Дата'].dt.strftime('%A').str.capitalize()
 
@@ -1097,7 +1099,9 @@ class VIMBGridProcessor(BaseParser):
             VIMB = VIMB[~VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)]
         
         elif self.channel_name == 'СОЛНЦЕ':
-            VIMB = VIMB[~VIMB['Название программы'].str.contains('межпрограммный блок ', case = False, na = False)]
+            mask = VIMB['Название программы'].str.contains('межпрограм', case=False, na=False) | \
+            VIMB['Название программы'].str.contains('межпрограммный', case=False, na=False)
+            VIMB = VIMB[~mask]
 
         # Для канала ТНТ4 заменяем название Камеди клаб на Комеди Клаб
         #if self.channel_name == 'ТНТ4':
