@@ -1396,6 +1396,12 @@ class VIMBGridProcessor(BaseParser):
                 date_column: str: название столбца с датой. Даты в формате строки
             Returns:
         """
+        need_start = '05:00:00'
+        need_end = '04:59:59'
+
+        need_start_dt = pd.to_datetime(need_start)
+        need_end_dt = pd.to_datetime(need_end)
+
         df_check = df.copy()
 
         # Конвертация дат в строковый формат, если требуется
@@ -1411,20 +1417,114 @@ class VIMBGridProcessor(BaseParser):
         except Exception as e:
             print(f'Ошибка конвертации дат: {e}')
 
+
+        corrections_made = False
         # Проверка, что каждый день начинается в 05:00:00 и заканчивается в 05:00:00
         dates_unique = df_check[date_column].unique()
 
+        # Создаем маску для удаления строк с профилактикой
+        delete_mask = pd.Series(False, index = df.index)
+
         for date in dates_unique:
 
-            table = df_check[df_check['Дата'] == date]
-            start = table[table['Время выхода'] == '05:00:00']
-            stop = table[table['Время окончания'] == '04:59:59']
+            # Находим индексы в исходном df для текущей даты
+            date_mask = df_check[date_column] == date
+            date_indices = df[date_mask].index.tolist()
 
-            if len(start) == 0 and len(table) != 1:
-                print(f'⚠️ Для {date} не найдена стартовая программа дня.')
+            table_check = df_check[df_check['Дата'] == date].reset_index(drop = True)
 
-            elif len(stop) == 0  and len(table) != 1:
-                print(f'⚠️ Для {date} не найдена кульминационная программа дня.')
+
+            # Выделение дней с профилактикой
+            mask = table_check['Название программы'].str.contains('профилактика', case = False, na = False) | \
+                   table_check['Название программы'].str.contains('профилакт', case = False, na = False)
+            prophylactic_count = mask.sum()
+
+            indices = table_check.index.tolist()
+            first_idx_check = indices[0]
+            last_idx_check = indices[-1]
+
+            # Находим соответствующие индексы в исходном df
+            first_idx_original = date_indices[first_idx_check]
+            last_idx_original = date_indices[last_idx_check]
+
+            start = table_check[table_check['Время выхода'] == '05:00:00']
+            stop = table_check[table_check['Время окончания'] == '04:59:59']
+
+            # Исходное время выхода
+            old_start = table_check.at[first_idx_check, 'Время выхода']
+            old_start_dt = pd.to_datetime(old_start)
+            # Исходное время окончания
+            old_end = table_check.at[last_idx_check, 'Время окончания']
+            old_end_dt = pd.to_datetime(old_end)
+
+            # Флаг, указывающий, что были изменения времени
+            time_changed = False
+
+            # Если дней с профилактикой не обнаружено
+            if prophylactic_count == 0:
+                if len(start) == 0 and len(table_check) != 1 :
+                    print(f'⚠️ Для {date} не найдена стартовая программа дня.')
+
+                    # Если разница между фактической датой старта и нужной больше 45 мин, то замена не производится
+                    if abs(old_start_dt - need_start_dt).total_seconds() / 60.0 < 45:
+                        print(f'Делаем замену с {old_start} на 05:00:00.')
+                        df.loc[first_idx_original, 'Время выхода'] = '05:00:00'
+                        corrections_made = True
+                        time_changed = True
+
+                elif len(stop) == 0  and len(table_check) != 1:
+                    print(f'⚠️ Для {date} не найдена кульминационная программа дня')
+
+                    # Если разница между фактической датой окончания и нужной больше 45 мин, то замена не производится
+                    if (abs(old_end_dt - need_end_dt).total_seconds()) / 60.0 < 45:
+                        print(f'Делаем замену с {old_end} на 04:59:59.')
+                        df.loc[last_idx_original, 'Время окончания'] = '04:59:59'
+                        corrections_made = True
+                        time_changed = True
+            
+            # Если обнаружены дни с профилактикой
+            else:
+                # Помечаем строки с профилактикой для удаления
+                prophylactic_indices = [date_indices[i] for i in table_check[mask].index]
+                delete_mask.loc[prophylactic_indices] = True
+                corrections_made = True
+
+            
+            # Если время было изменено, пересчитываем длительность для всех программ этого дня
+            if time_changed:
+                print(f"Пересчитываем длительность программ для даты {date}...")
+                
+                # Получаем все индексы для текущей даты
+                day_indices = df[df[date_column] == date].index
+                
+                # Для каждой программы в этом дне пересчитываем длительность
+                for idx in day_indices:
+                    start_time = df.loc[idx, 'Время выхода']
+                    end_time = df.loc[idx, 'Время окончания']
+                    
+                    # Вычисляем новую длительность
+                    new_duration = VIMBGridProcessor.calculate_duration(start_time, end_time)
+                    
+                    if new_duration:
+                        df.loc[idx, 'Прод-ть'] = new_duration
+                        if idx == first_idx_original or idx == last_idx_original:
+                            print(f"  Программа '{df.loc[idx, 'Название программы']}': новая длительность {new_duration}")
+                    else:
+                        print(f"  Ошибка при вычислении длительности для программы '{df.loc[idx, 'Название программы']}'")
+
+        # Удаляем строки с профилактикой из исходного df
+        if delete_mask.any():
+            print(f'Найдены строки с ПРОФИЛАКТИКОЙ. Удалено строк с профилактикой: {delete_mask.sum()}')
+            df.drop(df[delete_mask].index, inplace = True)
+        
+        if corrections_made:
+            print('Изменения внесены в исходную таблицу.')
+        else:
+            print('Изменений не требуется.')
+
+        return df
+
+    
     
 
     def update_vimb_file(self, web_new):
@@ -1448,7 +1548,7 @@ class VIMBGridProcessor(BaseParser):
                 new_cleaned[col] = new_cleaned[col].astype(str).str.strip()
             
             # Проверяем границы дней перед сохранением
-            self.check_start__and__end_day(new_cleaned)
+            new_cleaned = self.check_start__and__end_day(new_cleaned)
             
             # Создаем Excel файл с форматированием
             self.folder_path = file_path # Добавляем путь для сохранения
