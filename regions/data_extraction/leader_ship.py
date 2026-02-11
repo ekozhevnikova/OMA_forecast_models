@@ -381,6 +381,8 @@ class LeaderShipDataExtractor:
             #    json_tasks[key] = LeaderShipDataExtractor.build_json_tasks(date_filter, *params)
             #####################################################################################################
             results[period] = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
+
+            time.sleep(120)
     
         return results
         

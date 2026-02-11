@@ -51,6 +51,9 @@ class ChannelAnalysisMaster:
         # Кэшируем результаты
         self._total_tv_auedience = None
         self._web_df = None
+
+        self.STOP_WORDS = ['погода', 'межпрограммные заставки']
+        self.PATTERN = '|'.join(self.STOP_WORDS)
     
 
     def auedience_pipeline(self):
@@ -88,6 +91,8 @@ class ChannelAnalysisMaster:
         plmrs_parser = MediascopeParser(self.web_file)
         # 1. Выгрузка новых исторических данных
         web_new = plmrs_parser.make_web(self.date_filter, self.company_filter, self.basedemo_filter)
+
+        web_new = web_new[~web_new['Название программы'].str.contains(self.PATTERN, case = False, na = False)]
 
         # 2. Обновление таблицы
         print('🔄 Обновляю файл с исторической сеткой Mediascope. Пожалуйста, подождите ...')
