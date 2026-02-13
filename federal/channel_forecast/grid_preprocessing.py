@@ -6,6 +6,8 @@ import shutil
 import glob
 from pathlib import Path
 import xlsxwriter
+import calendar
+from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 import locale
@@ -34,7 +36,7 @@ ADD_CITY_TO_BASEDEMO_FROM_REGION = False    # работаем в Федерал
 ADD_CITY_TO_TARGETDEMO_FROM_REGION = False  # работаем в Федеральной Базе
 BREAK_FILTER = None
 AD_FILTER = None
-PROGRAM_FILTER = 'programDuration >= 300'
+PROGRAM_FILTER = 'programDuration >= 100'
 #############################################################################################
 
 class BaseParser:
@@ -1072,7 +1074,7 @@ class VIMBGridProcessor(BaseParser):
 
         # Не на всех каналах эфирные сутки начинаются в 05:00:00. Поэтому нужна дополнительная конвертация на + 1 день
         # Создаем маску и увеличиваем дату 
-        if self.channel_name in ['2X2', 'ТНТ4', 'МАТЧ ТВ', 'СТС LOVE', 'СУББОТА']:
+        if self.channel_name in ['2X2', 'ТНТ4', 'МАТЧ_ТВ', 'СТС_LOVE', 'СУББОТА', 'ЧЕ', 'ЗВЕЗДА', 'ТВ_ЦЕНТР']:
             time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
             VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
         
@@ -1080,6 +1082,12 @@ class VIMBGridProcessor(BaseParser):
 
         # Если нужно вернуть в строковый формат
         VIMB['Дата'] = VIMB['Дата'].dt.strftime('%Y-%m-%d')
+
+        # Удаляем рекламные блоки и межпрограммные заставки
+        mask = VIMB['Название программы'].str.contains('межпрограм', case = False, na = False) | \
+               VIMB['Название программы'].str.contains('межпрограммный', case = False, na = False) | \
+               VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)
+        VIMB = VIMB[~mask]
 
         # Убираем строки, которые содержат Р/Б. Применительно с детским каналам
         VIMB = VIMB[~VIMB['Название программы'].str.contains('р/б', case = False, na = False)]
@@ -1095,19 +1103,11 @@ class VIMBGridProcessor(BaseParser):
             pattern = '|'.join(stop_words)
             VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
         
-        elif self.channel_name == '2X2':
-            VIMB = VIMB[~VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)]
         
-        elif self.channel_name == 'СОЛНЦЕ':
-            mask = VIMB['Название программы'].str.contains('межпрограм', case=False, na=False) | \
-            VIMB['Название программы'].str.contains('межпрограммный', case=False, na=False)
-            VIMB = VIMB[~mask]
-
-        # Для канала ТНТ4 заменяем название Камеди клаб на Комеди Клаб
-        #if self.channel_name == 'ТНТ4':
-        #    #Название программы 'Камеди клаб' записано по-разному. Переименуем в Комеди клаб
-        #    if 'Камеди клаб' in list(VIMB['Название программы']):
-        #        VIMB['Название программы'].replace('Камеди клаб', 'Комеди Клаб', inplace = True)
+        #elif self.channel_name == 'СОЛНЦЕ':
+        #    mask = VIMB['Название программы'].str.contains('межпрограм', case=False, na=False) | \
+        #    VIMB['Название программы'].str.contains('межпрограммный', case=False, na=False)
+        #    VIMB = VIMB[~mask]
         
         return VIMB
 
@@ -1416,6 +1416,46 @@ class VIMBGridProcessor(BaseParser):
 
         except Exception as e:
             print(f'Ошибка конвертации дат: {e}')
+
+        # Проверка хронологии дат
+        # Группируем даты по годам и месяцам
+        month_days = defaultdict(set)
+        
+        for date_str in df_check[date_column].dropna().unique():
+            try:
+                year, month, day = map(int, date_str.split('-'))
+                month_days[(year, month)].add(day)
+            except (ValueError, AttributeError):
+                continue
+        
+        # Проверяем каждый месяц
+        for (year, month), days_set in month_days.items():
+            # Получаем правильное количество дней для этого месяца
+            if month == 2:  # Февраль - проверяем високосность
+                _, correct_days = calendar.monthrange(year, month)
+            else:
+                correct_days = calendar.monthrange(year, month)[1]
+            
+            # Проверяем, есть ли все дни месяца
+            actual_days = sorted(days_set)
+            expected_days = set(range(1, correct_days + 1))
+            
+            missing_days = expected_days - days_set
+            extra_days = days_set - expected_days
+            
+            if missing_days:
+                print(f'❌ ОШИБКА: В {year}-{month:02d} отсутствуют дни: {sorted(missing_days)}')
+                print(f'   Должно быть дней: {correct_days}, имеется: {len(days_set)}')
+            
+            if extra_days:
+                print(f'❌ ОШИБКА: В {year}-{month:02d} найдены лишние дни: {sorted(extra_days)}')
+            
+            # Проверяем непрерывность дней
+            if actual_days and len(actual_days) != actual_days[-1] - actual_days[0] + 1:
+                print(f'⚠️ ПРЕДУПРЕЖДЕНИЕ: В {year}-{month:02d} дни идут не подряд')
+                print(f'Присутствуют дни: {actual_days}')
+        
+        #print(f"\nПроверка месяцев завершена. Всего уникальных месяцев: {len(month_days)}")
 
 
         corrections_made = False
