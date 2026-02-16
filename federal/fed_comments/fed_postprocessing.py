@@ -39,13 +39,31 @@ class Federal_Postprocessing:
 
         data = self.df.copy()
 
+        data = data.astype({
+            'Канал': 'str', 
+            'Месяц': 'str', 
+            'Изменение GRP': 'float64', 
+            'Порог': 'float64', 
+            'Доп столбец': 'str', 
+            'Комментарий': 'str'
+            })
+        
         comments = pd.read_excel(comments_filepath)
+
+        comments = comments.astype({
+            'Канал': 'str', 
+            'Месяц': 'str', 
+            'Изменение GRP': 'float64', 
+            'Порог': 'float64', 
+            'Доп столбец': 'str', 
+            'Комментарий': 'str'
+            })
         
         cols = ['Канал', 'Месяц', 'Дата', 'Изменение GRP']
 
-        for df in [comments, data]:
-            if 'Дата' in df.columns:
-                df['Дата'] = pd.to_datetime(df['Дата'], errors = 'coerce').dt.date
+        # Приводим даты к единому формату
+        comments['Дата'] = pd.to_datetime(comments['Дата'], dayfirst = True, errors = 'coerce')
+        data['Дата'] = pd.to_datetime(data['Дата'], dayfirst = True, errors = 'coerce')
         
         # Используем merge для анти-объединения
         merged = pd.merge(
@@ -58,6 +76,19 @@ class Federal_Postprocessing:
         
         # Оставляем только строки, которые есть только в comments
         result = merged[merged['_merge'] == 'left_only'].drop('_merge', axis = 1)
+
+        result['Дата'] = result['Дата'].dt.strftime('%d.%m.%Y')
+
+        comments = comments.astype({
+            'Канал': 'str', 
+            'Месяц': 'str', 
+            'Изменение GRP': 'float64', 
+            'Порог': 'float64', 
+            'Доп столбец': 'str', 
+            'Комментарий': 'str'
+            })
+        
+        result['Доп столбец'] = result['Доп столбец'].replace('nan', '')
         
         return result
 

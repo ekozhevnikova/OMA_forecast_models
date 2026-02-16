@@ -1003,9 +1003,14 @@ class Federal_Processing:
                             # Отфильтровываем непустые строки в списке. В противном случае возникнут лишние точки
                             filtered_list = [item for item in result_list if item.strip()]
 
-                            # Обновляем комментарий для канала
-                            comment = '. '.join(filtered_list) + '.'
-                            res_updated.at[i, 'Комментарий'] = Federal_Processing.clean_trailing_dots(comment)
+                            if len(filtered_list) != 0:
+                                # Обновляем комментарий для канала
+                                comment = '. '.join(filtered_list) + '.'
+                                
+                                res_updated.at[i, 'Комментарий'] = Federal_Processing.clean_trailing_dots(comment)
+                            else:
+                                res_updated.at[i, 'Комментарий'] = ''
+
                 else:
                     res_updated.at[i, 'Комментарий'] = ''
 
