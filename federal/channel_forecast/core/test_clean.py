@@ -43,12 +43,170 @@ SPECIAL_PATTERNS_FOR_SAVE = [
 ]
 
 
+STOP_PATTERNS = {
+    'films': [
+                # Полные слова
+                r'\b(анимационный|документальный|худ\.?|фильм|цикл|сериал|мультфильм)\b',
+
+                # Аббревиатуры с любым разделителем (х/ф, х.ф, х ф, и т.д.)
+                r'[хмд]\W*[ф]',  # х/ф, х.ф, м/ф, д/ф и т.д.
+                r'm\W*ф',         # английская 'm'
+                
+                # Специальные случаи
+                r'\bг\.\s*'
+    ],
+    
+    'not_sport': [r'\b(спецрепортаж)\b'],
+
+    'sport': [
+        # Финал/полуфинал
+        r'\(?(полу)?финал[аы]?\)?',
+        r'\b[а-яёa-z]+-?финал[аы]?\b',
+        r'\b\d+\s*[-–—/\s]?\s*\d+\s+(?:финала?|полуфинала?|четвертьфинала?)\b' # 1/8 финала, 1/16 финала 
+    ]
+}
+
+
+# Стоп-слова для удаления по категориям
+STOP_WORDS = {
+    # для неспортивных трансляций
+    'not_sport': {
+        'спецрепортаж', 'дайджест'
+    },
+    # для спортивных трансляций
+    'sport': {
+        'сезон', 'дайджест', 'место', 'лига ставок', 'betboom', 'olimpbet', 
+        'winline', 'fonbet', 'фонбет', 'раунд', 'матч', 'товарищеский'
+    },
+    # для фильмов
+    'films': {
+        'фильм', 'документальный', 'сериал', 'fonbet'
+    }
+}
+
+
 class SportChannelParsing:
+    """
+    Класс для очистки названий телепередач от служебных пометок,
+    стоп-слов и лишних символов в зависимости от канала.
+
+    !!! ВАЖНО !!!
+    Данный класс предназначен для работы с каналом МАТЧ ТВ
+    """
     def __init__(self, channel):
         self.channel = channel
+    
 
-    @staticmethod
-    def final_cleaning(text):
+    def divide_by_categories(self, data: pd.DataFrame, table_form: str):
+        """
+            Метод для разделения программ по 4 категориям: 
+                - sport (спортивные програмы), 
+                - not_sport (неспортивные програмы)
+                - films (фильмы/сериалы/мультфильмы)
+                - other
+            
+            Args:
+                data: pd.DataFrame: исходная сетка, в которой хотим почистить названия программ от ненужных элементов
+                table_form: pd.DataFrame: тип входной таблицы, в которой будем делать преобразования программ. Может быть либо 'vimb', либо 'palomars'.
+        """
+        if table_form == 'vimb':
+            ###################### РАЗДЕЛЕНИЕ ПРОГРАММ ПО КАТЕГОРИЯМ ДЛЯ СЕТКИ VIMB ######################
+            categories = {
+            'films': ['анимационный', 'художественный фильм', 'документальный', 'худ. фильм', 'мультфильм'],
+            'not_sport': ['лица страны', 'матч! парад', 'все на матч', 'новости', 'век нашего спорта', 
+                        'титаны', 'география спорта', 'всё о главном', 'спецрепортаж', 'что за спорт', 
+                        'непридуманные истории', '10 лет в спорте', 'команда мечты', 'непобедимый', 
+                        'культовые', 'что по спорту'],
+            'sport': ['автоспорт', 'аквабайк', 'акробатический рок-н-ролл', 'американский футбол', 
+                    'айкидо', 'альпинизм', 'армрестлинг', 'бадминтон', 'баскетбол', 'биатлон', 
+                    'бильярд', 'бобслей', 'бокс', 'борьба', 'боулинг', 'бейсбол', 'брейкинг', 
+                    'бодибилдинг', 'банджо', 'балет', 'бег', 'велоспорт', 'водное поло', 'волейбол', 
+                    'вейкбординг', 'виндсерфинг', 'вольная борьба', 'верховая езда', 'гандбол', 'гольф', 
+                    'гребля', 'греко-римская борьба', 'гимнастика', 'гиревой спорт', 'горные лыжи', 
+                    'дартс', 'дзюдо', 'дайвинг', 'дельтапланеризм', 'джиу-джитсу', 'драгрейсинг', 
+                    'единоборства', 'карате', 'кёрлинг', 'конный', 'кхл', 'кикбоксинг', 'капоэйра', 
+                    'киберспорт', 'конькобежный спорт', 'легкая атлетика', 'лёгкая атлетика', 'лыжи', 
+                    'лыжные гонки', 'лыжное двоеборье', 'лапта', 'мхл', 'марафон', 'маунтинбайк', 
+                    'мотоспорт', 'мотокросс', 'метание диска', 'нхл', 'настольный теннис', 
+                    'настольный футбол', 'ориентирование', 'олимпийские игры', 'падел', 'плавание', 
+                    'прыжки в воду', 'прыжки на лыжах', 'пауэрлифтинг', 'парашютный спорт', 'паркур', 
+                    'пейнтбол', 'регби', 'рпл', 'рукопашный бой', 'роллер спорт', 'рафтинг', 'реслинг', 
+                    'самбо', 'санный спорт', 'скелетон', 'скоростной спуск на коньках', 
+                    'смешанные единоборства', 'спортивная гимнастика', 'стрельба из лука', 'серфинг', 
+                    'сноуборд', 'скалолазание', 'сквош', 'софтбол', 'теннис', 'триатлон', 
+                    'тяжёлая атлетика', 'тхэквондо', 'тайский бокс', 'танцевальный спорт', 
+                    'толкание ядра', 'ушу', 'универсальный бой', 'фехтование', 'фигурное катание', 
+                    'формула-1', 'фрирайд', 'футбол', 'футзал', 'флорбол', 'фристайл', 'хоккей', 
+                    'художественная гимнастика', 'хайдайвинг', 'хоккей на траве', 'чемпионат испании', 
+                    'чемпионат италии', 'шахматы', 'шашки', 'шорт-трек', 'экстремальный спорт', 
+                    'яхтинг', 'яхтенный спорт']
+            }
+            
+            # Создаем паттерны одной строкой
+            patterns = {k: '|'.join(v) for k, v in categories.items()}
+            
+            # Классификация одной строкой (создаем словарь с результатами)
+            result = {}
+            remaining = data
+            for cat in ['films', 'not_sport', 'sport']:
+                mask = remaining['Название программы'].str.contains(patterns[cat], case=False, na=False)
+                result[cat] = remaining[mask]
+                remaining = remaining[~mask]
+            result['other'] = remaining
+            
+            # Распаковываем результаты
+            VIMB_films, VIMB_not_sport, VIMB_sport, VIMB_other = result.values()
+
+            # Списки из программ
+            self.programs = {
+                'films': list(set(VIMB_films['Название программы'])),
+                'sport': list(set(VIMB_sport['Название программы'])),
+                'not_sport': list(set(VIMB_not_sport['Название программы'])),
+                'other': list(set(VIMB_other['Название программы']))
+            }
+            return self.programs
+
+        elif table_form == 'palomars':
+        
+            ###################### РАЗДЕЛЕНИЕ ПРОГРАММ ПО КАТЕГОРИЯМ ДЛЯ РЕАЛЬНОЙ СЕТКИ ######################
+            categories = {
+            'sport': ['трансляция спортивного', 'репортаж', 'другая музыкально-танцевая'],
+            'not_sport': ['передаче о спорте и спортсменах', 'новости', 'география'],
+            'films': ['сериал', 'фильм']
+            }
+            
+            # Создаем паттерны
+            patterns = {k: '|'.join(v) for k, v in categories.items()}
+            
+            # Классификация
+            plmrs_results = {}
+            remaining = data
+            
+            for cat in ['sport', 'not_sport', 'films']:
+                mask = remaining['Жанр'].str.contains(patterns[cat], case=False, na=False)
+                plmrs_results[cat] = remaining[mask].reset_index(drop=True)
+                remaining = remaining[~mask]
+            
+            plmrs_results['other'] = remaining.reset_index(drop=True)
+            
+            # Распаковываем (если нужны отдельные переменные)
+            plmrs_sport, plmrs_not_sport, plmrs_films, plmrs_other = plmrs_results.values()
+        
+            # Списки из программ
+            self.programs = {
+                'films': list(set(plmrs_films['Название программы'])),
+                'sport': list(set(plmrs_sport['Название программы'])),
+                'not_sport': list(set(plmrs_not_sport['Название программы'])),
+                'other': list(set(plmrs_other['Название программы']))
+            }
+
+            return self.programs
+        
+        else:
+            print(f"Неизвестный вид таблицы! Выберите либо 'vimb', либо 'palomars'.")
+
+
+    def final_cleaning(self, text):
         """
             Финальная очистка текста - удаляет паттерны только в начале или в конце строки
         """
@@ -150,7 +308,7 @@ class SportChannelParsing:
         return text
 
 
-    def clean_program_name(
+    def clean(
         self,
         text: str,
         program_type: str = 'other',  # 'films', 'sport', 'not_sport', 'other'
@@ -390,7 +548,7 @@ class SportChannelParsing:
             print(f"  После ЭТАПА 9: '{result}'")
             print(f"ЭТАП 10 - Финальная очистка")
         
-        result = SportChannelParsing.final_cleaning(result)
+        result = self.final_cleaning(result)
         
         if debug:
             print(f"  После ЭТАПА 10: '{result}'")
@@ -412,4 +570,37 @@ class SportChannelParsing:
         result = re.sub(r'\,', '', result)  # запятая в любом месте
         result = re.sub(r'\b\d{4,}\b', '', result) #удаление последовательности из 8ми и более цифр
         result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
+
+        if result == '':
+            print(Color.BOLD + Color.RED + f'‼️ Для {self.channel} строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+
         return result
+    
+
+    def clean_programs(self, data, table_form: str):
+        """
+            Метод для зачистки названий программ для всевозможных категорий
+        """
+        # ЭТАП 1: Инициализация программ по категориям
+        self.programs = self.divide_by_categories(data, table_form)
+        
+        # ЭТАП 2: Маппинг категорий
+        category_mapping = {
+            'sport': ('sport', STOP_WORDS['sport'], STOP_PATTERNS['sport']),
+            'not_sport': ('not_sport', STOP_WORDS['not_sport'], STOP_PATTERNS['not_sport']),
+            'films': ('films', STOP_WORDS['films'], STOP_PATTERNS['films']),
+            'other': ('not_sport', STOP_WORDS['not_sport'], STOP_PATTERNS['not_sport'])
+        }
+        
+        # ЭТАП 3: Зачистка
+        cleaned_programs = []
+        for category, (prog_type, words, patterns) in category_mapping.items():
+            if category in self.programs:
+                cleaned_programs.extend([
+                    self.clean(text = p, program_type = prog_type, 
+                            stop_words_specific = words, stop_patterns = patterns)
+                    for p in self.programs[category]
+                ])
+        
+        return list(set(cleaned_programs))  # убираем дубликаты
+
