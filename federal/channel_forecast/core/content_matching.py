@@ -146,6 +146,9 @@ class GeneralTextCleaner:
             'ЧЕ': {
                 'patterns': [r'\bмультфильм\b']
             },
+            '2X2': {
+                'patterns': [r'\bхуд\.\s*', r'\bдокументальный\b']
+            },
             'МИР': {
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b']
             },
@@ -163,7 +166,8 @@ class GeneralTextCleaner:
             'СОЛНЦЕ': {
                 'patterns': [
                     r'\bх\W*ф\b',  # дополнительный паттерн для Солнца
-                ]
+                ],
+                'special_names': {'фильм.фильм.фильм', 'фильм фильм фильм'} 
             }
         }
 
@@ -284,11 +288,11 @@ class GeneralTextCleaner:
         
         # Удаляем упоминания сезонов и серий
         title = re.sub(r'\s*\d+\s*сезон\s*', ' ', title)
-        title = re.sub(r'\.?\s*сезон\s*\d+\s*$', '', title, flags = re.IGNORECASE)
-        title = re.sub(r'\s*\d+\s*сезон\s*$', '', title, flags = re.IGNORECASE)
+        title = re.sub(r'\.?\s*сезон\s*\d+\s*$', ' ', title, flags = re.IGNORECASE)
+        title = re.sub(r'\s*\d+\s*сезон\s*$', ' ', title, flags = re.IGNORECASE)
         
-        title = re.sub(r'\.?\s*серия\s*\d+\s*$', '', title, flags = re.IGNORECASE)
-        title = re.sub(r'\s*\d+\s*серия\s*$', '', title, flags = re.IGNORECASE)
+        title = re.sub(r'\.?\s*серия\s*\d+\s*$', ' ', title, flags = re.IGNORECASE)
+        title = re.sub(r'\s*\d+\s*серия\s*$', ' ', title, flags = re.IGNORECASE)
         
         title = re.sub(r'\s+', ' ', title).strip()
         
@@ -315,12 +319,16 @@ class GeneralTextCleaner:
             return False, text
         
         # Специальная обработка для 2X2
-        if self.channel == '2X2' and 'фильм, фильм, фильм' in text:
-            match = re.search(r'"([^"]+)"', text)
+        if self.channel == '2X2' and 'фильм, фильм, фильм' in text_lower:
+            # Проверяем, не является ли это специальным именем
+            match = re.search(r'фильм,\s*фильм,\s*фильм\.?\s*"([^"]+)"', text_lower)
             if match:
-                return True, match.group(1).strip()
-
-            return False, text
+                # Извлекаем название в кавычках
+                return True, self.clean_title(match.group(1).strip())
+            
+            # Если это просто "фильм, фильм, фильм" без названия
+            if text_lower.strip() == 'фильм, фильм, фильм' or 'фильм, фильм, фильм' in text_lower:
+                return True, 'фильм, фильм, фильм'
         
         # Специальная обработка для ТНТ4
         if self.channel == 'ТНТ4' and 'комеди' in text:
@@ -331,6 +339,20 @@ class GeneralTextCleaner:
             
         # Специальная обработка для СОЛНЦЕ
         if self.channel == 'СОЛНЦЕ':
+            # ===== СПЕЦИАЛЬНАЯ ПРОВЕРКА ДЛЯ "ФИЛЬМ.ФИЛЬМ.ФИЛЬМ" =====
+            film_patterns = [
+                r'фильм\.фильм\.фильм',
+                r'фильм\s+фильм\s+фильм',
+                r'фильм[.\s]+фильм[.\s]+фильм',
+            ]
+            
+            for pattern in film_patterns:
+                if re.search(pattern, text, flags=re.IGNORECASE):
+                    if 'фильм.фильм.фильм' in text.lower():
+                        return True, 'фильм.фильм.фильм'
+                    else:
+                        return True, 'фильм фильм фильм'
+    
             cleaned = text
             
             # Удаляем м/с, мс, м/с, мс в разных вариациях
@@ -380,10 +402,10 @@ class GeneralTextCleaner:
 
         # Финальное схлопывание пробелов        
         result = re.sub(r'\s+', ' ', result).strip()
-        result = re.sub(r'\.', '', result)  # точка в любом месте
-        result = re.sub(r'\,', '', result)  # запятая в любом месте
-        result = re.sub(r'\b\d{8,}\b', '', result) #удаление последовательности из 8ми и более цифр
-        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', '', result) # удаление всех символов, кроме букв и цифр
+        result = re.sub(r'\.', ' ', result)  # точка в любом месте
+        result = re.sub(r'\,', ' ', result)  # запятая в любом месте
+        result = re.sub(r'\b\d{8,}\b', ' ', result) #удаление последовательности из 8ми и более цифр
+        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result) # удаление всех символов, кроме букв и цифр
         result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
         return result
 
@@ -467,7 +489,10 @@ class GeneralTextCleaner:
 
         # Удаляем упоминания серий с номерами
         old_result = result
-        result = re.sub(r'\s*\d+(?:\s*,\s*\d+\s*)*\s*сери[яи]?\s*', ' ', result, flags=re.IGNORECASE)
+        result = re.sub(
+            r'\s*(?:\d+(?:\s*,\s*\d+\s*)*\s*(?:сери[яи]|сезон[ы]?|сез[а-я]*)|(?:сери[яи]|сезон[ы]?|сез[а-я]*)\s*\d+)\s*', 
+            ' ', result, flags=re.IGNORECASE
+        )
         if debug and old_result != result:
             print(f"Удалены номера серий: '{result}'")
         
@@ -628,7 +653,7 @@ class GeneralTextCleaner:
 
         if result == '':
             print(Color.BOLD + Color.RED + f'‼️ Для {self.channel} строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
-
+        
         return result
     
 
@@ -637,17 +662,19 @@ class GeneralTextCleaner:
             Финальный метод для предобработки текста. В процессе работы метода создаётся дополнительный столбец в датафрейме, в 
             который записывается очищенное название программы.
         """
+        data = self.df.copy()
+
         # Создаем сет уникальных программ
-        unique_programs = self.df[program_name_column].unique()
+        unique_programs = data[program_name_column].unique()
 
         # Создаем словарь маппинга уникальных программ
         mapping = {prog: self.clean(prog) for prog in unique_programs}
         
         # Применяем маппинг к DataFrame. Записываем очищенные названия программ в новый столбец под названием 'program_name'.
-        self.df['program_name'] = self.df[program_name_column].map(mapping)
+        data['program_name'] = data[program_name_column].map(mapping)
         
         # Возвращаем список уникальных очищенных программ
-        return list(set(mapping.values())), self.df
+        return list(set(mapping.values())), data
 
 
 
@@ -1561,7 +1588,7 @@ class CosineSimilarity:
                     print(f"  • {program}")
             
             if all_programs_matched:
-                print(f"\n✓ УСПЕХ: Для всех программ найдены соответствия")
+                print(Color.BOLD + Color.GREEN + f'УСПЕХ: Для всех программ найдены соответствия' + Color.END)
             else:
                 print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
         
