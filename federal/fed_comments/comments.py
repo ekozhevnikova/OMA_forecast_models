@@ -113,7 +113,7 @@ class Federal_Comments:
             'ДОМАШНИЙ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017},
             'ПЕРВЫЙ КАНАЛ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017},
             'МАТЧ ТВ': {'share': 0.006, 'ttv': 0.005, 'kus': 0.006},
-            'СУББОТА': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
+            'СУББОТА': {'share': 0.0024, 'ttv': 0.005, 'kus': 0.0065},
             'МУЗ ТВ': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
             'ПЯТНИЦА': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
             'РОССИЯ 24': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
@@ -538,12 +538,13 @@ class Federal_Comments:
                         else:
                             comments[statistic] = 'Снижение КУС за счет снижения прогноза внедомашнего телесмотрения.'
                     
-                    elif statistic == 'GRP Телемагазины' and channel == 'СПАС':
-                        val = reasons_dict['GRP Телемагазины']
-                        if val > 0:
-                            comments[statistic] = f'Размещение телемагазинов {val} GRP.'
-                        else:
-                            comments[statistic] = f'Снятие телемагазинов {(-1) * val} GRP.'
+                    #elif statistic == 'GRP Телемагазины':
+                    #    val = reasons_dict['GRP Телемагазины']
+                    #    print(channel, month, val)
+                    #    if val > 0:
+                    #        comments[statistic] = f'Размещение телемагазинов {val} GRP.'
+                    #    else:
+                    #        comments[statistic] = f'Снятие телемагазинов {(-1) * val} GRP.'
                     
                     elif statistic == 'GRP ТП канала':
                         if reasons_dict['GRP ТП канала'] > 0:

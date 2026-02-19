@@ -102,7 +102,7 @@ class GeneralTextCleaner:
             },
             'stop_words': {'документальный', 'док.'},
             'patterns': [
-                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'\sх\W*ф\s',  r'\bв\W*[сc]\b',
+                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'(?<!\w)х\W*ф(?!\w)',  r'\bв\W*[сc]\b',
                 r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*']
         }
 
@@ -360,15 +360,6 @@ class GeneralTextCleaner:
             
             return False, text
         
-        # Специальная обработка для ЗВЕЗДА
-        if self.channel == 'ЗВЕЗДА':
-            # Только специфичные для ЗВЕЗДА случаи, которые НЕ могут быть обработаны общим алгоритмом
-            if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
-                return True, 'документальный сериал'
-            
-            # А всё остальное (например, извлечение названия) возвращаем False,
-            # чтобы основной алгоритм обработал
-            return False, text
         
         # Специальная обработка для 2X2
         if self.channel == '2X2' and 'фильм, фильм, фильм' in text_lower:
@@ -390,7 +381,7 @@ class GeneralTextCleaner:
             return False, text
         
 
-        # Специальная обработка для СПАС
+        # Специальная обработка для Ю
         if self.channel == 'Ю':
             special_phrases = [
                 'маша и медведь', 'супермама', 'ждули'
@@ -409,6 +400,24 @@ class GeneralTextCleaner:
                     if re.search(pattern, text_lower):
                         cleaned_phrase = self.clean_title(phrase)
                         return True, cleaned_phrase
+        
+
+        # Специальная обработка для ЗВЕЗДА
+        if self.channel == 'ЗВЕЗДА':
+            # Сначала проверяем специальные фразы
+            special_phrases = ['голоса победы','дневники памяти']
+            
+            for phrase in special_phrases:
+                if phrase in text_lower:
+                    cleaned_phrase = self.clean_title(phrase)
+                    return True, cleaned_phrase
+            
+            # Проверяем специальный случай с документальным сериалом
+            if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
+                return True, 'документальный сериал'
+            
+            # Если ничего не нашли, идем в общий алгоритм
+            return False, text
         
 
         # Специальная обработка для СПАС
