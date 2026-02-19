@@ -552,13 +552,14 @@ class MediascopeParser(BaseParser):
         Класс для работы с данными Mediascope
     """
     
-    def __init__(self, web_filepath: str):
+    def __init__(self, channel: str, web_filepath: str):
         """
             Инициализация парсера Mediascope.
             
             Args:
                 web_filepath: Путь к файлу с исторической сеткой Mediascope
         """
+        self.channel = channel
         self.web_filepath = web_filepath
 
         super().__init__(web_filepath)
@@ -676,7 +677,14 @@ class MediascopeParser(BaseParser):
 
                 res.append(final)
             
-            return pd.concat(res).reset_index(drop = True)
+            result_data = pd.concat(res).reset_index(drop = True)
+            
+            #if self.channel == '2X2':
+            #    stop_words = ['новости', 'вставай на', 'фильтруй факты', 'техно-елка']
+            #    pattern = '|'.join(stop_words)
+            #    result_data = result_data[~result_data['Название программы'].str.contains(pattern, case = False, na = False)]
+            
+            return 
     
 
     def update_web_table(self, new_data: pd.DataFrame) -> pd.DataFrame:
@@ -1078,6 +1086,7 @@ class VIMBGridProcessor(BaseParser):
             time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
             VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
         
+        
         VIMB['День недели'] = VIMB['Дата'].dt.strftime('%A').str.capitalize()
 
         # Если нужно вернуть в строковый формат
@@ -1102,13 +1111,13 @@ class VIMBGridProcessor(BaseParser):
             stop_words = ['это надо знать', 'распаковка', 'экодело', 'открывариум']
             pattern = '|'.join(stop_words)
             VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
+    
         
-        
-        #elif self.channel_name == 'СОЛНЦЕ':
-        #    mask = VIMB['Название программы'].str.contains('межпрограм', case=False, na=False) | \
-        #    VIMB['Название программы'].str.contains('межпрограммный', case=False, na=False)
-        #    VIMB = VIMB[~mask]
-        
+        # Если нужно вернуть в строковый формат
+        #VIMB['Прод-ть'] = VIMB['Прод-ть'].dt.strftime('%H:%M:%S')
+        # Удаляем ВСЕ программы длительностью 1 секунда
+        #VIMB = VIMB[VIMB['Прод-ть'] != '00:00:01'].reset_index(drop = True)
+
         return VIMB
 
 
@@ -1311,6 +1320,10 @@ class VIMBGridProcessor(BaseParser):
 
         # Убедимся, что дата в строковом формате
         general_result['Дата'] = general_result['Дата'].astype(str)
+
+
+        #general_result['Прод-ть'] = general_result['Прод-ть'].dt.strftime('%H:%M:%S')
+        general_result = general_result[general_result['Прод-ть'] != '00:00:01'].reset_index(drop = True)
 
         return general_result
     

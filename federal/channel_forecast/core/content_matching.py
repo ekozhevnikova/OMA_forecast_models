@@ -85,7 +85,7 @@ class GeneralTextCleaner:
 
         # Базовые паттерны
         self.BASE_PATTERNS = [
-            r'х\W*ф', r'№\s*\d+', r'\bсериал\b', r'\bсерия\b', r'\bсезон\b', 
+            r'\sх\W*ф\s', r'№\s*\d+', r'\bсериал\b', r'\bсерия\b', r'\bсезон\b', 
             r'\bчасть\b', r'\d+\s*серия\b', r'\d+\s*сезон\b', r'\d+\s*часть\b'
         ]
 
@@ -102,7 +102,7 @@ class GeneralTextCleaner:
             },
             'stop_words': {'документальный', 'док.'},
             'patterns': [
-                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'\bх\W*ф\b',  r'\bв\W*[сc]\b',
+                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'\sх\W*ф\s',  r'\bв\W*[сc]\b',
                 r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*']
         }
 
@@ -117,7 +117,7 @@ class GeneralTextCleaner:
                 # Удаление сочетаний 'мф', 'mф', 'аф', 'мс', 'тс', 'ас', если это они отдельно стоящие 
                 r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', 
                 r'\bм\W*[сc]\b', r'\bт\W*[сc]\b', r'\bа\W*[сc]\b',  # [сc] - русская или латинская с
-                r'\d{4}(?:\s*г(?:од)?\.?)?', r'\bмультфильм\b', r'\bсоюзмультфильм\b',
+                r'\d{4}(?:\s*г(?:од)?\.?)?', r'\bмультфильм\b', r'\bсоюзмультфильм\b', r'\bповтор\b',
                 r'\(\s*(?:сериал|серия|сезон|часть)\s*\d*\s*\)',
                 r'\d+\s*сез\b', r'\bсез\s*\d+\b'
             ]
@@ -153,7 +153,8 @@ class GeneralTextCleaner:
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b']
             },
             'СПАС': {
-                'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b']
+                'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b'],
+                'special_names': {'старцы'} 
             },
             'МузТВ': {
                 'stop_words': {'спец', 'концерт'},
@@ -286,14 +287,24 @@ class GeneralTextCleaner:
         # Удаляем паттерны типа т/с, а/с, м/с, a/ф
         title = re.sub(r'\s*[а-яa-z]+/[а-яa-z]+\s*', ' ', title, flags = re.IGNORECASE)
         
-        # Удаляем упоминания сезонов и серий
-        title = re.sub(r'\s*\d+\s*сезон\s*', ' ', title)
-        title = re.sub(r'\.?\s*сезон\s*\d+\s*$', ' ', title, flags = re.IGNORECASE)
-        title = re.sub(r'\s*\d+\s*сезон\s*$', ' ', title, flags = re.IGNORECASE)
+        # Слова для удаления с номерами
+        words = ['сезон', 'серия', 'фильм']
         
-        title = re.sub(r'\.?\s*серия\s*\d+\s*$', ' ', title, flags = re.IGNORECASE)
-        title = re.sub(r'\s*\d+\s*серия\s*$', ' ', title, flags = re.IGNORECASE)
+        for word in words:
+            # Варианты: "1 сезон", "сезон 1", "1-й сезон", "сезон 1-й"
+            patterns = [
+                rf'\s*\d+\s*{word}\s*',
+                rf'\s*{word}\s*\d+\s*',
+                rf'\s*\d+[-яй]?\s*{word}\s*',
+                rf'\s*{word}\s*\d+[-яй]?\s*',
+                rf'\.?\s*{word}\s*\d+\s*$',
+                rf'\s*\d+\s*{word}\s*$',
+            ]
+            
+            for pattern in patterns:
+                title = re.sub(pattern, ' ', title, flags=re.IGNORECASE)
         
+        # Схлопываем пробелы
         title = re.sub(r'\s+', ' ', title).strip()
         
         # Убираем точку в конце
@@ -307,6 +318,47 @@ class GeneralTextCleaner:
         """
             Обрабатывает специальные случаи для конкретных каналов
         """
+
+        # ===== УНИВЕРСАЛЬНАЯ ПРОВЕРКА НА СБОРНИКИ МУЛЬТФИЛЬМОВ =====
+        # Проверяем для ЛЮБОГО канала
+        mf_count = text_lower.count('м/ф') + text_lower.count('m/ф')
+        if mf_count >= 2:
+            # Можно добавить дополнительные проверки
+            # Например, проверять наличие слова "мультфильм" в тексте
+            if 'мультфильм' in text_lower or 'мультсериал' in text_lower:
+                return True, 'мультфильм'
+            # Или просто возвращать при 2+ мультфильмах
+            return True, 'мультфильм'
+
+        # Специальная обработка для МИР. Обрабатывает названия по типу 
+        # 'Худ.фильм/Сериал (Сериал "Меч". ("ЕДИНСТВЕННЫЙ ВЫХОД") 14, 15, 16, 17 серии)' -> 'меч'
+        if self.channel == 'МИР':
+            # Ищем название в кавычках после слова "сериал"
+            patterns = [
+                r'сериал\s+"([^"]+)"',           # сериал "Название"
+                r'сериал\s+«([^»]+)»',           # сериал «Название»
+                r'сериал\s+([а-яё\s]+?)(?:\s*\(|\.|$)',  # сериал Название (до точки или скобки)
+                r'"([^"]+)"',                      # просто "Название"
+                r'«([^»]+)»',                      # просто «Название»
+            ]
+            
+            for pattern in patterns:
+                match = re.search(pattern, text, flags=re.IGNORECASE)
+                if match:
+                    title = match.group(1).strip()
+                    # Очищаем от лишних символов
+                    title = re.sub(r'[^\w\s-]', '', title)
+                    title = re.sub(r'\s+', ' ', title).strip()
+                    if title and len(title) > 1:
+                        return True, title
+            
+            # Если не нашли в кавычках, пробуем извлечь из скобок
+            match = re.search(r'\([^)]*"([^"]+)"[^)]*\)', text)
+            if match:
+                title = match.group(1).strip()
+                return True, title
+            
+            return False, text
         
         # Специальная обработка для ЗВЕЗДА
         if self.channel == 'ЗВЕЗДА':
@@ -336,7 +388,58 @@ class GeneralTextCleaner:
                 return True, self._replace_whole_word(text, 'комеди', 'камеди')
             
             return False, text
+        
+
+        # Специальная обработка для СПАС
+        if self.channel == 'Ю':
+            special_phrases = [
+                'маша и медведь', 'супермама', 'ждули'
+            ]
+
+            for phrase in special_phrases:
+                # Создаем паттерн с границами слов для каждого слова во фразе
+                if ' ' in phrase:
+                    # Для многословных фраз проверяем точное вхождение
+                    if phrase in text_lower:
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
+                else:
+                    # Для однословных используем границы слов
+                    pattern = r'\b' + re.escape(phrase) + r'\b'
+                    if re.search(pattern, text_lower):
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
+        
+
+        # Специальная обработка для СПАС
+        if self.channel == 'СПАС':
+            special_phrases = [
+                'старцы', 'лики богородицы', 'день ангела', 'искатели', 'утреня', 'дом у большой реки',
+                'люди донбасса', 'дети донбасса', 'детство. возвращение', 'апостолы',
+                'святые воины', 'лето господне', 'неизвестная европа', 'пилигрим',
+                'византия. жизнь после смерти', 'паисий святогорец', 'бесогон', 'ной',
+                'патриаршая литературная премия', 'военкоры', 'русские праведники',
+                'тропами алании', 'митрополит антоний сурожский', 'притчи', 'знаменный распев',
+                'глобус православия', 'добровидение', 'восход победы', 'голос церкви',
+                'проповедники'
+                ]
             
+            for phrase in special_phrases:
+                # Создаем паттерн с границами слов для каждого слова во фразе
+                if ' ' in phrase:
+                    # Для многословных фраз проверяем точное вхождение
+                    if phrase in text_lower:
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
+                else:
+                    # Для однословных используем границы слов
+                    pattern = r'\b' + re.escape(phrase) + r'\b'
+                    if re.search(pattern, text_lower):
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
+
+            
+        
         # Специальная обработка для СОЛНЦЕ
         if self.channel == 'СОЛНЦЕ':
             # ===== СПЕЦИАЛЬНАЯ ПРОВЕРКА ДЛЯ "ФИЛЬМ.ФИЛЬМ.ФИЛЬМ" =====
@@ -387,10 +490,6 @@ class GeneralTextCleaner:
             if cleaned != text:
                 return True, self.clean_title(cleaned)
         
-        # Проверка на сборники мультфильмов
-        if ('m/ф' in text or 'м/ф' in text_lower) and text_lower.count('м/ф') + text_lower.count('m/ф') >= 2:
-            return True, 'мультфильм'
-        
         return False, text
 
 
@@ -406,7 +505,12 @@ class GeneralTextCleaner:
         result = re.sub(r'\,', ' ', result)  # запятая в любом месте
         result = re.sub(r'\b\d{8,}\b', ' ', result) #удаление последовательности из 8ми и более цифр
         result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result) # удаление всех символов, кроме букв и цифр
+
+        # Удаляем паттерны типа "1 я ч", "2 я ч"
+        result = re.sub(r'\b\d+\s+я\s+ч\b', ' ', result, flags = re.IGNORECASE)
+        result = re.sub(r'\b\d+\s+я\b', '', result, flags = re.IGNORECASE)
         result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
+
         return result
 
 
@@ -490,7 +594,7 @@ class GeneralTextCleaner:
         # Удаляем упоминания серий с номерами
         old_result = result
         result = re.sub(
-            r'\s*(?:\d+(?:\s*,\s*\d+\s*)*\s*(?:сери[яи]|сезон[ы]?|сез[а-я]*)|(?:сери[яи]|сезон[ы]?|сез[а-я]*)\s*\d+)\s*', 
+            r'\s*(?:\d+(?:[-яй]?(?:\s*,\s*\d+\s*)*)?\s*(?:сери[яи]|сезон[ы]?|сез[а-я]*|фильм[ы]?|\bч\.?\b|часть)|(?:сери[яи]|сезон[ы]?|сез[а-я]*|фильм[ы]?|\bч\.?\b|часть)\s*\d+[-яй]?)\s*', 
             ' ', result, flags=re.IGNORECASE
         )
         if debug and old_result != result:
