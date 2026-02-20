@@ -11,12 +11,15 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 import locale
+
+from regions.data_extraction.task_builder import BaseDataService
+
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from io_data.operations import File, Table, Dict_Operations
 # from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from federal.channel_forecast.calculator import *
-from federal.channel_forecast.core.content_matching import Find_Similarity
+# from federal.channel_forecast.core.content_matching import Find_Similarity
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -812,7 +815,7 @@ class TVPreprocessing(BaseParser):
 
         # Вызываем ensure_file_exists с нужными колонками
         self._ensure_file_exists([
-            'Канал', 'Дата', 'Название программы', 'Время выхода', 
+            'Канал', 'Дата', 'Название программы', 'Время выхода',
             'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
         ])
 
@@ -1026,25 +1029,23 @@ class TVPreprocessing(BaseParser):
         )
 
 
-
 class VIMBGridProcessor(BaseParser):
     """
         Класс для парсинга сеток VIMB (Сводная таблица)
     """
-    
+
     def __init__(self, folder_path: str, channel_name: str):
         """
             Инициализация парсера VIMB.
-            
+
             Args:
                 folder_path: путь к файлам с новыми сетками ТВ-программ.
         """
         super().__init__(folder_path)
         self.folder_path = folder_path
         self.channel_name = channel_name
-    
 
-    def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows = 1):
+    def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows=1):
         """
             Метод для парсинга файла с сеткой VIMB из отчета Размещение -> Сводная таблица
             Args:
@@ -1054,98 +1055,37 @@ class VIMBGridProcessor(BaseParser):
                 VIMB: причёсанный DataFrame с сеткой VIMB.
         """
         # Чтение файла
-        df = pd.read_excel(filepath, sheet_name = sheet_name, skiprows = skiprows)
+        df = pd.read_excel(filepath, sheet_name=sheet_name, skiprows=skiprows)
 
         # Оставляем только нужные столбцы
         data = df[['Дата', 'Время выхода', 'Прод-ть', 'Название программы']]
 
         # Преобразование столбца в datetime
-        data['Дата'] = pd.to_datetime(data['Дата'], format = '%d.%m.%Y')
-        
+        data['Дата'] = pd.to_datetime(data['Дата'], format='%d.%m.%Y')
+
         # Вычленяем день недели
         data['День недели'] = data['Дата'].dt.strftime('%A').str.capitalize()
 
-
         data['Время выхода_'] = pd.to_timedelta(data['Время выхода'].astype(str))
-        data['Прод-ть_'] = pd.to_timedelta(data['Прод-ть'].astype(str))
+        data['Время выхода'] = data['Время выхода_'].apply(
+            lambda
+                x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+        )
 
-        # расчет времени окончания
+        data['Прод-ть_'] = pd.to_timedelta(data['Прод-ть'].astype(str))
+        data['Прод-ть'] = data['Прод-ть_'].apply(
+            lambda
+                x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+        )
+
+        # Считаем время окончания
         data['Время окончания _'] = data['Время выхода_'] + data['Прод-ть_']
 
-        # Маска для перепрыгивания на следующий день
-        time_mask = (data['Время выхода_'] >= pd.Timedelta(hours=5)) & \
-                    (data['Время выхода_'] < pd.Timedelta(hours=6))
-
-        # Смотрим "следующую дату" в файле
-        next_date = data['Дата'].shift(-1)
-        # Смотрим "предыдующую дату" в файле
-        prev_date = data['Дата'].shift(1)
-        # Основная маска: не последняя строка файла, текущая дата != следующая
-        adjust_mask_main = time_mask & (data.index != data.index[-1]) & (data['Дата'] != next_date)
-        # Для последней строки файла: проверяем только с предыдущей датой
-        adjust_mask_last = (time_mask & (data.index == data.index[-1]) & (data['Дата'] == prev_date))
-
-        adjust_mask = adjust_mask_main | adjust_mask_last
-        data.loc[adjust_mask, 'Дата'] = data.loc[adjust_mask, 'Дата'] + pd.Timedelta(days=1)
-        rows_to_add = []
-
-        def has_gap(end_time, next_start, min_gap=MIN_GAP):
-            return next_start - end_time > min_gap
-
-        for i in range(len(data) - 1):
-            cur = data.iloc[i]
-            nxt = data.iloc[i + 1]
-
-            cur_date = cur['Дата']
-            next_date = nxt['Дата']
-
-            end_time = cur['Время окончания _']
-            next_start = nxt['Время выхода_']
-
-            if not has_gap(end_time, next_start):
-                continue
-
-            # Обнаруживаем пропуски программ внутри дня
-            if cur_date == next_date:
-                print(
-                    f"⚠️ Пропуск в сетке: {cur_date.date()} | "
-                    f"{end_time} → {next_start} | "
-                    f"разрыв {next_start - end_time}"
-                )
-                continue
-
-            # Обнаруживаем отсутствие кульминационных программ дня (и профилактику)
-            if cur_date.normalize() in self.special_dates:
-                print(f"🛑 {cur_date.date()} – профилактика")
-                continue
-
-            print(
-                f"🛠 Автозаполнение: {cur_date.date()} | "
-                f"{end_time} → {next_start} | "
-                f"разрыв {next_start - end_time}"
-            )
-
-            new_row = cur.copy()
-            new_row['Время выхода_'] = end_time
-            new_row['Прод-ть_'] = next_start - end_time
-            new_row['Время окончания _'] = next_start
-
-            rows_to_add.append(new_row)
-
-        if rows_to_add:
-            data = (
-                pd.concat([data, pd.DataFrame(rows_to_add)], ignore_index=True)
-                .sort_values(['Дата', 'Время выхода_'])
-                .reset_index(drop=True)
-            )
-
-        #Преобразуем дату
-        data['Время выхода'] = data['Время выхода_'].apply(self.format_timedelta)
-        data['Прод-ть'] = data['Прод-ть_'].apply(self.format_timedelta)
+        # Если время окончания превышает 24 часа, корректируем отображение
         data['Время окончания'] = data['Время окончания _'].apply(
-            lambda x: self.format_timedelta(x % pd.Timedelta(days=1))
+            lambda
+                x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
         )
-        data['Дата'] = data['Дата'].dt.strftime('%Y-%m-%d')
 
         # Оставляем только нужные столбцы
         VIMB = data[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели']]
@@ -1156,58 +1096,56 @@ class VIMBGridProcessor(BaseParser):
         # Не на всех каналах эфирные сутки начинаются в 05:00:00. Поэтому нужна дополнительная конвертация на + 1 день
         # Создаем маску и увеличиваем дату
         if self.channel_name in ['2X2', 'ТНТ4', 'МАТЧ_ТВ', 'СТС_LOVE', 'СУББОТА', 'ЧЕ', 'ЗВЕЗДА', 'ТВ_ЦЕНТР']:
-            time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
-            VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
+            time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours=5)) & (
+                        pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours=6))
+            VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days=1)
 
-        
         VIMB['День недели'] = VIMB['Дата'].dt.strftime('%A').str.capitalize()
 
-         # Если нужно вернуть в строковый формат
+        # Если нужно вернуть в строковый формат
         VIMB['Дата'] = VIMB['Дата'].dt.strftime('%Y-%m-%d')
 
         # Удаляем рекламные блоки и межпрограммные заставки
-        mask = VIMB['Название программы'].str.contains('межпрограм', case = False, na = False) | \
-               VIMB['Название программы'].str.contains('межпрограммный', case = False, na = False) | \
-               VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False)
+        mask = VIMB['Название программы'].str.contains('межпрограм', case=False, na=False) | \
+               VIMB['Название программы'].str.contains('межпрограммный', case=False, na=False) | \
+               VIMB['Название программы'].str.contains('рекламный блок', case=False, na=False)
         VIMB = VIMB[~mask]
 
         # Убираем строки, которые содержат Р/Б. Применительно с детским каналам
-        VIMB = VIMB[~VIMB['Название программы'].str.contains('р/б', case = False, na = False)]
+        VIMB = VIMB[~VIMB['Название программы'].str.contains('р/б', case=False, na=False)]
 
         # Для канала Карусель удаляем программы "Новости", "Погода"
         if self.channel_name == 'КАРУСЕЛЬ':
-            VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
+            VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case=False, na=False)]
 
         # Для канала СТС Лав удаляем программы "это надо знать", "распаковка", "экодело"
         elif self.channel_name == 'СТС LOVE':
             # список из программ, которые не нужны. Возможно, это реклама
             stop_words = ['это надо знать', 'распаковка', 'экодело', 'открывариум']
             pattern = '|'.join(stop_words)
-            VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
-
+            VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case=False, na=False)]
 
         # Если нужно вернуть в строковый формат
-        #VIMB['Прод-ть'] = VIMB['Прод-ть'].dt.strftime('%H:%M:%S')
+        # VIMB['Прод-ть'] = VIMB['Прод-ть'].dt.strftime('%H:%M:%S')
         # Удаляем ВСЕ программы длительностью 1 секунда
-        #VIMB = VIMB[VIMB['Прод-ть'] != '00:00:01'].reset_index(drop = True)
+        # VIMB = VIMB[VIMB['Прод-ть'] != '00:00:01'].reset_index(drop = True)
 
         return VIMB
 
-
     def parse_new_vimb_grids(
-                self, 
-                file_format: str = '*.xlsm', 
-                date_column: str = 'Дата', 
-                time_column: str = 'Время выхода'
-            ) -> pd.DataFrame:
+            self,
+            file_format: str = '*.xlsm',
+            date_column: str = 'Дата',
+            time_column: str = 'Время выхода'
+    ) -> pd.DataFrame:
         """
             Метод для чтения новых сеток ТВ-программ из VIMB (Сводная таблица) для какого-то одного канала. (Применительно к историческим данным)
-            
+
             Args:
                 file_format: формат файлов с новыми сетками ТВ-программ. По умолчанию '*.xlsm'.
                 date_column: название колонки с датой. По умолчанию 'Дата'.
                 time_column: название колонки с временем выхода программы. По умолчанию 'Время выхода'.
-                
+
             Returns:
                 combined: pd.DataFrame: фулл-таблица с новыми сетками с сортировкой по дате и слоту от 05:00-29:00.
         """
@@ -1215,12 +1153,7 @@ class VIMBGridProcessor(BaseParser):
         if not os.path.exists(self.folder_path):
             raise FileNotFoundError(f'Указанный путь {self.folder_path} не существует!')
 
-        # xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
-        # Ищем файлы во всех подпапках
-        xlsx_files = glob.glob(
-            os.path.join(self.folder_path, '**', file_format),
-            recursive=True
-        )
+        xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
 
         files = []
         # Перебираем найденные файлы и читаем их
@@ -1229,103 +1162,95 @@ class VIMBGridProcessor(BaseParser):
                 # Читаем файл в DataFrame
                 vimb = self.parse_VIMB(file_path)
                 files.append(vimb)
-        
+
             except Exception as e:
                 print(f'Ошибка при чтении файла {file_path}: {e}\n')
 
         # Полный датафрейм со всеми сетками (неотсортированный)
-        full_vimb = pd.concat(files).reset_index(drop = True)
-
+        full_vimb = pd.concat(files).reset_index(drop=True)
 
         # Устанавливаем правильные сортировки для столбцов с датой и временем начала программы
         full_vimb[date_column] = pd.to_datetime(full_vimb[date_column])
+        sorted_vimb = full_vimb.sort_values(date_column).reset_index(drop=True)
 
-        # Убрала сортировку по месяцам
-        full_vimb['sort_key'] = full_vimb[time_column].apply(BaseParser.get_sort_key)
+        # Создаем столбец с Месяцем
+        sorted_vimb['Месяц'] = sorted_vimb[date_column].dt.month
+        sorted_vimb[date_column] = sorted_vimb[date_column].dt.strftime('%Y-%m-%d')
 
-        result_df = (
-            full_vimb
-            .sort_values([date_column, 'sort_key'])
-            .drop(columns='sort_key')
-            .reset_index(drop=True)
-        )
-        # sorted_vimb = full_vimb.sort_values(date_column).reset_index(drop = True)
-        #
-        # # Создаем столбец с Месяцем
-        # sorted_vimb['Месяц'] = sorted_vimb[date_column].dt.month
-        # sorted_vimb[date_column] = sorted_vimb[date_column].dt.strftime('%Y-%m-%d')
-        #
-        # months_unique = sorted_vimb['Месяц'].unique()
-        #
-        # result = {}
-        # for month in months_unique:
-        #     df = sorted_vimb[sorted_vimb['Месяц'] == month].reset_index(drop = True)
-        #     data = df.drop('Месяц', axis = 1)
-        #
-        #     dates_unique = data[date_column].unique()
-        #     res = []
-        #     for date in dates_unique:
-        #         t = data[data[date_column] == date]
-        #
-        #         t['sort_key'] = t[time_column].apply(BaseParser.get_sort_key)
-        #
-        #         final = t.sort_values('sort_key').reset_index(drop = True)
-        #
-        #         final = final.drop('sort_key', axis = 1)
-        #         res.append(final)
-        #
-        #     general_result = pd.concat(res).reset_index(drop = True)
-        #
-        #     result[month] = general_result
-        #
-        # result_df = pd.concat(result.values(), ignore_index = True)
+        months_unique = sorted_vimb['Месяц'].unique()
+
+        result = {}
+        for month in months_unique:
+            df = sorted_vimb[sorted_vimb['Месяц'] == month].reset_index(drop=True)
+            data = df.drop('Месяц', axis=1)
+
+            dates_unique = data[date_column].unique()
+            res = []
+            for date in dates_unique:
+                t = data[data[date_column] == date]
+
+                t['sort_key'] = t[time_column].apply(BaseParser.get_sort_key)
+
+                final = t.sort_values('sort_key').reset_index(drop=True)
+
+                final = final.drop('sort_key', axis=1)
+                res.append(final)
+
+            general_result = pd.concat(res).reset_index(drop=True)
+
+            result[month] = general_result
+
+        result_df = pd.concat(result.values(), ignore_index=True)
 
         vimb = result_df.copy()
 
         # ВОТ ИСПРАВЛЕНИЕ - правильная обработка времени
-        vimb['datetime_obj'] = pd.to_datetime(vimb['Прод-ть'], format = '%H:%M:%S')
+        vimb['datetime_obj'] = pd.to_datetime(vimb['Прод-ть'], format='%H:%M:%S')
         vimb['hour_start'] = pd.to_datetime(vimb['Время выхода']).dt.hour
         vimb['hour_end'] = pd.to_datetime(vimb['Время окончания']).dt.hour
-        vimb['duration'] = vimb['datetime_obj'].dt.hour * 60 + vimb['datetime_obj'].dt.minute + vimb['datetime_obj'].dt.second / 60
-        vimb.drop('datetime_obj', axis = 1, inplace = True)
-        
+        vimb['duration'] = vimb['datetime_obj'].dt.hour * 60 + vimb['datetime_obj'].dt.minute + vimb[
+            'datetime_obj'].dt.second / 60
+        vimb.drop('datetime_obj', axis=1, inplace=True)
+
         vimb['original_index'] = vimb.index
         vimb['original_index'] = vimb['original_index'].round().astype(int)
 
         # ПРАВИЛЬНАЯ ФИЛЬТРАЦИЯ - преобразуем время в datetime для сравнения
         # Создаем временные колонки для сравнения
-        vimb['time_start_dt'] = pd.to_datetime(vimb['Время выхода'], format = '%H:%M:%S')
-        vimb['time_end_dt'] = pd.to_datetime(vimb['Время окончания'], format = '%H:%M:%S')
-        
+        vimb['time_start_dt'] = pd.to_datetime(vimb['Время выхода'], format='%H:%M:%S')
+        vimb['time_end_dt'] = pd.to_datetime(vimb['Время окончания'], format='%H:%M:%S')
+
         # Исправляем время окончания для программ, переходящих через полночь
         # Если время окончания меньше времени начала, значит программа переходит через полночь
         mask_overnight = vimb['time_end_dt'] < vimb['time_start_dt']
-        vimb.loc[mask_overnight, 'time_end_dt'] += pd.Timedelta(days = 1)
-        
+        vimb.loc[mask_overnight, 'time_end_dt'] += pd.Timedelta(days=1)
+
         # Теперь корректно фильтруем программы, пересекающие 5:00
-        split_time = pd.to_datetime('05:00:00', format = '%H:%M:%S')
+        split_time = pd.to_datetime('05:00:00', format='%H:%M:%S')
 
         mask_crosses_5am = (
-        # Случай 1: начинается до 05:00, заканчивается после 05:00 (включая переход через полночь)
-        (vimb['time_start_dt'] < vimb['time_end_dt']) &  # обычный случай (без перехода через полночь)
-        (vimb['time_start_dt'] < split_time) & 
-        (vimb['time_end_dt'] > split_time)
-        ) | (
-        # Случай 2: переходит через полночь (start > end без коррекции)
-        # Но time_end_dt уже скорректирован +1 день
-        # Так что time_end_dt всегда > time_start_dt после коррекции
-        # Поэтому этот случай уже покрыт Случаем 1
-        (vimb['time_start_dt'] >= split_time) & 
-        (vimb['time_end_dt'] > split_time + pd.Timedelta(days=1))
-        )
-        
-        df = vimb[mask_crosses_5am].reset_index(drop = True)
+                               # Случай 1: начинается до 05:00, заканчивается после 05:00 (включая переход через полночь)
+                                   (vimb['time_start_dt'] < vimb[
+                                       'time_end_dt']) &  # обычный случай (без перехода через полночь)
+                                   (vimb['time_start_dt'] < split_time) &
+                                   (vimb['time_end_dt'] > split_time)
+                           ) | (
+                               # Случай 2: переходит через полночь (start > end без коррекции)
+                               # Но time_end_dt уже скорректирован +1 день
+                               # Так что time_end_dt всегда > time_start_dt после коррекции
+                               # Поэтому этот случай уже покрыт Случаем 1
+                                   (vimb['time_start_dt'] >= split_time) &
+                                   (vimb['time_end_dt'] > split_time + pd.Timedelta(days=1))
+                           )
+
+        df = vimb[mask_crosses_5am].reset_index(drop=True)
 
         # Удаляем временные колонки
-        vimb = vimb.drop(['time_start_dt', 'time_end_dt'], axis = 1)
-        
-        df = df[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели', 'original_index']]
-    
+        vimb = vimb.drop(['time_start_dt', 'time_end_dt'], axis=1)
+
+        df = df[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели',
+                 'original_index']]
+
         weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
         new_rows = []
@@ -1346,16 +1271,15 @@ class VIMBGridProcessor(BaseParser):
                 'Дата': current_date,
                 'Время выхода': time_start,
                 'Время окончания': '04:59:59',
-                'Прод-ть': VIMBGridProcessor.calculate_duration(time_start, end_time_new),
+                'Прод-ть': VIMBGridProcessor.calculate_duration(time_start, '04:59:59'),
                 'Название программы': pr_name,
                 'День недели': current_weekday,
                 'original_index': idx_orig
             }
             new_rows.append(row_1)
 
-            
-            # Часть 2: После 05:00:00    
-            next_date = pd.to_datetime(current_date, format = '%Y-%m-%d', errors = 'coerce') + pd.Timedelta(days = 1)
+            # Часть 2: После 05:00:00
+            next_date = pd.to_datetime(current_date, format='%Y-%m-%d', errors='coerce') + pd.Timedelta(days=1)
 
             row_2 = {
                 'Дата': next_date.strftime('%Y-%m-%d'),
@@ -1370,17 +1294,17 @@ class VIMBGridProcessor(BaseParser):
 
         df_new = pd.DataFrame(new_rows)
 
-        vimb = vimb[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели', 'original_index']]
+        vimb = vimb[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели',
+                     'original_index']]
 
         indices_to_remove = df['original_index'].unique()
 
         vimb_cleaned = vimb[~vimb['original_index'].isin(indices_to_remove)].copy()
 
-        vimb_new = pd.concat([vimb_cleaned, df_new], ignore_index = True)
+        vimb_new = pd.concat([vimb_cleaned, df_new], ignore_index=True)
 
         vimb_new['Дата'] = pd.to_datetime(vimb_new['Дата'])
-        vimb_new = vimb_new.sort_values('Дата').reset_index(drop = True)
-
+        vimb_new = vimb_new.sort_values('Дата').reset_index(drop=True)
 
         vimb_new = vimb_new[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели']]
 
@@ -1392,15 +1316,15 @@ class VIMBGridProcessor(BaseParser):
 
             t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
 
-            final = t.sort_values('sort_key').reset_index(drop = True)
+            final = t.sort_values('sort_key').reset_index(drop=True)
 
-            final = final.drop('sort_key', axis = 1)
+            final = final.drop('sort_key', axis=1)
             res.append(final)
 
-        general_result = pd.concat(res).reset_index(drop = True)
+        general_result = pd.concat(res).reset_index(drop=True)
 
         general_result['Дата'] = pd.to_datetime(general_result['Дата'], errors='coerce')
-            
+
         # Затем преобразуем в строку
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
 
@@ -1409,34 +1333,32 @@ class VIMBGridProcessor(BaseParser):
         # Убедимся, что дата в строковом формате
         general_result['Дата'] = general_result['Дата'].astype(str)
 
-
-        #general_result['Прод-ть'] = general_result['Прод-ть'].dt.strftime('%H:%M:%S')
-        general_result = general_result[general_result['Прод-ть'] != '00:00:01'].reset_index(drop = True)
+        # general_result['Прод-ть'] = general_result['Прод-ть'].dt.strftime('%H:%M:%S')
+        general_result = general_result[general_result['Прод-ть'] != '00:00:01'].reset_index(drop=True)
 
         return general_result
-    
 
     @staticmethod
     def calculate_duration(start_time, end_time):
         """
             Вычисляет продолжительность программы, учитывая переход через полночь.
             Учитывает часы, минуты и секунды.
-            
+
             Args:
                 start_time: время начала в формате 'HH:MM:SS'
                 end_time: время окончания в формате 'HH:MM:SS'
-            
+
             Returns:
                 Продолжительность в формате 'HH:MM:SS'
         """
         # Разбиваем время на часы, минуты и секунды
         start_h, start_m, start_s = map(int, start_time.split(':'))
         end_h, end_m, end_s = map(int, end_time.split(':'))
-        
+
         # Преобразуем в секунды от полуночи
         start_total_sec = start_h * 3600 + start_m * 60 + start_s
         end_total_sec = end_h * 3600 + end_m * 60 + end_s
-        
+
         # Если время окончания меньше времени начала - переход через полночь
         if end_total_sec < start_total_sec:
             # Продолжительность = (24:00:00 - начало) + окончание
@@ -1444,20 +1366,19 @@ class VIMBGridProcessor(BaseParser):
         else:
             # Обычный случай
             duration_sec = end_total_sec - start_total_sec
-        
+
         # Преобразуем обратно в часы:минуты:секунды
         duration_h = duration_sec // 3600
         duration_m = (duration_sec % 3600) // 60
         duration_s = duration_sec % 60
-        
+
         return f"{duration_h:02d}:{duration_m:02d}:{duration_s:02d}"
-    
 
     def adjust_end_time(
-                    self, 
-                    df: pd.DataFrame, 
-                    time_col: str = 'Время окончания'
-                ) -> pd.DataFrame:
+            self,
+            df: pd.DataFrame,
+            time_col: str = 'Время окончания'
+    ) -> pd.DataFrame:
         """
             Корректировка времени окончания для обработки границ часов. Если время окончания, например, 05:00:00, то будет сделана замена на 04:59:59.
             Отдельно обрабатывается перескок через полночь.
@@ -1486,7 +1407,6 @@ class VIMBGridProcessor(BaseParser):
         df_ = df.copy()
         df_[time_col] = df_[time_col].apply(adjust_time)
         return df_
-    
 
     def check_start__and__end_day(self, df: pd.DataFrame, date_column: str = 'Дата'):
         """
@@ -1513,7 +1433,7 @@ class VIMBGridProcessor(BaseParser):
 
             # Если даты не в строковом формате
             elif not all(isinstance(x, str) for x in df_check[date_column].dropna().head(10)):
-                df_check[date_column] = pd.to_datetime(df_check[date_column], errors = 'coerce').dt.strftime('%Y-%m-%d')
+                df_check[date_column] = pd.to_datetime(df_check[date_column], errors='coerce').dt.strftime('%Y-%m-%d')
 
         except Exception as e:
             print(f'Ошибка конвертации дат: {e}')
@@ -1556,15 +1476,14 @@ class VIMBGridProcessor(BaseParser):
                 print(f'⚠️ ПРЕДУПРЕЖДЕНИЕ: В {year}-{month:02d} дни идут не подряд')
                 print(f'Присутствуют дни: {actual_days}')
 
-        #print(f"\nПроверка месяцев завершена. Всего уникальных месяцев: {len(month_days)}")
-
+        # print(f"\nПроверка месяцев завершена. Всего уникальных месяцев: {len(month_days)}")
 
         corrections_made = False
         # Проверка, что каждый день начинается в 05:00:00 и заканчивается в 05:00:00
         dates_unique = df_check[date_column].unique()
 
         # Создаем маску для удаления строк с профилактикой
-        delete_mask = pd.Series(False, index = df.index)
+        delete_mask = pd.Series(False, index=df.index)
 
         for date in dates_unique:
 
@@ -1572,12 +1491,11 @@ class VIMBGridProcessor(BaseParser):
             date_mask = df_check[date_column] == date
             date_indices = df[date_mask].index.tolist()
 
-            table_check = df_check[df_check['Дата'] == date].reset_index(drop = True)
-
+            table_check = df_check[df_check['Дата'] == date].reset_index(drop=True)
 
             # Выделение дней с профилактикой
-            mask = table_check['Название программы'].str.contains('профилактика', case = False, na = False) | \
-                   table_check['Название программы'].str.contains('профилакт', case = False, na = False)
+            mask = table_check['Название программы'].str.contains('профилактика', case=False, na=False) | \
+                   table_check['Название программы'].str.contains('профилакт', case=False, na=False)
             prophylactic_count = mask.sum()
 
             indices = table_check.index.tolist()
@@ -1603,7 +1521,7 @@ class VIMBGridProcessor(BaseParser):
 
             # Если дней с профилактикой не обнаружено
             if prophylactic_count == 0:
-                if len(start) == 0 and len(table_check) != 1 :
+                if len(start) == 0 and len(table_check) != 1:
                     print(f'⚠️ Для {date} не найдена стартовая программа дня.')
 
                     # Если разница между фактической датой старта и нужной больше 45 мин, то замена не производится
@@ -1613,7 +1531,7 @@ class VIMBGridProcessor(BaseParser):
                         corrections_made = True
                         time_changed = True
 
-                elif len(stop) == 0  and len(table_check) != 1:
+                elif len(stop) == 0 and len(table_check) != 1:
                     print(f'⚠️ Для {date} не найдена кульминационная программа дня')
 
                     # Если разница между фактической датой окончания и нужной больше 45 мин, то замена не производится
@@ -1629,7 +1547,6 @@ class VIMBGridProcessor(BaseParser):
                 prophylactic_indices = [date_indices[i] for i in table_check[mask].index]
                 delete_mask.loc[prophylactic_indices] = True
                 corrections_made = True
-
 
             # Если время было изменено, пересчитываем длительность для всех программ этого дня
             if time_changed:
@@ -1649,14 +1566,16 @@ class VIMBGridProcessor(BaseParser):
                     if new_duration:
                         df.loc[idx, 'Прод-ть'] = new_duration
                         if idx == first_idx_original or idx == last_idx_original:
-                            print(f"  Программа '{df.loc[idx, 'Название программы']}': новая длительность {new_duration}")
+                            print(
+                                f"  Программа '{df.loc[idx, 'Название программы']}': новая длительность {new_duration}")
                     else:
-                        print(f"  Ошибка при вычислении длительности для программы '{df.loc[idx, 'Название программы']}'")
+                        print(
+                            f"  Ошибка при вычислении длительности для программы '{df.loc[idx, 'Название программы']}'")
 
         # Удаляем строки с профилактикой из исходного df
         if delete_mask.any():
             print(f'Найдены строки с ПРОФИЛАКТИКОЙ. Удалено строк с профилактикой: {delete_mask.sum()}')
-            df.drop(df[delete_mask].index, inplace = True)
+            df.drop(df[delete_mask].index, inplace=True)
 
         if corrections_made:
             print('Изменения внесены в исходную таблицу.')
@@ -1665,8 +1584,88 @@ class VIMBGridProcessor(BaseParser):
 
         return df
 
+    def _final_check(self, df: pd.DataFrame):
+        """
+            Функция для финальной проверки причесанного датафрейма с сетками вимба на наличие:
+            - пропусков программ,
+            - дубликатов записей,
+            - дубликатов времени начала программ (в рамках одного дня).
+        """
 
-    
+        print("\n ПРОИЗВОДИТСЯ ФИНАЛЬНАЯ ПРОВЕРКА СЕТКИ, ПЕРЕД ЗАПИСЬЮ В ФАЙЛ...\n")
+
+        problems_found = False
+
+        # Проверяем полные дубликаты строк
+        dup_rows = df[df.duplicated(keep=False)]
+
+        if not dup_rows.empty:
+            problems_found = True
+            print("🚩 Найдены полные дубликаты строк:")
+
+            for _, row in dup_rows.iterrows():
+                print(
+                    f"   {row['Дата']} {row['Время выхода']} — "
+                    f"{row['Название программы']}"
+                )
+            print()
+
+        # Проверяем разрывы/перекрытия между программами
+        start_dt = pd.to_datetime(df['Дата'] + ' ' + df['Время выхода'], errors='coerce')
+        end_dt = pd.to_datetime(df['Дата'] + ' ' + df['Время окончания'], errors='coerce')
+
+        for i in range(1, len(df)):
+            gap = start_dt.iloc[i] - end_dt.iloc[i - 1]
+
+            if gap > pd.Timedelta(hours=12):
+                # игнорируем разрыв, потому что это просто переход через 5:00
+                gap = pd.Timedelta(0)
+            elif gap < pd.Timedelta(hours=-12):
+                # отрицательный разрыв через сутки — тоже игнорируем
+                gap = pd.Timedelta(0)
+
+            if gap > MIN_GAP:
+                problems_found = True
+                print(
+                    f"🚩 Разрыв между строками {i - 1} → {i}:\n"
+                    f"   [{df.iloc[i - 1]['Название программы']}] "
+                    f"{df.iloc[i - 1]['Дата']} {df.iloc[i - 1]['Время окончания']} →\n"
+                    f"   [{df.iloc[i]['Название программы']}] "
+                    f"{df.iloc[i]['Дата']} {df.iloc[i]['Время выхода']} "
+                    f"(разрыв {gap})\n"
+                )
+
+            if gap < pd.Timedelta(0):
+                problems_found = True
+                print(
+                    f"🚩 Перекрытие программ между строками {i - 1} → {i}:\n"
+                    f"   [{df.iloc[i - 1]['Название программы']}] "
+                    f"заканчивается в {df.iloc[i - 1]['Время окончания']},\n"
+                    f"   а [{df.iloc[i]['Название программы']}] "
+                    f"начинается в {df.iloc[i]['Время выхода']} "
+                    f"(перекрытие {gap})\n"
+                )
+
+        # Проверяем дубликаты по дате и времени выхода
+        dup_start = df[df.duplicated(subset=['Дата', 'Время выхода'], keep=False)]
+
+        if not dup_start.empty:
+            problems_found = True
+            print("🚩 Найдены дубликаты по дате и времени выхода:")
+
+            for _, row in dup_start.iterrows():
+                print(
+                    f"   {row['Дата']} {row['Время выхода']} — "
+                    f"{row['Название программы']}"
+                )
+            print()
+
+        # Итог
+        if not problems_found:
+            print("🎉 ВСЕ СУПЕР, ПРОБЛЕМ НЕТ!\n")
+
+        return not problems_found
+
 
     def update_vimb_file(self, web_new):
         """
@@ -1677,34 +1676,35 @@ class VIMBGridProcessor(BaseParser):
 
         # Проверяем существование файла
         file_path = Path(self.folder_path)
-        
+
         if not file_path.exists():
             print(f'Файл {file_path} не найден. Создаем новый файл...')
-            
+
             # Подготавливаем данные для записи
             new_cleaned = web_new.copy()
-            
+
             # Приводим все к строковому типу и обрезаем пробелы
             for col in new_cleaned.columns:
                 new_cleaned[col] = new_cleaned[col].astype(str).str.strip()
-            
+
             # Проверяем границы дней перед сохранением
             new_cleaned = self.check_start__and__end_day(new_cleaned)
-            
+            self._final_check(new_cleaned)
             # Создаем Excel файл с форматированием
-            self.folder_path = file_path # Добавляем путь для сохранения
+            self.folder_path = file_path  # Добавляем путь для сохранения
 
             self.make_vimbs_style_of_table(
-                df = new_cleaned, 
-                sheet_name = 'Sheet1'
+                df=new_cleaned,
+                sheet_name='Sheet1'
             )
-            
+
             print(f'Создан новый файл: {file_path}')
             return
-        
+
         # Файл существует - читаем и обновляем
         try:
             new = web_new.copy()
+
             # Читаем существующие данные
             old_web = pd.read_excel(self.folder_path)
 
@@ -1712,26 +1712,66 @@ class VIMBGridProcessor(BaseParser):
             for col in new.columns:
                 new[col] = new[col].astype(str).str.strip()
                 old_web[col] = old_web[col].astype(str).str.strip()
-            
-            full = pd.concat([old_web, new]).reset_index(drop = True)
+
+            # Танцы с бубнами, чтобы правильно актуализировать сетку
+            full_list = []
+
+            # Берём все даты, которые есть либо в old, либо в new
+            all_dates = list(
+                dict.fromkeys(list(old_web['Дата'].unique()) + list(new['Дата'].unique())))
+
+            for date in all_dates:
+                old_day = old_web[old_web['Дата'] == date]
+                new_day = new[new['Дата'] == date]
+
+                if not new_day.empty:
+                    old_first_time = old_day.iloc[0]['Время выхода'] if not old_day.empty else None
+                    new_has_5 = not new_day[new_day['Время выхода'] == '05:00:00'].empty
+                    old_has_5 = not old_day[old_day['Время выхода'] == '05:00:00'].empty
+
+                    if new_has_5:
+                        # В new есть 05:00:00 → берём всё из new
+                        day_final = new_day
+                    elif old_has_5 and not new_has_5:
+                        # В old есть 05:00:00, в new нет тогда берём старую строку 05:00 + все новые строки из new
+                        day_final = pd.concat([
+                            old_day[old_day['Время выхода'] == '05:00:00'],
+                            new_day
+                        ])
+                    else:
+                        # Первая строка old не 05:00 и в new нет 05:00 тогда берём всё из new
+                        day_final = new_day
+                else:
+                    # Если новых данных нет, берём полностью старые
+                    day_final = old_day
+
+                full_list.append(day_final)
+
+            # Объединяем все дни в итоговый DataFrame
+            full = pd.concat(full_list).reset_index(drop=True)
+            # full = pd.concat([old_web, new]).reset_index(drop=True)
 
             df_no_duplicates = full.drop_duplicates(
-                subset = ['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели'],
-                keep = 'first'
+                subset=['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели'],
+                keep='last'
+            )
+            # По идее это уже не надо, но пока оставлю
+            df_no_duplicates = df_no_duplicates.drop_duplicates(
+                subset=['Дата', 'Время выхода', 'Время окончания'],
+                keep='last'
             )
             print(f'Удалено {len(full) - len(df_no_duplicates)} дубликатов.')
-
             # Проверяем границы дней
             self.check_start__and__end_day(df_no_duplicates)
-
+            # Финальная проверка, что все четко
+            self._final_check(df_no_duplicates)
             self.make_vimbs_style_of_table(
-                df = df_no_duplicates, 
-                sheet_name = 'Sheet1'
+                df=df_no_duplicates,
+                sheet_name='Sheet1'
             )
 
         except Exception as e:
             print(f'Ошибка при обновлении файла: {e}')
-        
 
             # Создаем резервную копию и новый файл
             try:
@@ -1739,20 +1779,18 @@ class VIMBGridProcessor(BaseParser):
                 if file_path.exists():
                     shutil.copy2(file_path, backup_path)
                     print(f'Создана резервная копия: {backup_path}')
-                
+
                 # Создаем новый файл с web_new данными
                 self.folder_path = file_path
 
                 self.make_vimbs_style_of_table(
-                    df = web_new, 
-                    sheet_name = 'Sheet1'
+                    df=web_new,
+                    sheet_name='Sheet1'
                 )
                 print(f'Создан новый файл с предоставленными данными.')
-                
+
             except Exception as backup_error:
                 print(f'Критическая ошибка при создании резервной копии: {backup_error}')
-    
-
 
     def make_vimbs_style_of_table(self, df: pd.DataFrame, sheet_name: str):
         """
@@ -1766,12 +1804,12 @@ class VIMBGridProcessor(BaseParser):
             {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
             {'header': 'День недели', 'width': 12.0, 'format': 'general'}
         ]
-        
+
         self.make_style_of_table(
-            df = df,
-            sheet_name = sheet_name,
-            column_configs = column_configs,
-            date_columns = ['Дата']
+            df=df,
+            sheet_name=sheet_name,
+            column_configs=column_configs,
+            date_columns=['Дата']
         )
 
 
