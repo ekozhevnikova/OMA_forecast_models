@@ -102,7 +102,7 @@ class GeneralTextCleaner:
             },
             'stop_words': {'документальный', 'док.'},
             'patterns': [
-                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'\sх\W*ф\s',  r'\bв\W*[сc]\b',
+                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'(?<!\w)х\W*ф(?!\w)',  r'\bв\W*[сc]\b',
                 r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*']
         }
 
@@ -151,6 +151,9 @@ class GeneralTextCleaner:
             },
             'МИР': {
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b']
+            },
+            'ЗВЕЗДА': {
+                'special_names': {'1812'} 
             },
             'СПАС': {
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b'],
@@ -360,15 +363,6 @@ class GeneralTextCleaner:
             
             return False, text
         
-        # Специальная обработка для ЗВЕЗДА
-        if self.channel == 'ЗВЕЗДА':
-            # Только специфичные для ЗВЕЗДА случаи, которые НЕ могут быть обработаны общим алгоритмом
-            if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
-                return True, 'документальный сериал'
-            
-            # А всё остальное (например, извлечение названия) возвращаем False,
-            # чтобы основной алгоритм обработал
-            return False, text
         
         # Специальная обработка для 2X2
         if self.channel == '2X2' and 'фильм, фильм, фильм' in text_lower:
@@ -390,7 +384,7 @@ class GeneralTextCleaner:
             return False, text
         
 
-        # Специальная обработка для СПАС
+        # Специальная обработка для Ю
         if self.channel == 'Ю':
             special_phrases = [
                 'маша и медведь', 'супермама', 'ждули'
@@ -409,6 +403,40 @@ class GeneralTextCleaner:
                     if re.search(pattern, text_lower):
                         cleaned_phrase = self.clean_title(phrase)
                         return True, cleaned_phrase
+        
+
+        # Специальная обработка для ЗВЕЗДА
+        if self.channel == 'ЗВЕЗДА':
+            # Сначала проверяем специальные фразы
+            special_phrases = [
+                'голоса победы', 'дневники памяти', 'люди донбасса', 
+                'военный врач', 'восход победы', 'операция', 'проект "альфа"',
+                'армия "трясогузки"'
+                ]
+            
+            for phrase in special_phrases:
+                if phrase in text_lower:
+                    cleaned_phrase = self.clean_title(phrase)
+                    return True, cleaned_phrase
+            
+            # 2. Проверяем, не является ли текст просто числом
+            if text_lower.strip().isdigit():
+                return True, text_lower.strip()
+            
+            # 3. Проверяем специальный случай с документальным сериалом
+            if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
+                return True, 'документальный сериал'
+            
+            # 4. Ищем название в кавычках (это то, что нужно для "28 панфиловцев")
+            match = re.search(r'"([^"]+)"', text_lower)
+            if match:
+                title = match.group(1).strip()
+                if title:
+                    cleaned_title = self.clean_title(title)
+                    return True, cleaned_title if cleaned_title else title
+            
+            # 5. Если ничего не нашли, идем в общий алгоритм
+            return False, text
         
 
         # Специальная обработка для СПАС
@@ -584,7 +612,10 @@ class GeneralTextCleaner:
         result = text_lower
 
         # Удаляем возрастные рейтинги (12+, 16+ и т.д.)
-        result = re.sub(r'\s*(0|[68]|1[0268]|2[04]|[3-9][02468])\+', ' ', result, flags=re.IGNORECASE)
+        result = re.sub(
+            r'\(?\s*\+?\s*\d+\s*\+?\s*\)?', 
+            ' ', result, flags=re.IGNORECASE
+        )
 
         old_result = result
         result = re.sub(r'\(\s*[а-яa-z]\s*\)', ' ', result, flags=re.IGNORECASE)
