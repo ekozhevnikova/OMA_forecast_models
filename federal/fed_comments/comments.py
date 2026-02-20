@@ -538,14 +538,18 @@ class Federal_Comments:
                         else:
                             comments[statistic] = 'Снижение КУС за счет снижения прогноза внедомашнего телесмотрения.'
                     
-                    #elif statistic == 'GRP Телемагазины':
-                    #    val = reasons_dict['GRP Телемагазины']
-                    #    print(channel, month, val)
-                    #    if val > 0:
-                    #        comments[statistic] = f'Размещение телемагазинов {val} GRP.'
-                    #    else:
-                    #        comments[statistic] = f'Снятие телемагазинов {(-1) * val} GRP.'
-                    
+                    elif statistic == 'GRP Телемагазины' and channel == 'СПАС':
+                        # Для канала СПАС по особенному пишутся комментариии по телемагам.
+                        val = reasons_dict['GRP Телемагазины']
+                        if val > 0:
+                            # Если изменение по GRP Телемагазины составило > 10 GRP, то заносим это в причину.
+                            if val > 10:
+                                comments[statistic] = f'Размещение телемагазинов {val} GRP.'
+                        else:
+                            # Если изменение по GRP Телемагазины составило > 10 GRP, то заносим это в причину.
+                            if np.abs(val) > 10:
+                                comments[statistic] = f'Снятие телемагазинов {(-1) * val} GRP.'
+                
                     elif statistic == 'GRP ТП канала':
                         if reasons_dict['GRP ТП канала'] > 0:
                             comments[statistic] = f'Рост ТП канала.'

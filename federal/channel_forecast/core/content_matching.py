@@ -152,6 +152,9 @@ class GeneralTextCleaner:
             'МИР': {
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b']
             },
+            'ЗВЕЗДА': {
+                'special_names': {'1812'} 
+            },
             'СПАС': {
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b'],
                 'special_names': {'старцы'} 
@@ -405,18 +408,34 @@ class GeneralTextCleaner:
         # Специальная обработка для ЗВЕЗДА
         if self.channel == 'ЗВЕЗДА':
             # Сначала проверяем специальные фразы
-            special_phrases = ['голоса победы','дневники памяти']
+            special_phrases = [
+                'голоса победы', 'дневники памяти', 'люди донбасса', 
+                'военный врач', 'восход победы', 'операция', 'проект "альфа"',
+                'армия "трясогузки"'
+                ]
             
             for phrase in special_phrases:
                 if phrase in text_lower:
                     cleaned_phrase = self.clean_title(phrase)
                     return True, cleaned_phrase
             
-            # Проверяем специальный случай с документальным сериалом
+            # 2. Проверяем, не является ли текст просто числом
+            if text_lower.strip().isdigit():
+                return True, text_lower.strip()
+            
+            # 3. Проверяем специальный случай с документальным сериалом
             if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
                 return True, 'документальный сериал'
             
-            # Если ничего не нашли, идем в общий алгоритм
+            # 4. Ищем название в кавычках (это то, что нужно для "28 панфиловцев")
+            match = re.search(r'"([^"]+)"', text_lower)
+            if match:
+                title = match.group(1).strip()
+                if title:
+                    cleaned_title = self.clean_title(title)
+                    return True, cleaned_title if cleaned_title else title
+            
+            # 5. Если ничего не нашли, идем в общий алгоритм
             return False, text
         
 
@@ -593,7 +612,10 @@ class GeneralTextCleaner:
         result = text_lower
 
         # Удаляем возрастные рейтинги (12+, 16+ и т.д.)
-        result = re.sub(r'\s*(0|[68]|1[0268]|2[04]|[3-9][02468])\+', ' ', result, flags=re.IGNORECASE)
+        result = re.sub(
+            r'\(?\s*\+?\s*\d+\s*\+?\s*\)?', 
+            ' ', result, flags=re.IGNORECASE
+        )
 
         old_result = result
         result = re.sub(r'\(\s*[а-яa-z]\s*\)', ' ', result, flags=re.IGNORECASE)
