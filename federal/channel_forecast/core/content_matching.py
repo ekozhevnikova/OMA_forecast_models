@@ -842,6 +842,8 @@ class SportChannelCleaner:
         
         # Слова без скобок
         r'\b(повтор|премьера|посвящение|сезон|сери[яи]|част[ьи]|эпизод[ы]?)\b',
+
+        r'\bд\W*ф\b',
         
         # Специальные паттерны
         r'№\s*\d+',
@@ -858,11 +860,12 @@ class SportChannelCleaner:
 
 
         self.SPECIAL_NAMES = {
-            'все на матч', 'мультфильм', 'все о главном', 'что за спорт', #'матч парад',
+            'все на матч', 'мультфильм', 'все о главном', 'что за спорт', 'матч парад',
             'непридуманные истории', 'век нашего спорта', 'география спорта', 
             'что по спорту', 'лица страны', 'культовые', 'команда мечты', 'третий тайм',
-            'смешанные единоборства ufc', 'смешанные единоборства one ufc', 
-            'смешанные единоборства aca', 'смешанные единоборства ifc', 'смешанные единоборства uralfc'
+            'смешанные единоборства ufc', 'смешанные единоборства one ufc', 'смешанные единоборства one fc',
+            'смешанные единоборства аса', 'смешанные единоборства ifc', 'смешанные единоборства uralfc',
+            'бокс bare knuckle fc', 'профессиональный бокс'
         }
 
         self.SPECIAL_PATTERNS_FOR_SAVE = [
@@ -875,6 +878,7 @@ class SportChannelCleaner:
             'films': [
                         # Полные слова
                         r'\b(анимационный|документальный|худ\.?|фильм|цикл|сериал|мультфильм)\b',
+                        r'\bд\W*ф\b',
 
                         # Аббревиатуры с любым разделителем (х/ф, х.ф, х ф, и т.д.)
                         r'[хмд]\W*[ф]',  # х/ф, х.ф, м/ф, д/ф и т.д.
@@ -905,7 +909,7 @@ class SportChannelCleaner:
             'sport': {
                 'сезон', 'дайджест', 'место', 'лига ставок', 'betboom', 'olimpbet', 
                 'winline', 'fonbet', 'фонбет', 'раунд', 'матч', 'товарищеский', 'озон', 'ozon',
-                'фосагро', 'технониколь', 'online'
+                'фосагро', 'технониколь', 'online', 'on line'
             },
             # для фильмов
             'films': {
@@ -1208,8 +1212,9 @@ class SportChannelCleaner:
         
         # === ЭТАП 3: ПРОВЕРКА НА СПЕЦИАЛЬНЫЕ ИМЕНА ===
         if special_names:
-
-            result = re.sub(r'\.', '', result)  # точка в любом месте
+            
+            result = re.sub(r'[^\w\s]', ' ', result)
+            result = re.sub(r'\.', ' ', result)  # точка в любом месте
             result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
 
             # Удаляем от специальных символов
@@ -1302,7 +1307,7 @@ class SportChannelCleaner:
                 
         elif program_type == 'sport':
             # Удаление подстрок типа '3е место'
-            result = re.sub(r'\b\d+\-?[еой]?\s*место\b', '', result, flags=re.IGNORECASE)
+            result = re.sub(r'\b\d+\s*\-?\s*[еой]?\s*место\b', '', result, flags = re.IGNORECASE)
 
             # Для спортивных программ - только стоп-слова
             for stop_word in words_to_remove:
@@ -1454,7 +1459,7 @@ class SportChannelCleaner:
             print(f"ИТОГОВЫЙ РЕЗУЛЬТАТ: '{result}'")
             print('='*50)
         
-        if result == 'футбол чемпионат италии on line':
+        if result == 'жизньподарок':
             print(text)
 
         if result == '':
@@ -1504,7 +1509,7 @@ class SportChannelCleaner:
                 all_mappings.update(category_mapping_dict)
         
         # ЭТАП 5: Применяем маппинг к датафрейму
-        result_df['program_name_cleaned'] = result_df[program_name_column].map(all_mappings)
+        result_df['program_name'] = result_df[program_name_column].map(all_mappings)
         
         # ЭТАП 6: Получаем уникальные очищенные программы с сохранением порядка
         unique_programs = []
@@ -1789,6 +1794,13 @@ class CosineSimilarity:
         
         # ДОБАВЛЕННАЯ ПРОВЕРКА: все ли программы нашли соответствия
         all_programs_matched = len(programs_not_found) == 0
+
+        comparison_result = {
+                'TF-IDF': len(tfidf_found),
+                'fuzzy': len(fuzzy_found),
+                'Справочник': len(vocabulary_found),
+                'Не найдено': len(programs_not_found)
+            }
         
         if print_in_console:
             # Вывод информации о результатах сопоставления
@@ -1823,15 +1835,7 @@ class CosineSimilarity:
             if all_programs_matched:
                 print(Color.BOLD + Color.GREEN + f'УСПЕХ: Для всех программ найдены соответствия' + Color.END)
             else:
-                print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
-        
-            comparison_result = {
-                'TF-IDF': len(tfidf_found),
-                'fuzzy': len(fuzzy_found),
-                'Справочник': len(vocabulary_found),
-                'Не найдено': len(programs_not_found)
-            }
-            
+                print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")            
         
         return result_df, programs_not_found, comparison_result
     

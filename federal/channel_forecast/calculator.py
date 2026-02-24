@@ -387,12 +387,13 @@ class TVScheduleProcessor:
         Класс для подгона сетки Palomars под сетку VIMB из Сводного отчёта для одного дня
     """
 
-    def __init__(self, vimb_init, palomars_init):
+    def __init__(self, channel, vimb_init, palomars_init):
         """
             Атрибуты:
                 vimb_init: pd.DataFrame: исходная сетка ТВ-программ VIMB
                 palomars_init: pd.DataFrame: исходная сетка ТВ-программ Mediascope
         """
+        self.channel = channel
         self.vimb_init = vimb_init
         self.palomars_init = palomars_init
     
@@ -623,7 +624,7 @@ class TVScheduleProcessor:
         share_init = plmrs_joined['Share'].sum()
 
         # Округление времени
-        calculator = TVShareCalculator(plmrs_joined)
+        calculator = TVShareCalculator(self.channel, plmrs_joined)
         plmrs_joined['Время выхода'] = calculator.round_time('Время выхода', minutes)
         plmrs_joined['Время окончания'] = calculator.round_time('Время окончания', minutes)
 

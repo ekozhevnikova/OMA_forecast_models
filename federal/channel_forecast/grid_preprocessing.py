@@ -1858,7 +1858,7 @@ class ProgramMatcher(BaseParser):
         Класс для сопоставления телепрограмм из разных источников: Mediascope и VIMB.
         Обеспечивает нормализацию названий программ и поиск временных совпадений.
     """
-    def __init__(self, channel_vocabulary: pd.DataFrame, folder_path: str, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
+    def __init__(self, channel: str, channel_vocabulary: pd.DataFrame, folder_path: str, palomars_grid: pd.DataFrame, vimb_grid: pd.DataFrame):
         """
         Инициализация ProgramMatcher
         
@@ -1870,6 +1870,7 @@ class ProgramMatcher(BaseParser):
         """
         super().__init__(folder_path)
 
+        self.channel = channel
         self.channel_vocabulary = channel_vocabulary
         self.folder_path = folder_path
         self.palomars_grid = palomars_grid
@@ -1922,19 +1923,31 @@ class ProgramMatcher(BaseParser):
             # Отбираем дату, которую будем анализировать
             palomars = plmrs[plmrs['Дата'] == target_date].reset_index(drop = True)
 
-            text_prepr = TextPreprocessor()
+            ######################## НОВЫЙ КУСОК ########################
+            # 1. Программы в VIMB
+            vimb_prepr = GeneralTextCleaner(self.channel, vimb)
+            vimb_prgms, vimb_df = vimb_prepr.clean_dataframe()
+
+
+            # 2. Программы в PALOMARS
+            palomars_prepr = GeneralTextCleaner(self.channel, palomars)
+            palomars_prgms, palomars_df = palomars_prepr.clean_dataframe()
+
+            ######################## КОНЕЦ НОВОГО КУСКА ########################
+
+            #text_prepr = TextPreprocessor()
             
             #Программы в Palomars
-            plmrs_modified, data_plmrs, not_found_plmrs = text_prepr.clean_text(palomars, 'Название программы')
-            plmrs_modified_ = list(set(plmrs_modified))
+            #plmrs_modified, data_plmrs, not_found_plmrs = text_prepr.clean_text(palomars, 'Название программы')
+            #plmrs_modified_ = list(set(plmrs_modified))
             
             #Программы в VIMB
-            vimb_modified, vimb_cleaned, not_found_vimb = text_prepr.clean_text(vimb, 'Название программы')
-            vimb_modified_ = list(set(vimb_modified))
+            #vimb_modified, vimb_cleaned, not_found_vimb = text_prepr.clean_text(vimb, 'Название программы')
+            #vimb_modified_ = list(set(vimb_modified))
             
             # Делаем поиск по схожим программам
-            similar = CosineSimilarity(plmrs_modified_, vimb_modified_, data_plmrs, vimb_cleaned)
-            result, matched = similar.comparison(self.channel_vocabulary, min_similarity = 0.5, use_vocabulary = True)
+            similar = CosineSimilarity(palomars_prgms, vimb_prgms, palomars_df, vimb_df)
+            result, not_matched, comparison = similar.comparison(self.channel_vocabulary, min_similarity = 0.5, use_vocabulary = True)
             #features_dict = similar.generate_similar_features(result, False)
             
             # Заменяем названия передач, если какие-то не совпадают
@@ -1944,14 +1957,14 @@ class ProgramMatcher(BaseParser):
             for i in range(len(df)):
                 programs_replace[df.iloc[i]['Программа Palomars']] = df.iloc[i]['Программа VIMB']
                 
-            data_plmrs['program_name'].replace(programs_replace, inplace = True)
+            palomars_df['program_name'].replace(programs_replace, inplace = True)
             
             # Находим базовые названия программ. Производим замену
-            base_names = ProgramMatcher.find_common_base_names(data_plmrs['program_name'].tolist())
-            data_plmrs['Базовое_название'] = data_plmrs['program_name'].map(base_names)
+            base_names = ProgramMatcher.find_common_base_names(palomars_df['program_name'].tolist())
+            palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)
             
             # Оставляем только нужные столбцы для анализа
-            Pal = data_plmrs[['Дата', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted']]
+            Pal = palomars_df[['Дата', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted']]
             
             Pal.rename(columns = 
                     {
@@ -1968,7 +1981,7 @@ class ProgramMatcher(BaseParser):
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
 
-            result = TVScheduleProcessor(VIMB_init, Pal_init).find_matches(minutes)
+            result = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes)
 
             result_webs[target_date] = result
             
