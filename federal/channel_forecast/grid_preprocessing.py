@@ -14,7 +14,7 @@ import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
-#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.federal.channel_forecast.core.content_matching import *
 
@@ -559,16 +559,40 @@ class MediascopeParser(BaseParser):
             Args:
                 web_filepath: Путь к файлу с исторической сеткой Mediascope
         """
-        self.channel = channel
-        self.web_filepath = web_filepath
-
         super().__init__(web_filepath)
 
-        # Вызываем ensure_file_exists с нужными колонками
-        self._ensure_file_exists([
-            'Канал', 'Дата', 'Название программы', 'Время выхода',
-            'Время окончания', 'Share', 'Жанр', 'День недели'
-        ])
+        # Список допустимых названий каналов
+        allowed_channels = [
+            'ТНТ4', '2X2', 'КАРУСЕЛЬ', 'СУББОТА', 
+            'СТСЛав', 'ЗВЕЗДА', 'МИР', 'МатчТВ', 
+            'МузТВ', 'СОЛНЦЕ', 'СПАС', 'ТВЦ', 'ЧЕ', 'Ю'
+            ]
+        
+        # Проверка наличия канала в списке допустимых
+        if channel not in allowed_channels:
+            raise ValueError(
+                f'Канал '{channel_name}' не существует. '
+                f'Выберите канал из списка: {', '.join(allowed_channels)}'
+            )
+        
+        self.channel_name = channel
+
+        self.web_filepath = web_filepath
+
+
+        if self.channel == 'МатчТВ':
+            # Вызываем ensure_file_exists с нужными колонками
+            self._ensure_file_exists([
+                'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода',
+                'Время окончания', 'Share', 'Жанр', 'День недели'
+            ])
+        else:
+            # Вызываем ensure_file_exists с нужными колонками
+            self._ensure_file_exists([
+                'Канал', 'Дата', 'Название программы', 'Время выхода',
+                'Время окончания', 'Share', 'Жанр', 'День недели'
+            ])
+
     
 
     @staticmethod
@@ -628,7 +652,7 @@ class MediascopeParser(BaseParser):
             df.rename(columns = {'researchDate': 'Date'}, inplace = True)
             df = df[
                 [
-                    'tvCompanyName', 'Date', 'programName', 
+                    'tvCompanyName', 'Date', 'programName', 'programIssueDescriptionName',
                     'programStartTime', 'programFinishTime', 'Share', 
                     'programCategoryName', 'researchWeekDay'
                     ]
@@ -641,14 +665,29 @@ class MediascopeParser(BaseParser):
             df['programFinishTime'] = df['programFinishTime'].astype(str).apply(BaseParser.convert_time)
             df['programFinishTime'] = pd.to_datetime(df['programFinishTime'], format = '%H:%M:%S', errors = 'coerce')
             
-            df.rename(columns = {
-                'tvCompanyName': 'Канал', 
-                'Date': 'Дата', 
-                'programName': 'Название программы', 
-                'programStartTime': 'Время выхода', 
-                'programFinishTime': 'Время окончания', 
-                'programCategoryName': 'Жанр', 
-                'researchWeekDay': 'День недели'}, inplace = True)
+            if self.channel in ['МатчТВ']:
+                df.rename(columns = {
+                    'tvCompanyName': 'Канал', 
+                    'Date': 'Дата', 
+                    'programName': 'Название программы', 
+                    'programIssueDescriptionName': 'Описание программы',
+                    'programStartTime': 'Время выхода', 
+                    'programFinishTime': 'Время окончания', 
+                    'programCategoryName': 'Жанр',
+                    'researchWeekDay': 'День недели'}, inplace = True)
+                
+                #df['Канал'].replace({'МАТЧ ТВ': 'МатчТВ'}, inplace = True)
+            
+            else:
+                df.rename(columns = {
+                    'tvCompanyName': 'Канал', 
+                    'Date': 'Дата', 
+                    'programName': 'Название программы', 
+                    'programStartTime': 'Время выхода', 
+                    'programFinishTime': 'Время окончания', 
+                    'programCategoryName': 'Жанр',
+                    'researchWeekDay': 'День недели'}, inplace = True)
+
             
             time_slots_columns = ['Время выхода', 'Время окончания']
             for i in range(len(time_slots_columns)):
@@ -679,12 +718,7 @@ class MediascopeParser(BaseParser):
             
             result_data = pd.concat(res).reset_index(drop = True)
             
-            #if self.channel == '2X2':
-            #    stop_words = ['новости', 'вставай на', 'фильтруй факты', 'техно-елка']
-            #    pattern = '|'.join(stop_words)
-            #    result_data = result_data[~result_data['Название программы'].str.contains(pattern, case = False, na = False)]
-            
-            return 
+            return result_data
     
 
     def update_web_table(self, new_data: pd.DataFrame) -> pd.DataFrame:
@@ -767,19 +801,36 @@ class MediascopeParser(BaseParser):
         """
             Функция для генерации внешнего вида таблицы с сеткой Mediascope.
         """
-        column_configs = [
+        # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
+        df_clean = df.where(pd.notna(df), None)
+
+        if self.channel == 'МатчТВ':
+            column_configs = [
             {'header': 'Канал', 'width': 24.0, 'format': 'general'},
             {'header': 'Дата', 'width': 12.0, 'format': 'date'},
             {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+            {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
             {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
             {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
             {'header': 'Share', 'width': 11.0, 'format': 'general'},
             {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
             {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-        ]
+            ]
+        
+        else:
+            column_configs = [
+                {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+                {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+                {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+                {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+                {'header': 'Share', 'width': 11.0, 'format': 'general'},
+                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+                {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+            ]
         
         self.make_style_of_table(
-            df = df,
+            df = df_clean,
             sheet_name = sheet_name,
             column_configs = column_configs,
             date_columns = ['Дата']
@@ -791,20 +842,31 @@ class TVPreprocessing(BaseParser):
     """
         Класс для предобработки файлов с исторической и новыми сетками Федеральных ТВ-каналовс регулярной сеткой
     """
-    def __init__(self, filepath: str, plmrs: pd.DataFrame):
+    def __init__(self, channel: str, filepath: str, plmrs: pd.DataFrame):
         """
             plmrs: pd.DataFrame: новая сетка Mediascope, которую нужно спарсить.
         """
+        super().__init__(filepath)
+
+
+        self.channel = channel
         self.plmrs = plmrs
         self.filepath = filepath
 
-        super().__init__(filepath)
 
-        # Вызываем ensure_file_exists с нужными колонками
-        self._ensure_file_exists([
-            'Канал', 'Дата', 'Название программы', 'Время выхода', 
-            'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
-        ])
+        if self.channel == 'МатчТВ':
+            # Вызываем ensure_file_exists с нужными колонками
+            self._ensure_file_exists([
+                'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 
+                'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
+            ])
+        else:
+            # Вызываем ensure_file_exists с нужными колонками
+            self._ensure_file_exists([
+                'Канал', 'Дата', 'Название программы', 'Время выхода', 
+                'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
+            ])
+
 
 
     @staticmethod
@@ -874,15 +936,28 @@ class TVPreprocessing(BaseParser):
         """
             Функция для округления времени слотов программ в исторической сетке Palomars для какого-то конкретного дня
         """
-        mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
+        if self.channel == 'МатчТВ':
+            mars = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
+        
+        else:
+            mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
+
+        
+
         mars['Дата'] = pd.to_datetime(mars['Дата'])
         
         # Округляем время до минут
-        share_calc = TVShareCalculator(mars)
+        share_calc = TVShareCalculator(self.channel, mars)
         mars['Время выхода_1min'] = share_calc.round_time('Время выхода')
         mars['Время окончания_1min'] = share_calc.round_time('Время окончания')
         
-        mars_new = mars[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+
+        if self.channel == 'МатчТВ':
+            mars_new = mars[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+        else:
+            mars_new = mars[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+        
+
         mars_new.rename(columns = {'Время выхода_1min': 'Время выхода', 'Время окончания_1min': 'Время окончания'}, inplace = True)
         
         # Создаем копию оригинального столбца
@@ -895,8 +970,13 @@ class TVPreprocessing(BaseParser):
         # Переименовываем колонки для наглядности
         mars_new.rename(columns = {'Время выхода': 'Время выхода_старое', 'Время выхода_новое': 'Время выхода'}, inplace = True)
         
-        palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
-        self.palomars_adjusted = TVShareCalculator(palomars).adjust_hour_start()
+
+        if self.channel == 'МатчТВ':
+            palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
+        else:
+            palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
+
+        self.palomars_adjusted = TVShareCalculator(self.channel, palomars).adjust_hour_start()
         
         # Эфирные сутки всегда начинаются с 05:00:00
         self.palomars_adjusted.loc[0, 'Время выхода'] = f'05:00:00'
@@ -952,7 +1032,7 @@ class TVPreprocessing(BaseParser):
                 auedience = weighted_auedience[weighted_auedience[date_col] == date].reset_index(drop = True)
 
                 plmrs_new = self._palomars_round_time(df)
-                res, share = TVShareCalculator(plmrs_new).calculate_weighted_share(auedience)
+                res, share = TVShareCalculator(self.channel, plmrs_new).calculate_weighted_share(auedience)
                 
                 results_list.append(res)
                 shares[date] = share
@@ -987,7 +1067,23 @@ class TVPreprocessing(BaseParser):
 
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
 
-        general_result = general_result[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+        if self.channel == 'МатчТВ':
+            general_result = general_result[
+                [
+                    'Канал', 'Дата', 'Название программы', 'Описание программы',
+                    'Время выхода', 'Время окончания', 'Share', 
+                    'Share_weighted', 'Жанр', 'День недели'
+                    ]
+            ]
+        
+        else:
+            general_result = general_result[
+                [
+                    'Канал', 'Дата', 'Название программы',
+                    'Время выхода', 'Время окончания', 'Share', 
+                    'Share_weighted', 'Жанр', 'День недели'
+                    ]
+            ]
 
         return general_result, shares
         
@@ -996,20 +1092,37 @@ class TVPreprocessing(BaseParser):
         """
             Функция для генерации внешнего вида таблицы с сеткой Mediascope.
         """
-        column_configs = [
-            {'header': 'Канал', 'width': 24.0, 'format': 'general'},
-            {'header': 'Дата', 'width': 12.0, 'format': 'date'},
-            {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-            {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
-            {'header': 'Share', 'width': 11.0, 'format': 'general'},
-            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
-            {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
-            {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-        ]
+        # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
+        df_clean = df.where(pd.notna(df), None)
+
+        if self.channel == 'МатчТВ':
+            column_configs = [
+                {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+                {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+                {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+                {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
+                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+                {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+                {'header': 'Share', 'width': 11.0, 'format': 'general'},
+                {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+                {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+            ]
+        else:
+            column_configs = [
+                {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+                {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+                {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+                {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+                {'header': 'Share', 'width': 11.0, 'format': 'general'},
+                {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+                {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+            ]
         
         self.make_style_of_table(
-            df = df,
+            df = df_clean,
             sheet_name = sheet_name,
             column_configs = column_configs,
             date_columns = ['Дата']
@@ -1031,6 +1144,21 @@ class VIMBGridProcessor(BaseParser):
         """
         super().__init__(folder_path)
         self.folder_path = folder_path
+
+        # Список допустимых названий каналов
+        allowed_channels = [
+            'ТНТ4', '2X2', 'КАРУСЕЛЬ', 'СУББОТА', 
+            'СТСЛав', 'ЗВЕЗДА', 'МИР', 'МатчТВ', 
+            'МузТВ', 'СОЛНЦЕ', 'СПАС', 'ТВЦ', 'ЧЕ', 'Ю'
+            ]
+        
+        # Проверка наличия канала в списке допустимых
+        if channel_name not in allowed_channels:
+            raise ValueError(
+                f'Канал '{channel_name}' не существует. '
+                f'Выберите канал из списка: {', '.join(allowed_channels)}'
+            )
+        
         self.channel_name = channel_name
     
 
@@ -1082,7 +1210,7 @@ class VIMBGridProcessor(BaseParser):
 
         # Не на всех каналах эфирные сутки начинаются в 05:00:00. Поэтому нужна дополнительная конвертация на + 1 день
         # Создаем маску и увеличиваем дату 
-        if self.channel_name in ['2X2', 'ТНТ4', 'МАТЧ_ТВ', 'СТС_LOVE', 'СУББОТА', 'ЧЕ', 'ЗВЕЗДА', 'ТВ_ЦЕНТР']:
+        if self.channel_name in ['2X2', 'ТНТ4', 'МатчТВ', 'СТСЛав', 'СУББОТА', 'ЧЕ', 'ЗВЕЗДА', 'ТВЦ']:
             time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
             VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
         
@@ -1629,7 +1757,7 @@ class VIMBGridProcessor(BaseParser):
 
             df_no_duplicates = full.drop_duplicates(
                 subset = ['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели'],
-                keep = 'first'
+                keep = 'last'
             )
             print(f'Удалено {len(full) - len(df_no_duplicates)} дубликатов.')
 

@@ -360,6 +360,25 @@ class GeneralTextCleaner:
             if match:
                 title = match.group(1).strip()
                 return True, title
+
+
+            special_phrases = [
+                'специальный репортаж', 'славянский базар в витебске'
+                ]
+            
+            for phrase in special_phrases:
+                # Создаем паттерн с границами слов для каждого слова во фразе
+                if ' ' in phrase:
+                    # Для многословных фраз проверяем точное вхождение
+                    if phrase in text_lower:
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
+                else:
+                    # Для однословных используем границы слов
+                    pattern = r'\b' + re.escape(phrase) + r'\b'
+                    if re.search(pattern, text_lower):
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
             
             return False, text
         
@@ -418,22 +437,6 @@ class GeneralTextCleaner:
                 if phrase in text_lower:
                     cleaned_phrase = self.clean_title(phrase)
                     return True, cleaned_phrase
-            
-            # 2. Проверяем, не является ли текст просто числом
-            if text_lower.strip().isdigit():
-                return True, text_lower.strip()
-            
-            # 3. Проверяем специальный случай с документальным сериалом
-            if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
-                return True, 'документальный сериал'
-            
-            # 4. Ищем название в кавычках (это то, что нужно для "28 панфиловцев")
-            match = re.search(r'"([^"]+)"', text_lower)
-            if match:
-                title = match.group(1).strip()
-                if title:
-                    cleaned_title = self.clean_title(title)
-                    return True, cleaned_title if cleaned_title else title
             
             # 5. Если ничего не нашли, идем в общий алгоритм
             return False, text
@@ -611,25 +614,31 @@ class GeneralTextCleaner:
         text_lower = text.lower().strip().replace('ё', 'е')
         result = text_lower
 
-        # Удаляем возрастные рейтинги (12+, 16+ и т.д.)
+        # Паттерн для возрастных рейтингов, включая варианты со скобками
         result = re.sub(
-            r'\(?\s*\+?\s*\d+\s*\+?\s*\)?', 
+            r'(?<!\S)\(?\s*(\+?(?:0|6|12|14|16|18)\+?)\s*\)?(?!\S)', 
             ' ', result, flags=re.IGNORECASE
         )
+        if debug:
+            print(f"Удалены возрастные рейтинги: '{result}'")
 
         old_result = result
         result = re.sub(r'\(\s*[а-яa-z]\s*\)', ' ', result, flags=re.IGNORECASE)
         if debug and old_result != result:
             print(f"Удалены одиночные буквы в скобках: '{result}'")
 
-        # Удаляем упоминания серий с номерами
-        old_result = result
-        result = re.sub(
-            r'\s*(?:\d+(?:[-яй]?(?:\s*,\s*\d+\s*)*)?\s*(?:сери[яи]|сезон[ы]?|сез[а-я]*|фильм[ы]?|\bч\.?\b|часть)|(?:сери[яи]|сезон[ы]?|сез[а-я]*|фильм[ы]?|\bч\.?\b|часть)\s*\d+[-яй]?)\s*', 
-            ' ', result, flags=re.IGNORECASE
-        )
-        if debug and old_result != result:
-            print(f"Удалены номера серий: '{result}'")
+       
+        # Универсальный паттерн для удаления любых комбинаций цифр и слова "серии"
+        #################################### Удаление серий ####################################
+        if re.search(r'сери[яи]|часть|части|сезон', result, flags=re.IGNORECASE):
+            old_result = result
+            result = re.sub(
+                r'\s*(?:\d+(?:\s*,\s*\d+\s*)*\s*)?сери[яиюе]{1,2}(?:\s*\d+(?:\s*,\s*\d+\s*)*)?\s*|\s*\d+(?:\s*,\s*\d+\s*)*\s*',
+                ' ', result, flags=re.IGNORECASE
+            )
+            if debug and old_result != result:
+                print(f"Удалены номера с серий: '{result}'")
+        ########################################################################################
         
         # Удаляем номера с символом № или n
         old_result = result
@@ -1727,7 +1736,15 @@ class CosineSimilarity:
             else:
                 print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
         
-        return result_df, programs_not_found
+            comparison_result = {
+                'TF-IDF': len(tfidf_found),
+                'fuzzy': len(fuzzy_found),
+                'Справочник': len(vocabulary_found),
+                'Не найдено': len(programs_not_found)
+            }
+            
+        
+        return result_df, programs_not_found, comparison_result
     
 
 

@@ -88,7 +88,7 @@ class ChannelAnalysisMaster:
         if not self.web_file:
             raise ValueError('🚨 Для выполнения web пайплайна необходимо указать web_file')
 
-        plmrs_parser = MediascopeParser(self.web_file)
+        plmrs_parser = MediascopeParser(self.channel, self.web_file)
         # 1. Выгрузка новых исторических данных
         web_new = plmrs_parser.make_web(self.date_filter, self.company_filter, self.basedemo_filter)
 
@@ -123,7 +123,7 @@ class ChannelAnalysisMaster:
         if not self.weighted_share_file:
             raise ValueError('🚨 Для выполнения web пайплайна необходимо указать weighted_share_file')
 
-        parser = TVPreprocessing(self.weighted_share_file, web_new)
+        parser = TVPreprocessing(self.channel, self.weighted_share_file, web_new)
 
         print('📈 Считаю взвешенную долю. Пожалуйста, подождите ...')
         # 1. Расчет взвешенной доли
@@ -131,7 +131,7 @@ class ChannelAnalysisMaster:
 
         # 2. Обновление таблицы
         new_df['Дата'] = pd.to_datetime(new_df['Дата'])
-        updated = MediascopeParser(self.weighted_share_file).update_web_table(new_df)
+        updated = MediascopeParser(self.channel, self.weighted_share_file).update_web_table(new_df)
 
         # 3. Сохранение в файл
         print('🔄 Обновляю файл со взвешенной долей и исторической сеткой Mediascope. Пожалуйста, подождите ...')

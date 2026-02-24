@@ -13,12 +13,13 @@ class TVShareCalculator:
     """
         Класс для расчета долей в конкретных слотах через вес слота и процент длительности программы в часе
     """
-    def __init__(self, df):
+    def __init__(self, channel, df):
         """
             Атрибуты класса
             Args:
                 df: pd.DataFrame: Датафрейм с исходной долей
         """
+        self.channel = channel
         self.df = df
         self._validate_data()
     
@@ -370,7 +371,10 @@ class TVShareCalculator:
                 coefficient = np.sum(coeffs)
                 df.at[i, 'Share_weighted'] = share * coefficient
 
-        res = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+        if self.channel == 'МатчТВ':
+            res = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+        else:
+            res = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
         #res.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
         # Расчёт суммарной доли по дню
         share_sum = np.sum(list(res['Share_weighted']))
