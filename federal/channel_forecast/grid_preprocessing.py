@@ -571,8 +571,7 @@ class MediascopeParser(BaseParser):
         # Проверка наличия канала в списке допустимых
         if channel not in allowed_channels:
             raise ValueError(
-                f'Канал '{channel_name}' не существует. '
-                f'Выберите канал из списка: {', '.join(allowed_channels)}'
+                f"Канал '{channel}' не существует. Выберите канал из списка: {', '.join(allowed_channels)}"
             )
         
         self.channel_name = channel
@@ -848,8 +847,21 @@ class TVPreprocessing(BaseParser):
         """
         super().__init__(filepath)
 
-
+        # Список допустимых названий каналов
+        allowed_channels = [
+            'ТНТ4', '2X2', 'КАРУСЕЛЬ', 'СУББОТА', 
+            'СТСЛав', 'ЗВЕЗДА', 'МИР', 'МатчТВ', 
+            'МузТВ', 'СОЛНЦЕ', 'СПАС', 'ТВЦ', 'ЧЕ', 'Ю'
+            ]
+        
+        # Проверка наличия канала в списке допустимых
+        if channel not in allowed_channels:
+            raise ValueError(
+                f"Канал '{channel}' не существует. Выберите канал из списка: {', '.join(allowed_channels)}"
+            )
+        
         self.channel = channel
+
         self.plmrs = plmrs
         self.filepath = filepath
 
@@ -1155,8 +1167,7 @@ class VIMBGridProcessor(BaseParser):
         # Проверка наличия канала в списке допустимых
         if channel_name not in allowed_channels:
             raise ValueError(
-                f'Канал '{channel_name}' не существует. '
-                f'Выберите канал из списка: {', '.join(allowed_channels)}'
+                f"Канал '{channel_name}' не существует. Выберите канал из списка: {', '.join(allowed_channels)}"
             )
         
         self.channel_name = channel_name
