@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from typing import Optional
@@ -88,7 +89,7 @@ class ChannelAnalysisMaster:
         if not self.web_file:
             raise ValueError('🚨 Для выполнения web пайплайна необходимо указать web_file')
 
-        plmrs_parser = MediascopeParser(self.web_file)
+        plmrs_parser = MediascopeParser(self.channel, self.web_file)
         # 1. Выгрузка новых исторических данных
         web_new = plmrs_parser.make_web(self.date_filter, self.company_filter, self.basedemo_filter)
 
@@ -123,7 +124,7 @@ class ChannelAnalysisMaster:
         if not self.weighted_share_file:
             raise ValueError('🚨 Для выполнения web пайплайна необходимо указать weighted_share_file')
 
-        parser = TVPreprocessing(self.weighted_share_file, web_new)
+        parser = TVPreprocessing(self.channel, self.weighted_share_file, web_new)
 
         print('📈 Считаю взвешенную долю. Пожалуйста, подождите ...')
         # 1. Расчет взвешенной доли
@@ -131,7 +132,7 @@ class ChannelAnalysisMaster:
 
         # 2. Обновление таблицы
         new_df['Дата'] = pd.to_datetime(new_df['Дата'])
-        updated = MediascopeParser(self.weighted_share_file).update_web_table(new_df)
+        updated = MediascopeParser(self.channel, self.weighted_share_file).update_web_table(new_df)
 
         # 3. Сохранение в файл
         print('🔄 Обновляю файл со взвешенной долей и исторической сеткой Mediascope. Пожалуйста, подождите ...')
@@ -189,9 +190,24 @@ class ChannelAnalysisMaster:
         # 3. PLMRS пайплайн (требует audience и web)
         if run_plmrs and self.weighted_share_file:
             if 'web' in results and results['web']:
-                print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
-                web_new, _ = results['web']
-                results['plmrs'] = self.plmrs_web_pipeline(web_new)
+                if 'audience' in results and results['audience']:
+                    print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                    web_new, _ = results['web']
+                    results['plmrs'] = self.plmrs_web_pipeline(web_new)
+
+                else:
+                    # Проверяем существование файла с Total TV Auedience. Без этого не можем продолжить!
+                    if not os.path.exists(self.auedience_file):
+                        print(Color.BOLD + Color.RED + f'❌ Ошибка: файл c Total TV Auedience для канала {self.channel} не найден: {self.auedience_file}' + Color.END)
+                        print('⏭️ Пропускаем PLMRS пайплайн: требуется файл аудитории')
+                    
+                    else:
+                        self.total_tv_auedience = pd.read_excel(self.auedience_file)
+                        print(Color.BOLD + Color.GREEN + f'Файл c Total TV Auedience для канала {self.channel} найден!' + Color.END)
+                        print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                        web_new, _ = results['web']
+                        results['plmrs'] = self.plmrs_web_pipeline(web_new)
+
             else:
                 print('⏭️ Пропускаем PLMRS пайплайн: требуется выполнить web пайплайн')
         

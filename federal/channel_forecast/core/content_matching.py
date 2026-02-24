@@ -360,6 +360,25 @@ class GeneralTextCleaner:
             if match:
                 title = match.group(1).strip()
                 return True, title
+
+
+            special_phrases = [
+                'специальный репортаж', 'славянский базар в витебске'
+                ]
+            
+            for phrase in special_phrases:
+                # Создаем паттерн с границами слов для каждого слова во фразе
+                if ' ' in phrase:
+                    # Для многословных фраз проверяем точное вхождение
+                    if phrase in text_lower:
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
+                else:
+                    # Для однословных используем границы слов
+                    pattern = r'\b' + re.escape(phrase) + r'\b'
+                    if re.search(pattern, text_lower):
+                        cleaned_phrase = self.clean_title(phrase)
+                        return True, cleaned_phrase
             
             return False, text
         
@@ -418,22 +437,6 @@ class GeneralTextCleaner:
                 if phrase in text_lower:
                     cleaned_phrase = self.clean_title(phrase)
                     return True, cleaned_phrase
-            
-            # 2. Проверяем, не является ли текст просто числом
-            if text_lower.strip().isdigit():
-                return True, text_lower.strip()
-            
-            # 3. Проверяем специальный случай с документальным сериалом
-            if re.search(r'док\.?\s*сериал/?фильм\s*\(\s*п\s*\)', text):
-                return True, 'документальный сериал'
-            
-            # 4. Ищем название в кавычках (это то, что нужно для "28 панфиловцев")
-            match = re.search(r'"([^"]+)"', text_lower)
-            if match:
-                title = match.group(1).strip()
-                if title:
-                    cleaned_title = self.clean_title(title)
-                    return True, cleaned_title if cleaned_title else title
             
             # 5. Если ничего не нашли, идем в общий алгоритм
             return False, text
@@ -611,25 +614,31 @@ class GeneralTextCleaner:
         text_lower = text.lower().strip().replace('ё', 'е')
         result = text_lower
 
-        # Удаляем возрастные рейтинги (12+, 16+ и т.д.)
+        # Паттерн для возрастных рейтингов, включая варианты со скобками
         result = re.sub(
-            r'\(?\s*\+?\s*\d+\s*\+?\s*\)?', 
+            r'(?<!\S)\(?\s*(\+?(?:0|6|12|14|16|18)\+?)\s*\)?(?!\S)', 
             ' ', result, flags=re.IGNORECASE
         )
+        if debug:
+            print(f"Удалены возрастные рейтинги: '{result}'")
 
         old_result = result
         result = re.sub(r'\(\s*[а-яa-z]\s*\)', ' ', result, flags=re.IGNORECASE)
         if debug and old_result != result:
             print(f"Удалены одиночные буквы в скобках: '{result}'")
 
-        # Удаляем упоминания серий с номерами
-        old_result = result
-        result = re.sub(
-            r'\s*(?:\d+(?:[-яй]?(?:\s*,\s*\d+\s*)*)?\s*(?:сери[яи]|сезон[ы]?|сез[а-я]*|фильм[ы]?|\bч\.?\b|часть)|(?:сери[яи]|сезон[ы]?|сез[а-я]*|фильм[ы]?|\bч\.?\b|часть)\s*\d+[-яй]?)\s*', 
-            ' ', result, flags=re.IGNORECASE
-        )
-        if debug and old_result != result:
-            print(f"Удалены номера серий: '{result}'")
+       
+        # Универсальный паттерн для удаления любых комбинаций цифр и слова "серии"
+        #################################### Удаление серий ####################################
+        if re.search(r'сери[яи]|часть|части|сезон', result, flags=re.IGNORECASE):
+            old_result = result
+            result = re.sub(
+                r'\s*(?:\d+(?:\s*,\s*\d+\s*)*\s*)?сери[яиюе]{1,2}(?:\s*\d+(?:\s*,\s*\d+\s*)*)?\s*|\s*\d+(?:\s*,\s*\d+\s*)*\s*',
+                ' ', result, flags=re.IGNORECASE
+            )
+            if debug and old_result != result:
+                print(f"Удалены номера с серий: '{result}'")
+        ########################################################################################
         
         # Удаляем номера с символом № или n
         old_result = result
@@ -843,11 +852,17 @@ class SportChannelCleaner:
         r'\b\d{8,}\b' # последовательность из 8ми и более цифр
         ]
 
+        #self.SPECIAL_PHRASES  = [
+        #    ''
+        #]
+
 
         self.SPECIAL_NAMES = {
             'все на матч', 'мультфильм', 'все о главном', 'что за спорт', #'матч парад',
             'непридуманные истории', 'век нашего спорта', 'география спорта', 
-            'что по спорту', 'лица страны', 'культовые', 'команда мечты', 'третий тайм'
+            'что по спорту', 'лица страны', 'культовые', 'команда мечты', 'третий тайм',
+            'смешанные единоборства ufc', 'смешанные единоборства one ufc', 
+            'смешанные единоборства aca', 'смешанные единоборства ifc', 'смешанные единоборства uralfc'
         }
 
         self.SPECIAL_PATTERNS_FOR_SAVE = [
@@ -889,7 +904,8 @@ class SportChannelCleaner:
             # для спортивных трансляций
             'sport': {
                 'сезон', 'дайджест', 'место', 'лига ставок', 'betboom', 'olimpbet', 
-                'winline', 'fonbet', 'фонбет', 'раунд', 'матч', 'товарищеский'
+                'winline', 'fonbet', 'фонбет', 'раунд', 'матч', 'товарищеский', 'озон', 'ozon',
+                'фосагро', 'технониколь', 'online'
             },
             # для фильмов
             'films': {
@@ -1056,13 +1072,13 @@ class SportChannelCleaner:
         
         # Применяем паттерны для начала строки
         for pattern in start_patterns:
-            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-            text = re.sub(r'^\s+', '', text)  # удаляем пробелы в начале после удаления
+            text = re.sub(pattern, ' ', text, flags = re.IGNORECASE)
+            text = re.sub(r'^\s+', ' ', text)  # удаляем пробелы в начале после удаления
         
         # Применяем паттерны для конца строки
         for pattern in end_patterns:
-            text = re.sub(pattern, '', text, flags=re.IGNORECASE)
-            text = re.sub(r'\s+$', '', text)  # удаляем пробелы в конце после удаления
+            text = re.sub(pattern, ' ', text, flags = re.IGNORECASE)
+            text = re.sub(r'\s+$', ' ', text)  # удаляем пробелы в конце после удаления
         
         # Удаляем точки, которые могли остаться между словами (но не внутри слов)
         # Например, "2 . тяжеловес" -> "2 тяжеловес" (точка уже убрана выше)
@@ -1073,23 +1089,27 @@ class SportChannelCleaner:
             '!', '@', '#', '$', '%', '^', '&', '(', ')', '+', 
             '=', '[', ']', '{', '}', '-', '№', '"', "'", '«', '»'
         ]
-        escaped_marks = ''.join(re.escape(mark) for mark in punctuaction_marks)
+        escaped_marks = ' '.join(re.escape(mark) for mark in punctuaction_marks)
         punctuation_pattern = f'[{escaped_marks}]'
         
         # Удаляем знаки пунктуации в начале и конце
-        text = re.sub(f'^{punctuation_pattern}+\\s*', '', text)
-        text = re.sub(f'\\s*{punctuation_pattern}+$', '', text)
+        text = re.sub(f'^{punctuation_pattern}+\\s*', ' ', text)
+        text = re.sub(f'\\s*{punctuation_pattern}+$', ' ', text)
         
         # ДОПОЛНИТЕЛЬНО: удаляем одиночные точки с пробелами (как в "2 . тяжеловес")
         text = re.sub(r'\s+\.\s+', ' ', text)  # " . " -> " "
-        text = re.sub(r'^\s*\.\s*', '', text)  # точка в начале
-        text = re.sub(r'\s*\.\s*$', '', text)  # точка в конце
+        text = re.sub(r'^\s*\.\s*', ' ', text)  # точка в начале
+        text = re.sub(r'\s*\.\s*$', ' ', text)  # точка в конце
         
         # Удаляем множественные пробелы
         text = re.sub(r'\s+', ' ', text).strip()
         
         # Финальная проверка: если осталось что-то типа "2 тяжеловес", удаляем число в начале
-        text = re.sub(r'^\d+\s+', '', text)
+        text = re.sub(r'^\d+\s+', ' ', text)
+
+        text = re.sub(r'\.', '', text)  # точка в любом месте
+        text = re.sub(r'\,', '', text)  # запятая в любом месте
+        text = re.sub(r'\s+', ' ', text).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
         
         return text
 
@@ -1178,7 +1198,7 @@ class SportChannelCleaner:
         # === ЭТАП 2: ОЧИСТКА ОТ ГЛОБАЛЬНЫХ ПАТТЕРНОВ ===
         if stop_patterns_general:
             for pattern in stop_patterns_general:
-                result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags=re.IGNORECASE | re.UNICODE)
+                result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE | re.UNICODE)
                 result = result.strip()
 
                 if debug:
@@ -1189,11 +1209,15 @@ class SportChannelCleaner:
         # === ЭТАП 3: ПРОВЕРКА НА СПЕЦИАЛЬНЫЕ ИМЕНА ===
         if special_names:
 
+            result = re.sub(r'\.', '', result)  # точка в любом месте
+            result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
+
             # Удаляем от специальных символов
             if special_chars_to_remove:
                 for char in special_chars_to_remove:
-                    result = result.replace(char, '')
+                    result = result.replace(char, ' ')
 
+            result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
             if debug:
                 print(f"ЭТАП 3 - Проверка special_names: '{result.strip()}' содержит special_names?")
             
@@ -1203,6 +1227,10 @@ class SportChannelCleaner:
                 if special_name in result_stripped:
                     if debug:
                         print(f"  -> НАЙДЕНО специальное имя: '{special_name}' в строке")
+                    
+                    special_name = re.sub(r'\.', '', special_name)  # точка в любом месте
+                    special_name = re.sub(r'\,', '', special_name)  # запятая в любом месте
+                    special_name = re.sub(r'\s+', ' ', special_name).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
                     return special_name.strip()  # Возвращаем только имя
         
         # === ЭТАП 4: ПРОВЕРКА НА СПЕЦИАЛЬНЫЕ ПАТТЕРНЫ ===
@@ -1210,16 +1238,20 @@ class SportChannelCleaner:
             # Удаляем от специальных символов
             if special_chars_to_remove:
                 for char in special_chars_to_remove:
-                    result = result.replace(char, '')
+                    result = result.replace(char, ' ')
 
                 for pattern in special_patterns:
-                    match = re.search(pattern, result, flags=re.IGNORECASE | re.UNICODE)
+                    match = re.search(pattern, result, flags = re.IGNORECASE | re.UNICODE)
                     if match:
                         found_text = match.group(0)  # получаем всю найденную подстроку
                         if debug:
                             print(f"ЭТАП 4 - Специальный паттерн '{pattern}' найден")
                             print(f"  -> Найденная подстрока: '{found_text}'")
                             print(f"  -> Возвращаем: '{found_text.strip()}'")
+                        
+                        found_text = re.sub(r'\.', '', found_text)  # точка в любом месте
+                        found_text = re.sub(r'\,', '', found_text)  # запятая в любом месте
+                        found_text = re.sub(r'\s+', ' ', found_text).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
                         return found_text.strip()
         
         # === ЭТАП 5: УДАЛЕНИЕ ВОЗРАСТНЫХ РЕЙТИНГОВ ===
@@ -1227,18 +1259,6 @@ class SportChannelCleaner:
         result = re.sub(r'\s*\d+\+', ' ', result)
         if debug and old_result != result:
             print(f"ЭТАП 5 - После удаления возрастных рейтингов: '{result}'")
-        
-        # === ЭТАП 5: УДАЛЕНИЕ ОБЩИХ СТОП-СЛОВ ===
-        #if stop_words_general:
-        #    if debug:
-        #        print(f"ЭТАП 5 - Применяем stop_words_general ({len(stop_words_general)} паттернов)")
-        #    
-        #    for i, pattern in enumerate(stop_words_general):
-        #        old = result
-        #        result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags=re.IGNORECASE | re.UNICODE)
-        #        result = result.strip()
-        #        if debug and old != result:
-        #            print(f"  Паттерн {i}: '{pattern}' -> '{result}'")
         
         # === ЭТАП 6: ОБРАБОТКА В ЗАВИСИМОСТИ ОТ ТИПА ===
         words_to_remove = stop_words_specific if stop_words_specific else set()
@@ -1254,7 +1274,7 @@ class SportChannelCleaner:
             for stop_word in words_to_remove:
                 # Удаляем слово, даже если оно слиплось с другими буквами
                 pattern = rf'{re.escape(stop_word)}'
-                result = re.sub(pattern, ' ', result, flags=re.IGNORECASE | re.UNICODE)
+                result = re.sub(pattern, ' ', result, flags = re.IGNORECASE | re.UNICODE)
                 result = re.sub(r'\s+', ' ', result).strip()
                 
                 if debug:
@@ -1275,17 +1295,20 @@ class SportChannelCleaner:
             for stop_word in words_to_remove:
                 pattern = r'\b' + re.escape(stop_word) + r'\b'
                 old = result
-                result = re.sub(pattern, '', result, flags=re.IGNORECASE | re.UNICODE)
+                result = re.sub(pattern, '', result, flags = re.IGNORECASE | re.UNICODE)
                 result = re.sub(r'\s+', ' ', result).strip()
                 if debug and old != result:
                     print(f"    Стоп-слово '{stop_word}' -> '{result}'")
                 
         elif program_type == 'sport':
+            # Удаление подстрок типа '3е место'
+            result = re.sub(r'\b\d+\-?[еой]?\s*место\b', '', result, flags=re.IGNORECASE)
+
             # Для спортивных программ - только стоп-слова
             for stop_word in words_to_remove:
                 pattern = r'\b' + re.escape(stop_word) + r'\b'
                 old = result
-                result = re.sub(pattern, '', result, flags=re.IGNORECASE | re.UNICODE)
+                result = re.sub(pattern, '', result, flags = re.IGNORECASE | re.UNICODE)
                 result = re.sub(r'\s+', ' ', result).strip()
                 if debug and old != result:
                     print(f"    Стоп-слово '{stop_word}' -> '{result}'")
@@ -1301,7 +1324,7 @@ class SportChannelCleaner:
                 for stop_word in words_to_remove:
                     pattern = r'\b' + re.escape(stop_word) + r'\b'
                     old = result
-                    result = re.sub(pattern, '', result, flags=re.IGNORECASE | re.UNICODE)
+                    result = re.sub(pattern, '', result, flags = re.IGNORECASE | re.UNICODE)
                     result = re.sub(r'\s+', ' ', result).strip()
                     if debug and old != result:
                         print(f"    Удалили '{stop_word}': '{old}' -> '{result}'")
@@ -1327,16 +1350,20 @@ class SportChannelCleaner:
             if special_names and result.strip() in special_names:
                 if debug:
                     print(f"  -> После извлечения получено специальное имя: '{result}'")
+                
+                result = re.sub(r'\.', '', result)  # точка в любом месте
+                result = re.sub(r'\,', '', result)  # запятая в любом месте
+                result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
                 return result.strip()
         
         # === ЭТАП 7-10: ОСТАЛЬНАЯ ОЧИСТКА ===
         if debug:
             print(f"ЭТАП 7 - Удаление скобок и кавычек")
-        result = result.replace('"', '').replace("'", '')
-        result = result.replace('«', '').replace('»', '')
-        result = result.replace('(', '').replace(')', '')
-        result = result.replace('[', '').replace(']', '')
-        result = result.replace('{', '').replace('}', '')
+        result = result.replace('"', ' ').replace("'", '')
+        result = result.replace('«', ' ').replace('»', '')
+        result = result.replace('(', ' ').replace(')', '')
+        result = result.replace('[', ' ').replace(']', '')
+        result = result.replace('{', ' ').replace('}', '')
         
         if debug:
             print(f"  После ЭТАПА 7: '{result}'")
@@ -1350,13 +1377,13 @@ class SportChannelCleaner:
         
         if special_chars_to_remove:
             for char in special_chars_to_remove:
-                result = result.replace(char, '')
+                result = result.replace(char, ' ')
         
-        result = re.sub(r'^\s*\.\s*', '', result)  # точка в начале
-        result = re.sub(r'\s*\.\s*$', '', result)  # точка в конце
-        result = re.sub(r'^\s*\,\s*', '', result)  # точка в начале
-        result = re.sub(r'\s*\,\s*$', '', result)  # точка в конце
-        result = re.sub(r'\s*\,\s*$', '', result)  # точка в конце
+        result = re.sub(r'^\s*\.\s*', ' ', result)  # точка в начале
+        result = re.sub(r'\s*\.\s*$', ' ', result)  # точка в конце
+        result = re.sub(r'^\s*\,\s*', ' ', result)  # точка в начале
+        result = re.sub(r'\s*\,\s*$', ' ', result)  # точка в конце
+        result = re.sub(r'\s*\,\s*$', ' ', result)  # точка в конце
 
         if debug:
             print(f"  После ЭТАПА 9: '{result}'")
@@ -1367,6 +1394,7 @@ class SportChannelCleaner:
         if debug:
             print(f"  После ЭТАПА 10: '{result}'")
         
+         # === ЭТАП 11: ОСТАЛЬНАЯ ОЧИСТКА ===
         # Финальная проверка
         if not result or len(result) < 3:
             if debug:
@@ -1374,16 +1402,60 @@ class SportChannelCleaner:
             if special_names and text_lower.strip() in special_names:
                 if debug:
                     print(f"  -> Возвращаем специальное имя: '{text_lower.strip()}'")
+                
+                text_lower = re.sub(r'\.', '', text_lower)  # точка в любом месте
+                text_lower = re.sub(r'\,', '', text_lower)  # запятая в любом месте
+                text_lower = re.sub(r'\s+', ' ', text_lower).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
                 return text_lower.strip()
         
         if debug:
-            print(f"ИТОГОВЫЙ РЕЗУЛЬТАТ: '{result}'")
+            print(f"  После ЭТАПА 11: '{result}'")
             print('='*50)
+
+
+        # Удаляем одиночные буквы, которые являются отдельными словами (окружены пробелами или границами слов)
+        result = re.sub(r'\s+[а-яёa-z]\s+', ' ', result, flags = re.IGNORECASE)  # между словами
+        result = re.sub(r'^\s*[а-яёa-z]\s+', '', result, flags = re.IGNORECASE)  # в начале строки
+        result = re.sub(r'\s+[а-яёa-z]\s*$', '', result, flags = re.IGNORECASE)  # в конце строки
         
         result = re.sub(r'\.', '', result)  # точка в любом месте
         result = re.sub(r'\,', '', result)  # запятая в любом месте
         result = re.sub(r'\b\d{4,}\b', '', result) #удаление последовательности из 8ми и более цифр
         result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
+
+
+        # === ЭТАП 12: УДАЛЕНИЕ ДУБЛИКАТОВ ===
+        result_splited = result.split(' ')
+        # Разбиваем на слова
+
+        # Удаляем слова, которые уже встречались как подстроки в предыдущих словах
+        unique_words = []
+        seen_substrings = set()
+
+        for word in result_splited:
+            # Проверяем, не содержится ли это слово полностью в уже встреченных словах
+            is_duplicate = False
+            for seen_word in seen_substrings:
+                if word in seen_word:  # только проверка, что слово содержится в предыдущем
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                unique_words.append(word)
+                seen_substrings.add(word)
+
+        result = ' '.join(unique_words)
+
+        result = re.sub(r'\.', '', result)  # точка в любом месте
+        result = re.sub(r'\,', '', result)  # запятая в любом месте
+        result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
+
+        if debug:
+            print(f"ИТОГОВЫЙ РЕЗУЛЬТАТ: '{result}'")
+            print('='*50)
+        
+        if result == 'футбол чемпионат италии on line':
+            print(text)
 
         if result == '':
             print(Color.BOLD + Color.RED + f'‼️ Для {self.channel} строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
@@ -1391,7 +1463,7 @@ class SportChannelCleaner:
         return result
     
 
-    def clean_programs(self, data, table_form: str):
+    def clean_programs(self, data, table_form: str, program_name_column: str = 'Название программы'):
         """
             Метод для зачистки названий программ для всевозможных категорий
         """
@@ -1406,17 +1478,43 @@ class SportChannelCleaner:
             'other': ('not_sport', self.STOP_WORDS['not_sport'], self.STOP_PATTERNS['not_sport'])
         }
         
-        # ЭТАП 3: Зачистка
-        cleaned_programs = []
+        # ЭТАП 3: Создаем копию датафрейма
+        result_df = data.copy()
+        
+        # ЭТАП 4: Создаем общий маппинг для всех программ
+        all_mappings = {}
+        
         for category, (prog_type, words, patterns) in category_mapping.items():
             if category in self.programs:
-                cleaned_programs.extend([
-                    self.clean(text = p, program_type = prog_type, 
-                            stop_words_specific = words, stop_patterns = patterns)
-                    for p in self.programs[category]
-                ])
+                # Получаем уникальные программы для категории
+                unique_category_programs = list(set(self.programs[category]))
+                
+                # Создаем маппинг для уникальных программ категории
+                category_mapping_dict = {
+                    prog: self.clean(
+                        text = prog, 
+                        program_type = prog_type, 
+                        stop_words_specific = words, 
+                        stop_patterns = patterns
+                    ) 
+                    for prog in unique_category_programs
+                }
+                
+                # Добавляем в общий маппинг
+                all_mappings.update(category_mapping_dict)
         
-        return list(set(cleaned_programs))  # убираем дубликаты
+        # ЭТАП 5: Применяем маппинг к датафрейму
+        result_df['program_name_cleaned'] = result_df[program_name_column].map(all_mappings)
+        
+        # ЭТАП 6: Получаем уникальные очищенные программы с сохранением порядка
+        unique_programs = []
+        seen = set()
+        for prog in all_mappings.values():
+            if prog not in seen:
+                unique_programs.append(prog)
+                seen.add(prog)
+        
+        return unique_programs, result_df
     
 class CosineSimilarity:
     """
@@ -1727,7 +1825,15 @@ class CosineSimilarity:
             else:
                 print(f"\n⚠ ВНИМАНИЕ: Не для всех программ найдены соответствия")
         
-        return result_df, programs_not_found
+            comparison_result = {
+                'TF-IDF': len(tfidf_found),
+                'fuzzy': len(fuzzy_found),
+                'Справочник': len(vocabulary_found),
+                'Не найдено': len(programs_not_found)
+            }
+            
+        
+        return result_df, programs_not_found, comparison_result
     
 
 
