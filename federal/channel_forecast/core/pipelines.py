@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 from typing import Optional
@@ -189,9 +190,24 @@ class ChannelAnalysisMaster:
         # 3. PLMRS пайплайн (требует audience и web)
         if run_plmrs and self.weighted_share_file:
             if 'web' in results and results['web']:
-                print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
-                web_new, _ = results['web']
-                results['plmrs'] = self.plmrs_web_pipeline(web_new)
+                if 'audience' in results and results['audience']:
+                    print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                    web_new, _ = results['web']
+                    results['plmrs'] = self.plmrs_web_pipeline(web_new)
+
+                else:
+                    # Проверяем существование файла с Total TV Auedience. Без этого не можем продолжить!
+                    if not os.path.exists(self.auedience_file):
+                        print(Color.BOLD + Color.RED + f'❌ Ошибка: файл c Total TV Auedience для канала {self.channel} не найден: {self.auedience_file}' + Color.END)
+                        print('⏭️ Пропускаем PLMRS пайплайн: требуется файл аудитории')
+                    
+                    else:
+                        self.total_tv_auedience = pd.read_excel(self.auedience_file)
+                        print(Color.BOLD + Color.GREEN + f'Файл c Total TV Auedience для канала {self.channel} найден!' + Color.END)
+                        print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                        web_new, _ = results['web']
+                        results['plmrs'] = self.plmrs_web_pipeline(web_new)
+
             else:
                 print('⏭️ Пропускаем PLMRS пайплайн: требуется выполнить web пайплайн')
         

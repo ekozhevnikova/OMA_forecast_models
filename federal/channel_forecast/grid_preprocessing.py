@@ -574,23 +574,23 @@ class MediascopeParser(BaseParser):
                 f"Канал '{channel}' не существует. Выберите канал из списка: {', '.join(allowed_channels)}"
             )
         
-        self.channel_name = channel
+        self.channel = channel
 
         self.web_filepath = web_filepath
 
 
-        if self.channel == 'МатчТВ':
-            # Вызываем ensure_file_exists с нужными колонками
-            self._ensure_file_exists([
-                'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода',
-                'Время окончания', 'Share', 'Жанр', 'День недели'
-            ])
-        else:
-            # Вызываем ensure_file_exists с нужными колонками
-            self._ensure_file_exists([
-                'Канал', 'Дата', 'Название программы', 'Время выхода',
-                'Время окончания', 'Share', 'Жанр', 'День недели'
-            ])
+        #if self.channel == 'МатчТВ':
+        #    # Вызываем ensure_file_exists с нужными колонками
+        #    self._ensure_file_exists([
+        #        'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода',
+        #        'Время окончания', 'Share', 'Жанр', 'День недели'
+        #    ])
+        #else:
+        # Вызываем ensure_file_exists с нужными колонками
+        self._ensure_file_exists([
+            'Канал', 'Дата', 'Название программы', 'Время выхода',
+            'Время окончания', 'Share', 'Жанр', 'День недели'
+        ])
 
     
 
@@ -664,7 +664,8 @@ class MediascopeParser(BaseParser):
             df['programFinishTime'] = df['programFinishTime'].astype(str).apply(BaseParser.convert_time)
             df['programFinishTime'] = pd.to_datetime(df['programFinishTime'], format = '%H:%M:%S', errors = 'coerce')
             
-            if self.channel in ['МатчТВ']:
+            # Для канала МатчТВ объединяем столбцы 'Назване программы' и 'Описание программы'.
+            if self.channel == 'МатчТВ':
                 df.rename(columns = {
                     'tvCompanyName': 'Канал', 
                     'Date': 'Дата', 
@@ -675,7 +676,32 @@ class MediascopeParser(BaseParser):
                     'programCategoryName': 'Жанр',
                     'researchWeekDay': 'День недели'}, inplace = True)
                 
-                #df['Канал'].replace({'МАТЧ ТВ': 'МатчТВ'}, inplace = True)
+                # Сначала фильтруем строки
+                mask = (df['Жанр'] == 'Трансляция спортивного мероприятия') & \
+                    (df['Описание программы'].notna()) & \
+                    (df['Описание программы'] != '')
+
+                # Создаем новую колонку с объединенным названием
+                df.loc[mask, 'Название программы'] = df.loc[mask, 'Название программы'] + '. ' + df.loc[mask, 'Описание программы']
+
+                # Удаляем остальные строки (не спортивные)
+                df_sport = df[mask].reset_index(drop = True)
+                df_remained = df[~mask].reset_index(drop = True)
+
+                need_columns = [
+                                'Канал', 'Дата', 'Название программы', 
+                                'Время выхода', 'Время окончания', 'Share', 
+                                'Жанр', 'День недели'
+                            ]
+                # Оставляем нужные колонки
+                df_sport = df_sport[need_columns]
+                df_remained = df_remained[need_columns]
+
+                df = pd.concat([df_sport, df_remained]).reset_index(drop = True)
+
+                # Устанавливаем правильные сортировки для столбцов с датой и временем начала программы
+                df['Дата'] = pd.to_datetime(df['Дата'], errors = 'coerce')
+                df = df.sort_values('Дата').reset_index(drop = True)
             
             else:
                 df.rename(columns = {
@@ -803,30 +829,30 @@ class MediascopeParser(BaseParser):
         # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
         df_clean = df.where(pd.notna(df), None)
 
-        if self.channel == 'МатчТВ':
-            column_configs = [
+        #if self.channel == 'МатчТВ':
+        #    column_configs = [
+        #    {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+        #    {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+        #    {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+        #    {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
+        #    {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+        #    {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+        #    {'header': 'Share', 'width': 11.0, 'format': 'general'},
+        #    {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+        #    {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+        #    ]
+        
+        #else:
+        column_configs = [
             {'header': 'Канал', 'width': 24.0, 'format': 'general'},
             {'header': 'Дата', 'width': 12.0, 'format': 'date'},
             {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-            {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
             {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
             {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
             {'header': 'Share', 'width': 11.0, 'format': 'general'},
             {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
             {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-            ]
-        
-        else:
-            column_configs = [
-                {'header': 'Канал', 'width': 24.0, 'format': 'general'},
-                {'header': 'Дата', 'width': 12.0, 'format': 'date'},
-                {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-                {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
-                {'header': 'Share', 'width': 11.0, 'format': 'general'},
-                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
-                {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-            ]
+        ]
         
         self.make_style_of_table(
             df = df_clean,
@@ -866,18 +892,18 @@ class TVPreprocessing(BaseParser):
         self.filepath = filepath
 
 
-        if self.channel == 'МатчТВ':
-            # Вызываем ensure_file_exists с нужными колонками
-            self._ensure_file_exists([
-                'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 
-                'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
-            ])
-        else:
-            # Вызываем ensure_file_exists с нужными колонками
-            self._ensure_file_exists([
-                'Канал', 'Дата', 'Название программы', 'Время выхода', 
-                'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
-            ])
+        #if self.channel == 'МатчТВ':
+        #    # Вызываем ensure_file_exists с нужными колонками
+        #    self._ensure_file_exists([
+        #        'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 
+        #        'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
+        #    ])
+        #else:
+        # Вызываем ensure_file_exists с нужными колонками
+        self._ensure_file_exists([
+            'Канал', 'Дата', 'Название программы', 'Время выхода', 
+            'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
+        ])
 
 
 
@@ -948,11 +974,11 @@ class TVPreprocessing(BaseParser):
         """
             Функция для округления времени слотов программ в исторической сетке Palomars для какого-то конкретного дня
         """
-        if self.channel == 'МатчТВ':
-            mars = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
-        
-        else:
-            mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
+        #if self.channel == 'МатчТВ':
+        #    mars = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
+        #
+        #else:
+        mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
 
         
 
@@ -964,10 +990,10 @@ class TVPreprocessing(BaseParser):
         mars['Время окончания_1min'] = share_calc.round_time('Время окончания')
         
 
-        if self.channel == 'МатчТВ':
-            mars_new = mars[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
-        else:
-            mars_new = mars[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+        #if self.channel == 'МатчТВ':
+        #    mars_new = mars[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+        #else:
+        mars_new = mars[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
         
 
         mars_new.rename(columns = {'Время выхода_1min': 'Время выхода', 'Время окончания_1min': 'Время окончания'}, inplace = True)
@@ -983,10 +1009,10 @@ class TVPreprocessing(BaseParser):
         mars_new.rename(columns = {'Время выхода': 'Время выхода_старое', 'Время выхода_новое': 'Время выхода'}, inplace = True)
         
 
-        if self.channel == 'МатчТВ':
-            palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
-        else:
-            palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
+        #if self.channel == 'МатчТВ':
+        #    palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
+        #else:
+        palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
 
         self.palomars_adjusted = TVShareCalculator(self.channel, palomars).adjust_hour_start()
         
@@ -1009,9 +1035,10 @@ class TVPreprocessing(BaseParser):
 
             Args:
                 df: pd.DataFrame: Датафрейм, в котором есть столбцы Долей (Share), Время выхода, Время окончания, Название программы для какого одного дня.
-                auedience: pd.DataFrame: ДатаФрейм с весами слотов, посчитанными через TotalTVAuedience для конкретного дня.
-                column_1: столбец 1 с названием "Время выхода".
-                column_2: столбец 2 с названием "Время окончания".
+                weighted_auedience: pd.DataFrame: ДатаФрейм с весами слотов, посчитанными через TotalTVAuedience для конкретного дня.
+                start_time_col: название столбца с временем выхода программы. По умолчанию "Время выхода".
+                end_time_col: название столбца с временем окончания программы. По умолчанию "Время окончания".
+                date_col: название столбца с датой
 
             Returns:
                 data: pd.DataFrame: Датафрейм с новой рассчитанной долей
@@ -1079,23 +1106,23 @@ class TVPreprocessing(BaseParser):
 
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
 
-        if self.channel == 'МатчТВ':
-            general_result = general_result[
-                [
-                    'Канал', 'Дата', 'Название программы', 'Описание программы',
-                    'Время выхода', 'Время окончания', 'Share', 
-                    'Share_weighted', 'Жанр', 'День недели'
-                    ]
-            ]
-        
-        else:
-            general_result = general_result[
-                [
-                    'Канал', 'Дата', 'Название программы',
-                    'Время выхода', 'Время окончания', 'Share', 
-                    'Share_weighted', 'Жанр', 'День недели'
-                    ]
-            ]
+        #if self.channel == 'МатчТВ':
+        #    general_result = general_result[
+        #        [
+        #            'Канал', 'Дата', 'Название программы', 'Описание программы',
+        #            'Время выхода', 'Время окончания', 'Share', 
+        #            'Share_weighted', 'Жанр', 'День недели'
+        #            ]
+        #    ]
+        #
+        #else:
+        general_result = general_result[
+            [
+                'Канал', 'Дата', 'Название программы',
+                'Время выхода', 'Время окончания', 'Share', 
+                'Share_weighted', 'Жанр', 'День недели'
+                ]
+        ]
 
         return general_result, shares
         
@@ -1107,31 +1134,31 @@ class TVPreprocessing(BaseParser):
         # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
         df_clean = df.where(pd.notna(df), None)
 
-        if self.channel == 'МатчТВ':
-            column_configs = [
-                {'header': 'Канал', 'width': 24.0, 'format': 'general'},
-                {'header': 'Дата', 'width': 12.0, 'format': 'date'},
-                {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-                {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
-                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-                {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
-                {'header': 'Share', 'width': 11.0, 'format': 'general'},
-                {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
-                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
-                {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-            ]
-        else:
-            column_configs = [
-                {'header': 'Канал', 'width': 24.0, 'format': 'general'},
-                {'header': 'Дата', 'width': 12.0, 'format': 'date'},
-                {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-                {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
-                {'header': 'Share', 'width': 11.0, 'format': 'general'},
-                {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
-                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
-                {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-            ]
+        #if self.channel == 'МатчТВ':
+        #    column_configs = [
+        #        {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+        #        {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+        #        {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+        #        {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
+        #        {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+        #        {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+        #        {'header': 'Share', 'width': 11.0, 'format': 'general'},
+        #        {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+        #        {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+        #        {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+        #    ]
+        #else:
+        column_configs = [
+            {'header': 'Канал', 'width': 24.0, 'format': 'general'},
+            {'header': 'Дата', 'width': 12.0, 'format': 'date'},
+            {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
+            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+            {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+            {'header': 'Share', 'width': 11.0, 'format': 'general'},
+            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+            {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+            {'header': 'День недели', 'width': 14.0, 'format': 'general'}
+        ]
         
         self.make_style_of_table(
             df = df_clean,

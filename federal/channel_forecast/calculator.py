@@ -371,10 +371,10 @@ class TVShareCalculator:
                 coefficient = np.sum(coeffs)
                 df.at[i, 'Share_weighted'] = share * coefficient
 
-        if self.channel == 'МатчТВ':
-            res = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
-        else:
-            res = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+        #if self.channel == 'МатчТВ':
+        #    res = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
+        #else:
+        res = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
         #res.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
         # Расчёт суммарной доли по дню
         share_sum = np.sum(list(res['Share_weighted']))
