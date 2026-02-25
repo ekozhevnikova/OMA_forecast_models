@@ -12,6 +12,8 @@ from functools import reduce
 import copy
 from typing import Union, List, Dict, Any
 
+from functools import lru_cache
+
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
 from OMA_tools.io_data.dates import Dates_Operations
 from OMA_tools.regions.data_extraction.task_builder import *

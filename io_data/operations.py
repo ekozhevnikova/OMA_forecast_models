@@ -284,7 +284,15 @@ class Table:
         return data_old
     
 
-    def make_style_of_table(self, writer, sheet_name: str, width_col_1: float, width_col_2: float, width_col_3: float, num_format = '0.0000', column_start = 2):
+    def make_style_of_table(
+            self, 
+            writer, 
+            sheet_name: str, 
+            width_col_1: float, 
+            width_col_2: float, 
+            width_col_3: float, 
+            num_format = '0.0000', 
+            column_start = 2):
         """
         Args:
             filename: file with dataframe
@@ -482,7 +490,6 @@ class Dict_Operations:
         """
         res = {}
         for (key, df_1), (key, df_2) in zip(dict_1.items(), dict_2.items()):
-            res[key] = pd.concat([df_1, df_2])
-            res[key] = res[key].reset_index(drop = True)
+            res[key] = pd.concat([df_1, df_2]).reset_index(drop = True)
         return res
 

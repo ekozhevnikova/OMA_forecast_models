@@ -101,10 +101,10 @@ class GeneralTextCleaner:
                 'сериал/фильм', 'док. сериал/фильм (п)', 'док. сериал/фильм', 'док.фильм/сериал',
                 'сериал/х.ф.'
             },
-            'stop_words': {'документальный', 'док.'},
+            'stop_words': {'документальный', 'док.', 'сериал', 'мультфильм'},
             'patterns': [
                 r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'(?<!\w)х\W*ф(?!\w)',  r'\bв\W*[сc]\b',
-                r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*']
+                r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*', r'\bсериал\b', r'\bмультфильм\b']
         }
 
         # Для детских/анимационных каналов
@@ -155,6 +155,9 @@ class GeneralTextCleaner:
             },
             'ЗВЕЗДА': {
                 'special_names': {'1812'} 
+            },
+            'ТВЦ': {
+                'patterns': [r'\bтелесериал\b', r'\bсериал\b']
             },
             'СПАС': {
                 'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b'],
@@ -442,6 +445,52 @@ class GeneralTextCleaner:
             # 5. Если ничего не нашли, идем в общий алгоритм
             return False, text
         
+        # Специальная обработка для ТВЦ
+        if self.channel == 'ТВЦ':
+
+            if ('док.фильм' in text or 'д/ф' in text or 'худ.фильм' in text or 'х/ф' in text):
+                
+                # Ищем текст в кавычках
+                quote_match = re.search(r'[«"“„]([^»"”“]+)[»"”“]', text)
+                if quote_match:
+                    quoted = quote_match.group(1).strip()
+                    # Берем текст до первой точки
+                    extracted = quoted.split('.')[0].strip() if '.' in quoted else quoted
+                    text = extracted.lower()
+                    return True, text.strip()
+                
+                # Если нет кавычек, ищем в скобках
+                elif '(' in text and ')' in text:
+                    bracket_match = re.search(r'\(([^)]+)\)', text)
+                    if bracket_match:
+                        bracket = bracket_match.group(1).strip()
+                        # Убираем маркеры
+                        bracket = re.sub(r'(д/ф|х/ф|сериал)\s*', '', bracket, flags=re.IGNORECASE)
+                        # Берем текст до первой точки
+                        extracted = bracket.split('.')[0].strip() if '.' in bracket else bracket
+                        text = extracted.lower()
+                        return True, text.strip()
+            
+            return False, text
+
+            ## Сначала проверяем специальные фразы
+            #special_phrases = [
+            #    '90-е', 'русские тайны', 'тайная комната', '10 самых',
+            #    'актерские драмы', 'актерские судьбы', 'прощание', 'бессонница',
+            #    'назад в ссср', 'настоящий детектив', 'дорогие товарищи',
+            #    'невидимый поединок', 'провинциальный детектив', 'настенька',
+            #    'кочевница', 'тайна песни', 'некрасивая подружка', 'смерш',
+            #    'легенды эстрады', 'анатомия убийства'
+            #    ]
+            #
+            #for phrase in special_phrases:
+            #    if phrase in text_lower:
+            #        cleaned_phrase = self.clean_title(phrase)
+            #        return True, cleaned_phrase
+            
+            # 5. Если ничего не нашли, идем в общий алгоритм
+            #return False, text
+        
 
         # Специальная обработка для СПАС
         if self.channel == 'СПАС':
@@ -538,6 +587,12 @@ class GeneralTextCleaner:
         result = re.sub(r'\b\d{8,}\b', ' ', result) #удаление последовательности из 8ми и более цифр
         result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result) # удаление всех символов, кроме букв и цифр
 
+        # Паттерн 1: слово + пробел + число + пробел + й/я/е/ё (фильм 5 й)
+        result = re.sub(r'\b([а-яё]+)\s+(\d+)\s+([йяеё])\b', r'\1', result, flags=re.IGNORECASE)
+        
+        # Паттерн 2: слово + пробел + число + дефис + й/я/е/ё (фильм 5-й)
+        result = re.sub(r'\b([а-яё]+)\s+(\d+)[-–—]?([йяеё])\b', r'\1', result, flags=re.IGNORECASE)
+
         # Удаляем паттерны типа "1 я ч", "2 я ч"
         result = re.sub(r'\b\d+\s+я\s+ч\b', ' ', result, flags = re.IGNORECASE)
         result = re.sub(r'\b\d+\s+я\b', '', result, flags = re.IGNORECASE)
@@ -624,7 +679,7 @@ class GeneralTextCleaner:
             print(f"Удалены возрастные рейтинги: '{result}'")
 
         old_result = result
-        result = re.sub(r'\(\s*[а-яa-z]\s*\)', ' ', result, flags=re.IGNORECASE)
+        result = re.sub(r'\(\s*[а-яa-z]{1,3}\s*\)', ' ', result, flags=re.IGNORECASE)
         if debug and old_result != result:
             print(f"Удалены одиночные буквы в скобках: '{result}'")
 

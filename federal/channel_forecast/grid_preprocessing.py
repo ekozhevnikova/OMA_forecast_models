@@ -1272,11 +1272,26 @@ class VIMBGridProcessor(BaseParser):
             VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
         
         # Для канала СТС Лав удаляем программы "это надо знать", "распаковка", "экодело"
-        elif self.channel_name == 'СТС LOVE':
+        elif self.channel_name == 'СТСЛав':
             # список из программ, которые не нужны. Возможно, это реклама
             stop_words = ['это надо знать', 'распаковка', 'экодело', 'открывариум']
             pattern = '|'.join(stop_words)
             VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
+        
+        elif self.channel_name == 'ТВЦ':
+            VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
+
+            times_to_keep = ['02:00:00', '02:05:00', '02:10:00', '02:40:00', '02:45:00']
+            # Создаем условие для даты <= 2025-01-01
+            date_mask = VIMB['Дата'] < '2025-01-01'
+
+            # Обновляем с учетом всех условий
+            VIMB.loc[
+                date_mask & 
+                VIMB['Время выхода'].isin(times_to_keep) & 
+                VIMB['Название программы'].str.contains('док.фильм/сериал', case=False, na=False),
+                'Название программы'
+            ] = 'Документальное кино Леонида Млечина'
     
         
         # Если нужно вернуть в строковый формат

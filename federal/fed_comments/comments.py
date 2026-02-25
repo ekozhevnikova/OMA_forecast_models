@@ -104,31 +104,31 @@ class Federal_Comments:
 
         # Конфигурация пороговых значений по каналам
         CHANNEL_THRESHOLDS = {
-            'НТВ': {'share': 0.001, 'ttv': 0.001, 'kus': 0.001},
-            'РОССИЯ 1': {'share': 0.001, 'ttv': 0.001, 'kus': 0.001},
-            'СТС': {'share': 0.002, 'ttv': 0.002, 'kus': 0.002},
-            'ПЯТЫЙ КАНАЛ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015},
-            'РЕН ТВ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015},
-            'ТНТ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015},
-            'ДОМАШНИЙ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017},
-            'ПЕРВЫЙ КАНАЛ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017},
-            'МАТЧ ТВ': {'share': 0.006, 'ttv': 0.005, 'kus': 0.006},
-            'СУББОТА': {'share': 0.0024, 'ttv': 0.005, 'kus': 0.0065},
-            'МУЗ ТВ': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
-            'ПЯТНИЦА': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065},
-            'РОССИЯ 24': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
-            'КАРУСЕЛЬ': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
-            'СОЛНЦЕ': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
-            'ЗВЕЗДА': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265},
-            'Ю': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003},
-            'ТВ-3': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003},
-            'ТВ ЦЕНТР': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003},
-            'СПАС': {'share': 0.008, 'ttv': 0.008, 'kus': 0.008},
-            'ТНТ 4': {'share': 0.0038, 'ttv': 0.0038, 'kus': 0.0038},
-            'ЧЕ': {'share': 0.0055, 'ttv': 0.0055, 'kus': 0.0055},
-            '2X2': {'share': 0.0067, 'ttv': 0.0067, 'kus': 0.0067},
-            'СТС LOVE': {'share': 0.0055, 'ttv': 0.0055, 'kus': 0.0055},
-            'МИР': {'share': 0.0045, 'ttv': 0.0045, 'kus': 0.0045}
+            'НТВ': {'share': 0.001, 'ttv': 0.001, 'kus': 0.001, 'grp_sp': 0.03},
+            'РОССИЯ 1': {'share': 0.001, 'ttv': 0.001, 'kus': 0.001, 'grp_sp': 0.03},
+            'СТС': {'share': 0.002, 'ttv': 0.002, 'kus': 0.002, 'grp_sp': 0.03},
+            'ПЯТЫЙ КАНАЛ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015, 'grp_sp': 0.03},
+            'РЕН ТВ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015, 'grp_sp': 0.03},
+            'ТНТ': {'share': 0.0015, 'ttv': 0.0015, 'kus': 0.0015, 'grp_sp': 0.03},
+            'ДОМАШНИЙ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017, 'grp_sp': 0.03},
+            'ПЕРВЫЙ КАНАЛ': {'share': 0.0017, 'ttv': 0.0017, 'kus': 0.0017, 'grp_sp': 0.03},
+            'МАТЧ ТВ': {'share': 0.006, 'ttv': 0.005, 'kus': 0.006, 'grp_sp': 0.03},
+            'СУББОТА': {'share': 0.0024, 'ttv': 0.005, 'kus': 0.0065, 'grp_sp': 0.2},
+            'МУЗ ТВ': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065, 'grp_sp': 0.2},
+            'ПЯТНИЦА': {'share': 0.0024, 'ttv': 0.0024, 'kus': 0.0065, 'grp_sp': 0.03},
+            'РОССИЯ 24': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265, 'grp_sp': 0.2},
+            'КАРУСЕЛЬ': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265, 'grp_sp': 0.03},
+            'СОЛНЦЕ': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265, 'grp_sp': 0.2},
+            'ЗВЕЗДА': {'share': 0.00265, 'ttv': 0.00265, 'kus': 0.00265, 'grp_sp': 0.03},
+            'Ю': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003, 'grp_sp': 0.2},
+            'ТВ-3': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003, 'grp_sp': 0.03},
+            'ТВ ЦЕНТР': {'share': 0.003, 'ttv': 0.003, 'kus': 0.003, 'grp_sp': 0.03},
+            'СПАС': {'share': 0.008, 'ttv': 0.008, 'kus': 0.008, 'grp_sp': 0.2},
+            'ТНТ 4': {'share': 0.0038, 'ttv': 0.0038, 'kus': 0.0038, 'grp_sp': 0.2},
+            'ЧЕ': {'share': 0.0055, 'ttv': 0.0055, 'kus': 0.0055, 'grp_sp': 0.2},
+            '2X2': {'share': 0.0067, 'ttv': 0.0067, 'kus': 0.0067, 'grp_sp': 0.2},
+            'СТС LOVE': {'share': 0.0055, 'ttv': 0.0055, 'kus': 0.0055, 'grp_sp': 0.2},
+            'МИР': {'share': 0.0045, 'ttv': 0.0045, 'kus': 0.0045, 'grp_sp': 0.2}
         }
 
         # Общие пороговые значения
@@ -137,13 +137,13 @@ class Federal_Comments:
             'GRP ТП канала': 0.025,
             #'GRP КСР': 0.01,
             'GRP Телемагазины': 1e-3,
-            'GRP СП': 1e-2
+            #'GRP СП': 1e-2
         }
 
         # Специальные пороги для GRP СП
         SPECIAL_GRP_SP_THRESHOLDS = {
-            'ЗВЕЗДА': 20,
-            'РЕН ТВ': 20,
+            'ЗВЕЗДА': 12,
+            'РЕН ТВ': 18,
             'СУББОТА': 15
         }
 
@@ -226,13 +226,15 @@ class Federal_Comments:
                 elif pd.isna(value) and check_nan_case(attribute, month, f'{month}.1'):
                     reasons.append('GRP Телемагазины')
                     
-            elif attribute == 'GRP СП':
-                if channel in SPECIAL_GRP_SP_THRESHOLDS:
-                    delta = delta_SP(month, channel)
-                    if np.abs(delta) >= SPECIAL_GRP_SP_THRESHOLDS[channel]:
-                        reasons.append('GRP СП')
-                elif check_value(attribute, value, COMMON_THRESHOLDS['GRP СП']):
-                    reasons.append('GRP СП')
+            elif attribute == 'GRP СП' and check_value(attribute, value, channel_thresholds.get('grp_sp', 0)):
+                reasons.append('GRP СП')
+
+                #if channel in SPECIAL_GRP_SP_THRESHOLDS:
+                #    delta = delta_SP(month, channel)
+                #    if np.abs(delta) >= SPECIAL_GRP_SP_THRESHOLDS[channel]:
+                #        reasons.append('GRP СП')
+                #elif check_value(attribute, value, COMMON_THRESHOLDS['GRP СП']):
+                #    reasons.append('GRP СП')
 
         return list(set(reasons))
 

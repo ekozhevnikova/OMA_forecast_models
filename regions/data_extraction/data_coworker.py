@@ -508,6 +508,7 @@ class EmployeeExportService:
             print(f"⚠️ Ошибка при сохранении: {e}")
 
         return dict_data_new
+    
 
 
     def make_api_calculation_by_months(
@@ -579,7 +580,7 @@ class EmployeeExportService:
         data_old = Dict_Operations(data).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
 
         for bca, df in data_old.items():
-            #Проверка на то, что последние две строчки в исходном DataFrame различныdict_data
+            #Проверка на то, что последние две строчки в исходном DataFrame различны
             if data_old[bca].iloc[-1][0] == data_old[bca].iloc[-2][0]:
                 data_old[bca] = data_old[bca].iloc[:-2]
             #Join выгрузки и исходного DataFrame
@@ -610,3 +611,123 @@ class EmployeeExportService:
             print(f"⚠️ Ошибка при сохранении: {e}")
 
         return dict_data_new
+
+    @staticmethod
+    def update_monthly_data(current_year: int, df: pd.DataFrame, columns_order: str, filepath_by_months: str):
+        """
+            Новый метод для получения данных за фактическую часть месяца
+            Args:
+                current_year: текущий год
+                df: датафрейм с выгрузкой фактической части месяца, которая была получена в выгрузке для руководителей групп
+        """
+        # Загрузка порядка столбцов
+        loaded_dict_columns = Dict_Operations.load_pkl_file(columns_order)
+
+        data_anal = df.copy()
+
+        # Получаем название столбца с периодом
+        period_column = data_anal.columns[-1]
+
+        # Разбиваем строку с периодом на подстроку с целью извлечения месяца
+        text = period_column
+        splitted = text.split(' ')
+        month = splitted[-1]
+        # Приводим название к первоначальному виду и добавляем текущий год
+        morph = pmrph.MorphAnalyzer()
+        month_normalized = morph.parse(month)[0].normal_form.capitalize()
+        period_column_new = month_normalized + ' ' + str(current_year)
+
+        # Переименовываем названия БЦА и оставляем только нужные колонки для дальнейшего анализа
+        gender_map = {
+            'ВСЕ 18+': 'All 18+', 
+            'ВСЕ 14-59': 'All 14-59', 
+            'Ж 25-59': 'W 25-59', 
+            'ВСЕ 25-54': 'All 25-54', 
+            'ВСЕ 6-54': 'All 6-54', 
+            'ВСЕ 10-45': 'All 10-45', 
+            'ВСЕ 14-54': 'All 14-54', 
+            'ВСЕ 14-44': 'All 14-44', 
+            'ВСЕ 4-45': 'All 4-45', 
+            'Ж 14-44': 'W 14-44', 
+            'ВСЕ 25-49': 'All 25-49', 
+        }
+        data_anal['БЦА'] = data_anal['БЦА'].map(gender_map)
+        data_anal['tvCompanyName'] = data_anal['Телеканал'] + ' (' + data_anal['Город'] + ')'
+        data_anal = data_anal[['tvCompanyName', 'БЦА', period_column]]
+
+        # Переименовываем названия локальных каналов
+        data_anal['tvCompanyName'].replace(
+                        {
+                            'ТЕЛЕКАНАЛ 78 САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)': 'ТЕЛЕКАНАЛ 78 (САНКТ-ПЕТЕРБУРГ)', 
+                            'ТЕЛЕКАНАЛ САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)': 'САНКТ-ПЕТЕРБУРГ (САНКТ-ПЕТЕРБУРГ)'
+                            }, 
+                        inplace = True)
+
+        # Создаем словарь, в котором в дальнейшем будем выстраивать нужный порядок столбцов
+        bca_unique = data_anal['БЦА'].unique()
+        results_data_anal = {}
+        for bca in bca_unique:
+            df = data_anal[data_anal['БЦА'] == bca].reset_index(drop = True)
+            df.drop('БЦА', axis = 1, inplace = True)
+            df = df.T
+            
+            headers = df.iloc[0].tolist()  # берем всю вторую строку
+            
+            # Третья строка (индекс 2) - это данные
+            
+            data = df.iloc[1].tolist()     # берем всю третью строку
+            # Создаем DataFrame с одной строкой данных
+            
+            result = pd.DataFrame([data], columns = headers)
+            
+            result.insert(0, 'Date', period_column_new)
+            
+            results_data_anal[bca] = result
+
+
+        dict_data_new = Dict_Operations(results_data_anal).rename_columns_in_dict_with_df(loaded_dict_columns)
+
+        # Сохранение данных в файл
+        data = File(filepath_by_months).from_file(0, 0)
+        data_old = Dict_Operations(data).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
+
+        for bca, df in data_old.items():
+            # Проверка на то, что последние две строчки в исходном DataFrame различны
+            if len(data_old[bca]) >= 2 and data_old[bca].iloc[-1][0] == data_old[bca].iloc[-2][0]:
+                data_old[bca] = data_old[bca].iloc[:-1]  # Удаляем только последнюю дублирующуюся строку, а не две
+            
+            # Join выгрузки и исходного DataFrame
+            if bca in dict_data_new:  # Проверяем, что ключ существует в новых данных
+                if len(data_old[bca]) > 0 and len(dict_data_new[bca]) > 0:
+                    # Проверяем, не дублируется ли последняя дата
+                    if data_old[bca].iloc[-1][0] == dict_data_new[bca].iloc[0][0]:
+                        # Если даты совпадают, объединяем без дубликата
+                        res = pd.concat([data_old[bca].iloc[:-1], dict_data_new[bca]], ignore_index=True)
+                    else:
+                        # Если даты разные, просто объединяем
+                        res = pd.concat([data_old[bca], dict_data_new[bca]], ignore_index=True)
+                    
+                    # Сохраняем результат обратно в словарь
+                    data_old[bca] = res
+                    
+        #Сохранение в файл
+        File(filepath_by_months).to_file(data_old)
+
+        #Придание внешнего вида итоговой таблице
+        df_dict = File(filepath_by_months).from_file(0, 0)
+        data = Dict_Operations(df_dict).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
+        try:
+            writer = pd.ExcelWriter(filepath_by_months, engine = 'xlsxwriter')
+            for key, df in data.items():
+                Table(df = df).make_style_of_table(writer = writer, 
+                                                sheet_name = key, 
+                                                width_col_1 = 4.5, 
+                                                width_col_2 = 13.43, 
+                                                width_col_3 = 13.0)
+            writer.close()
+            print("✅ Файл успешно сохранен")
+
+        except Exception as e:
+            print(f"⚠️ Ошибка при сохранении: {e}")
+        
+        return data_old
