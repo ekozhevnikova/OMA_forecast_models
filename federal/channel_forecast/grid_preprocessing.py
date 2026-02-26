@@ -578,18 +578,10 @@ class MediascopeParser(BaseParser):
 
         self.web_filepath = web_filepath
 
-
-        #if self.channel == 'МатчТВ':
-        #    # Вызываем ensure_file_exists с нужными колонками
-        #    self._ensure_file_exists([
-        #        'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода',
-        #        'Время окончания', 'Share', 'Жанр', 'День недели'
-        #    ])
-        #else:
         # Вызываем ensure_file_exists с нужными колонками
         self._ensure_file_exists([
             'Канал', 'Дата', 'Название программы', 'Время выхода',
-            'Время окончания', 'Share', 'Жанр', 'День недели'
+            'Время окончания', 'Продолжительность', 'Share', 'Жанр', 'День недели'
         ])
 
     
@@ -666,6 +658,7 @@ class MediascopeParser(BaseParser):
             
             # Для канала МатчТВ объединяем столбцы 'Назване программы' и 'Описание программы'.
             if self.channel == 'МатчТВ':
+
                 df.rename(columns = {
                     'tvCompanyName': 'Канал', 
                     'Date': 'Дата', 
@@ -702,6 +695,22 @@ class MediascopeParser(BaseParser):
                 # Устанавливаем правильные сортировки для столбцов с датой и временем начала программы
                 df['Дата'] = pd.to_datetime(df['Дата'], errors = 'coerce')
                 df = df.sort_values('Дата').reset_index(drop = True)
+
+            
+            elif self.channel == 'МузТВ':
+
+                df.rename(columns = {
+                    'tvCompanyName': 'Канал', 
+                    'Date': 'Дата', 
+                    'programName': 'Название программы', 
+                    'programStartTime': 'Время выхода', 
+                    'programFinishTime': 'Время окончания', 
+                    'programCategoryName': 'Жанр',
+                    'researchWeekDay': 'День недели'}, inplace = True)
+                
+                stop_words = ['засеки звезду', 'proклип', 'proновости. специальный выпуск']
+                pattern = '|'.join(stop_words)
+                df = df[~df['Название программы'].str.contains(pattern, case = False, na = False)]
             
             else:
                 df.rename(columns = {
@@ -742,6 +751,31 @@ class MediascopeParser(BaseParser):
                 res.append(final)
             
             result_data = pd.concat(res).reset_index(drop = True)
+
+            result_data['Время выхода_dt'] = pd.to_datetime(result_data['Время выхода'], format = '%H:%M:%S', errors = 'coerce')
+            result_data['Время окончания_dt'] = pd.to_datetime(result_data['Время окончания'], format = '%H:%M:%S', errors = 'coerce')
+
+            # Автоматически корректируем переход через полночь
+            result_data['Время окончания_dt'] = np.where(
+                result_data['Время окончания_dt'] < result_data['Время выхода_dt'],
+                result_data['Время окончания_dt'] + pd.Timedelta(days = 1),
+                result_data['Время окончания_dt']
+            )
+
+            result_data['Продолжительность'] = (
+                pd.to_datetime(result_data['Время окончания_dt']) - pd.to_datetime(result_data['Время выхода_dt'])
+            ).dt.total_seconds()
+
+            # Форматирование
+            result_data['Продолжительность'] = result_data['Продолжительность'].apply(
+                lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+            )
+
+            result_data = result_data[
+            [
+                'Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Продолжительность', 'Share', 'Жанр', 'День недели'
+            ]
+                ]
             
             return result_data
     
@@ -829,26 +863,13 @@ class MediascopeParser(BaseParser):
         # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
         df_clean = df.where(pd.notna(df), None)
 
-        #if self.channel == 'МатчТВ':
-        #    column_configs = [
-        #    {'header': 'Канал', 'width': 24.0, 'format': 'general'},
-        #    {'header': 'Дата', 'width': 12.0, 'format': 'date'},
-        #    {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-        #    {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
-        #    {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-        #    {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
-        #    {'header': 'Share', 'width': 11.0, 'format': 'general'},
-        #    {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
-        #    {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-        #    ]
-        
-        #else:
         column_configs = [
             {'header': 'Канал', 'width': 24.0, 'format': 'general'},
             {'header': 'Дата', 'width': 12.0, 'format': 'date'},
             {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
             {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
             {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+            {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
             {'header': 'Share', 'width': 11.0, 'format': 'general'},
             {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
             {'header': 'День недели', 'width': 14.0, 'format': 'general'}
@@ -865,7 +886,8 @@ class MediascopeParser(BaseParser):
 
 class TVPreprocessing(BaseParser):
     """
-        Класс для предобработки файлов с исторической и новыми сетками Федеральных ТВ-каналовс регулярной сеткой
+        Класс для предобработки файлов с исторической и новыми сетками Федеральных ТВ-каналовс регулярной сеткой.
+        Рассчитываются взвешенные доли программ.
     """
     def __init__(self, channel: str, filepath: str, plmrs: pd.DataFrame):
         """
@@ -891,18 +913,10 @@ class TVPreprocessing(BaseParser):
         self.plmrs = plmrs
         self.filepath = filepath
 
-
-        #if self.channel == 'МатчТВ':
-        #    # Вызываем ensure_file_exists с нужными колонками
-        #    self._ensure_file_exists([
-        #        'Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 
-        #        'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
-        #    ])
-        #else:
         # Вызываем ensure_file_exists с нужными колонками
         self._ensure_file_exists([
             'Канал', 'Дата', 'Название программы', 'Время выхода', 
-            'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели'
+            'Время окончания', 'Продолжительность', 'Share', 'Share_weighted', 'Жанр', 'День недели'
         ])
 
 
@@ -974,13 +988,7 @@ class TVPreprocessing(BaseParser):
         """
             Функция для округления времени слотов программ в исторической сетке Palomars для какого-то конкретного дня
         """
-        #if self.channel == 'МатчТВ':
-        #    mars = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
-        #
-        #else:
-        mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Жанр', 'День недели']]
-
-        
+        mars = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Продолжительность', 'Share', 'Жанр', 'День недели']]
 
         mars['Дата'] = pd.to_datetime(mars['Дата'])
         
@@ -990,10 +998,13 @@ class TVPreprocessing(BaseParser):
         mars['Время окончания_1min'] = share_calc.round_time('Время окончания')
         
 
-        #if self.channel == 'МатчТВ':
-        #    mars_new = mars[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
-        #else:
-        mars_new = mars[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода_1min', 'Время окончания_1min', 'Жанр', 'День недели']]
+        mars_new = mars[
+            [
+                'Канал', 'Дата', 'Название программы', 
+                'Share', 'Время выхода_1min', 'Время окончания_1min', 
+                'Продолжительность', 'Жанр', 'День недели'
+                ]
+        ]
         
 
         mars_new.rename(columns = {'Время выхода_1min': 'Время выхода', 'Время окончания_1min': 'Время окончания'}, inplace = True)
@@ -1008,11 +1019,13 @@ class TVPreprocessing(BaseParser):
         # Переименовываем колонки для наглядности
         mars_new.rename(columns = {'Время выхода': 'Время выхода_старое', 'Время выхода_новое': 'Время выхода'}, inplace = True)
         
-
-        #if self.channel == 'МатчТВ':
-        #    palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
-        #else:
-        palomars = mars_new[['Канал', 'Дата', 'Название программы', 'Share', 'Время выхода', 'Время окончания', 'Жанр', 'День недели']]
+        palomars = mars_new[
+            [
+                'Канал', 'Дата', 'Название программы', 
+                'Share', 'Время выхода', 'Время окончания', 
+                'Продолжительность', 'Жанр', 'День недели'
+                ]
+            ]
 
         self.palomars_adjusted = TVShareCalculator(self.channel, palomars).adjust_hour_start()
         
@@ -1106,21 +1119,11 @@ class TVPreprocessing(BaseParser):
 
         general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
 
-        #if self.channel == 'МатчТВ':
-        #    general_result = general_result[
-        #        [
-        #            'Канал', 'Дата', 'Название программы', 'Описание программы',
-        #            'Время выхода', 'Время окончания', 'Share', 
-        #            'Share_weighted', 'Жанр', 'День недели'
-        #            ]
-        #    ]
-        #
-        #else:
         general_result = general_result[
             [
                 'Канал', 'Дата', 'Название программы',
-                'Время выхода', 'Время окончания', 'Share', 
-                'Share_weighted', 'Жанр', 'День недели'
+                'Время выхода', 'Время окончания', 'Продолжительность',
+                'Share', 'Share_weighted', 'Жанр', 'День недели'
                 ]
         ]
 
@@ -1134,26 +1137,13 @@ class TVPreprocessing(BaseParser):
         # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
         df_clean = df.where(pd.notna(df), None)
 
-        #if self.channel == 'МатчТВ':
-        #    column_configs = [
-        #        {'header': 'Канал', 'width': 24.0, 'format': 'general'},
-        #        {'header': 'Дата', 'width': 12.0, 'format': 'date'},
-        #        {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
-        #        {'header': 'Описание программы', 'width': 66.0, 'format': 'general'},
-        #        {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-        #        {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
-        #        {'header': 'Share', 'width': 11.0, 'format': 'general'},
-        #        {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
-        #        {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
-        #        {'header': 'День недели', 'width': 14.0, 'format': 'general'}
-        #    ]
-        #else:
         column_configs = [
             {'header': 'Канал', 'width': 24.0, 'format': 'general'},
             {'header': 'Дата', 'width': 12.0, 'format': 'date'},
             {'header': 'Название программы', 'width': 95.0, 'format': 'general'},
             {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
             {'header': 'Время окончания', 'width': 14.0, 'format': 'general'},
+            {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
             {'header': 'Share', 'width': 11.0, 'format': 'general'},
             {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
             {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
@@ -1294,10 +1284,6 @@ class VIMBGridProcessor(BaseParser):
             ] = 'Документальное кино Леонида Млечина'
     
         
-        # Если нужно вернуть в строковый формат
-        #VIMB['Прод-ть'] = VIMB['Прод-ть'].dt.strftime('%H:%M:%S')
-        # Удаляем ВСЕ программы длительностью 1 секунда
-        #VIMB = VIMB[VIMB['Прод-ть'] != '00:00:01'].reset_index(drop = True)
 
         return VIMB
 

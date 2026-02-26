@@ -17,6 +17,7 @@ from functools import lru_cache
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
 from OMA_tools.io_data.dates import Dates_Operations
 from OMA_tools.regions.data_extraction.task_builder import *
+from OMA_tools.io_data.colors import *
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -166,6 +167,13 @@ class LeaderShipDataExtractor:
         add_city_to_basedemo_from_region = DataConfig.ADD_CITY_TO_BASEDEMO_FROM_REGION,
         add_city_to_targetdemo_from_region = DataConfig.ADD_CITY_TO_TARGETDEMO_FROM_REGION
     ):
+        import time
+
+        start = time.perf_counter()
+
+        print(Color.BOLD + Color.BLUE + '=== 🕑 ФОРМИРУЮ ЗАДАЧИ В ФОРМАТЕ JSON ДЛЯ ОТПРАВКИ НА СЕРВЕР ===' + Color.END)
+        print('Пожалуйста, подождите, этот процесс обычно занимает около  10 мин.')
+
         json_tasks = {}
         
         for group_name, config in regions_params.items():
@@ -205,6 +213,11 @@ class LeaderShipDataExtractor:
             # Добавляем всю группу в основной результат
             json_tasks[group_name] = group_tasks
         
+        end = time.perf_counter()
+
+        print(Color.BOLD + Color.GREEN + '⭐ СФОРМИРОВАЛ ЗАДАЧИ!' + Color.END)
+        print(f'Время формирования задач по факту вышло: {((end - start) / 60):0.1f} мин.')
+
         return json_tasks
 
      
