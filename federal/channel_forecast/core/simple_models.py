@@ -294,6 +294,7 @@ class PrimitiveModel:
                         
                         # Ищем данные по иерархии
                         shares_data = PrimitiveModel.find_shares_in_hierarchy(slot, day, day_type, search_hierarchy, data_sources)
+                        print(shares_data)
                         share_mean = PrimitiveModel.get_clean_mean(shares_data)
                         
                         # Заполняем Share для всех строк с этой комбинацией

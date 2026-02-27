@@ -703,6 +703,7 @@ class MediascopeParser(BaseParser):
                     'tvCompanyName': 'Канал', 
                     'Date': 'Дата', 
                     'programName': 'Название программы', 
+                    'programIssueDescriptionName': 'Описание программы',
                     'programStartTime': 'Время выхода', 
                     'programFinishTime': 'Время окончания', 
                     'programCategoryName': 'Жанр',
@@ -711,6 +712,39 @@ class MediascopeParser(BaseParser):
                 stop_words = ['засеки звезду', 'proклип', 'proновости. специальный выпуск']
                 pattern = '|'.join(stop_words)
                 df = df[~df['Название программы'].str.contains(pattern, case = False, na = False)]
+
+                # Объединяем оба жанра в одну маску
+                mask_doc = ((df['Жанр'] == 'Документальный сериал') | (df['Жанр'] == 'Документальный фильм')) & \
+                    (df['Описание программы'].notna()) & \
+                    (df['Описание программы'] != '')
+
+                # Применяем изменения для обоих жанров (добавляем описание к названию)
+                df.loc[mask_doc, 'Название программы'] = df.loc[mask_doc, 'Название программы'] + '. ' + df.loc[mask_doc, 'Описание программы']
+
+                # Удаляем подстроку 'Сезон N/A / ' из названия программы (для всех строк)
+                df['Название программы'] = df['Название программы'].str.replace('Сезон N/A / ', '', regex = False)
+                df['Название программы'] = df['Название программы'].str.replace('Личное дело', '', regex = False)
+
+                # Оставляем нужные колонки
+                need_columns = [
+                    'Канал', 'Дата', 'Название программы', 
+                    'Время выхода', 'Время окончания', 'Share', 
+                    'Жанр', 'День недели'
+                ]
+
+                df = df[need_columns].reset_index(drop = True)
+            
+            elif self.channel == 'ТВЦ':
+                df.rename(columns = {
+                    'tvCompanyName': 'Канал', 
+                    'Date': 'Дата', 
+                    'programName': 'Название программы', 
+                    'programIssueDescriptionName': 'Описание программы',
+                    'programStartTime': 'Время выхода', 
+                    'programFinishTime': 'Время окончания', 
+                    'programCategoryName': 'Жанр',
+                    'researchWeekDay': 'День недели'}, inplace = True)
+
             
             else:
                 df.rename(columns = {
@@ -771,11 +805,15 @@ class MediascopeParser(BaseParser):
                 lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
             )
 
-            result_data = result_data[
-            [
-                'Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Продолжительность', 'Share', 'Жанр', 'День недели'
-            ]
+            if self.channel == 'ТВЦ':
+                result_data = result_data[
+                    [
+                        'Канал', 'Дата', 'Название программы', 'Описание программы',
+                        'Время выхода', 'Время окончания', 'Продолжительность', 
+                        'Share', 'Жанр', 'День недели'
+                    ]
                 ]
+
             
             return result_data
     
@@ -1271,17 +1309,17 @@ class VIMBGridProcessor(BaseParser):
         elif self.channel_name == 'ТВЦ':
             VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
 
-            times_to_keep = ['02:00:00', '02:05:00', '02:10:00', '02:40:00', '02:45:00']
-            # Создаем условие для даты <= 2025-01-01
-            date_mask = VIMB['Дата'] < '2025-01-01'
-
-            # Обновляем с учетом всех условий
-            VIMB.loc[
-                date_mask & 
-                VIMB['Время выхода'].isin(times_to_keep) & 
-                VIMB['Название программы'].str.contains('док.фильм/сериал', case=False, na=False),
-                'Название программы'
-            ] = 'Документальное кино Леонида Млечина'
+            #times_to_keep = ['02:00:00', '02:05:00', '02:10:00', '02:40:00', '02:45:00']
+            ## Создаем условие для даты <= 2025-01-01
+            #date_mask = VIMB['Дата'] < '2025-01-01'
+#
+            ## Обновляем с учетом всех условий
+            #VIMB.loc[
+            #    date_mask & 
+            #    VIMB['Время выхода'].isin(times_to_keep) & 
+            #    VIMB['Название программы'].str.contains('док.фильм/сериал', case=False, na=False),
+            #    'Название программы'
+            #] = 'Документальное кино Леонида Млечина'
     
         
 
@@ -2103,6 +2141,7 @@ class ProgramMatcher(BaseParser):
             {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
             {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
             {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
+            #{'header': 'Продолжительность', 'width': 17.2, 'format': 'general'},
             {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'}
         ]
         
