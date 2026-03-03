@@ -486,27 +486,40 @@ class EmployeeExportService:
             df_dict[bca].index = [replacements.get(x, x) for x in df_dict[bca].index]
             df_dict[bca] = df_dict[bca].reset_index()
             df_dict[bca] = df_dict[bca].rename(columns = {df_dict[bca].columns[0]: 'Date'})
+
+
         dict_data_new = Dict_Operations(df_dict).convert_column_with_date('Date')
 
-    
-        data_old = File(filepath_by_months).from_file(0, 0)
-        full_data = Dict_Operations(data_old).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
+        # Сохранение данных в файл
+        old = File(filepath_by_months).from_file(0, 0)
+        old = Dict_Operations(old).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
 
-        for bca, df in full_data.items():
-            if full_data['All 18+'].iloc[-1][0] == dict_data_new['All 18+'].iloc[-1][0]:
-                full_data[bca] = full_data[bca].iloc[:-1]
-                res = Dict_Operations.make_concat_of_dicts_dataframes(full_data, dict_data_new)
-            else:
-                res = Dict_Operations.make_concat_of_dicts_dataframes(full_data, dict_data_new)
-        File(filepath_by_months).to_file(res)
-        
-        #Придание внешнего вида итоговой таблице
-        df_dict = File(filepath_by_months).from_file(0, 0)
-        data = Dict_Operations(df_dict).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
+        data_old = old.copy()
+
+        for bca, df in data_old.items():
+            # Проверка на то, что последние две строчки в исходном DataFrame различны
+            if len(data_old[bca]) >= 2 and data_old[bca].iloc[-1][0] == data_old[bca].iloc[-2][0]:
+                data_old[bca] = data_old[bca].iloc[:-1]  # Удаляем только последнюю дублирующуюся строку, а не две
+            
+            # Join выгрузки и исходного DataFrame
+            if bca in dict_data_new:  # Проверяем, что ключ существует в новых данных
+                if len(data_old[bca]) > 0 and len(dict_data_new[bca]) > 0:
+                    # Проверяем, не дублируется ли последняя дата
+                    if data_old[bca].iloc[-1][0] == dict_data_new[bca].iloc[0][0]:
+                        # Если даты совпадают, объединяем без дубликата
+                        res = pd.concat([data_old[bca].iloc[:-1], dict_data_new[bca]], ignore_index = True)
+                    else:
+                        # Если даты разные, просто объединяем
+                        res = pd.concat([data_old[bca], dict_data_new[bca]], ignore_index = True)
+                    
+                    # Сохраняем результат обратно в словарь
+                    data_old[bca] = res
+
+        File(filepath_by_months).to_file(data_old)
         
         try:
             writer = pd.ExcelWriter(filepath_by_months, engine = 'xlsxwriter')
-            for key, df in data.items():
+            for key, df in data_old.items():
                 Table(df = df).make_style_of_table(writer = writer, 
                                                 sheet_name = key, 
                                                 width_col_1 = 4.5, 
@@ -587,29 +600,36 @@ class EmployeeExportService:
         dict_data_new = Dict_Operations(df_dict).convert_column_with_date('Date')
 
         # Сохранение данных в файл
-        data = File(filepath_by_months).from_file(0, 0)
-        data_old = Dict_Operations(data).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
+        old = File(filepath_by_months).from_file(0, 0)
+        old = Dict_Operations(old).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
+
+        data_old = old.copy()
 
         for bca, df in data_old.items():
-            #Проверка на то, что последние две строчки в исходном DataFrame различны
-            if data_old[bca].iloc[-1][0] == data_old[bca].iloc[-2][0]:
-                data_old[bca] = data_old[bca].iloc[:-2]
-            #Join выгрузки и исходного DataFrame
-            if data_old[bca].iloc[-1][0] == dict_data_new[bca].iloc[-1][0]:
-                data_old[bca] = data_old[bca].iloc[:-1]
-                res = Dict_Operations.make_concat_of_dicts_dataframes(data_old, dict_data_new)
-            else:
-                res = Dict_Operations.make_concat_of_dicts_dataframes(data_old, dict_data_new)
+            # Проверка на то, что последние две строчки в исходном DataFrame различны
+            if len(data_old[bca]) >= 2 and data_old[bca].iloc[-1][0] == data_old[bca].iloc[-2][0]:
+                data_old[bca] = data_old[bca].iloc[:-1]  # Удаляем только последнюю дублирующуюся строку, а не две
+            
+            # Join выгрузки и исходного DataFrame
+            if bca in dict_data_new:  # Проверяем, что ключ существует в новых данных
+                if len(data_old[bca]) > 0 and len(dict_data_new[bca]) > 0:
+                    # Проверяем, не дублируется ли последняя дата
+                    if data_old[bca].iloc[-1][0] == dict_data_new[bca].iloc[0][0]:
+                        # Если даты совпадают, объединяем без дубликата
+                        res = pd.concat([data_old[bca].iloc[:-1], dict_data_new[bca]], ignore_index = True)
+                    else:
+                        # Если даты разные, просто объединяем
+                        res = pd.concat([data_old[bca], dict_data_new[bca]], ignore_index = True)
+                    
+                    # Сохраняем результат обратно в словарь
+                    data_old[bca] = res
 
-        #Сохранение в файл
-        File(filepath_by_months).to_file(res)
+        File(filepath_by_months).to_file(data_old)
 
         #Придание внешнего вида итоговой таблице
-        df_dict = File(filepath_by_months).from_file(0, 0)
-        data = Dict_Operations(df_dict).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
         try:
             writer = pd.ExcelWriter(filepath_by_months, engine = 'xlsxwriter')
-            for key, df in data.items():
+            for key, df in data_old.items():
                 Table(df = df).make_style_of_table(writer = writer, 
                                                 sheet_name = key, 
                                                 width_col_1 = 4.5, 
@@ -726,11 +746,9 @@ class EmployeeExportService:
         File(filepath_by_months).to_file(data_old)
 
         #Придание внешнего вида итоговой таблице
-        df_dict = File(filepath_by_months).from_file(0, 0)
-        data = Dict_Operations(df_dict).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
         try:
             writer = pd.ExcelWriter(filepath_by_months, engine = 'xlsxwriter')
-            for key, df in data.items():
+            for key, df in data_old.items():
                 Table(df = df).make_style_of_table(writer = writer, 
                                                 sheet_name = key, 
                                                 width_col_1 = 4.5, 

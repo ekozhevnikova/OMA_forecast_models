@@ -136,69 +136,6 @@ class File:
         self.to_file(updated)
         
         return updated
-
-
-
-
-
-        #count = 0
-        #for (key, df_new), (key, df_excel) in zip(dataframe.items(), data_old.items()):
-        #    for col_name in df_new.columns:
-        #        if 'Unnamed' in col_name:
-        #            df_new = df_new.drop(columns = [col_name])
-        #    for col_name in df_excel.columns:
-        #        if 'Unnamed' in df_excel:
-        #            df_excel = df_excel.drop(columns = [col_name])
-        #    is_inserted = False
-        #    
-        #    
-        #    for i, row_i in df_new.iterrows():
-        #        if not df_excel[df_excel[column_name] == row_i[0]].empty:
-        #            row_num_excel = df_excel[df_excel[column_name] == row_i[0]].index[0]
-        #            rows_to_add = len(df_new) - i + 1
-        #            
-        #            up = df_excel.iloc[:row_num_excel]
-        #            middle = df_new.iloc[i:]
-        #            down = df_excel.iloc[row_num_excel + rows_to_add:]
-        #            
-        #            df_excel = pd.concat([up, middle, down])
-        #            is_inserted = True
-        #            break
-        #            #df_excel.iloc[df_excel[column_name] == row_i[0]] = df_new[df_new[column_name] == row_i[0]]
-        #        #else:
-        #            #df_excel = pd.concat([df_excel, df_new[df_new[column_name] == row_i[0]]], ignore_index = True)
-        #            #df_excel.reset_index()
-        #    if not is_inserted:
-        #        try:
-        #            df_new.iloc[0][0] = Dates_Operations.convert_dates_from_str_to_datetime_format(df_new, column_name, '%B %Y')
-        #            df_excel.iloc[-1][0] = Dates_Operations.convert_dates_from_str_to_datetime_format(df_excel, column_name, '%B %Y')
-        #            time_delta = df_new.iloc[0][0] - df_excel.iloc[-1][0]
-        #            if 28 <= time_delta.days <= 40:
-        #                df_excel = pd.concat([df_excel, df_new])
-        #        except Exception as ex:
-        #            if type(ex) != type(ValueError()):
-        #                time_delta = df_new.iloc[0][0] - df_excel.iloc[-1][0]
-        #                if 28 <= time_delta.days <= 40:
-        #                    df_excel = pd.concat([df_excel, df_new])
-        #            else:
-        #                raise ValueError("Выберете другой временной период.")
-        #                
-        #        #raise ValueError("Выберете другой временной период.")
-        #    '''
-        #    if df_excel.iloc[-1][column_name] == df_new.iloc[0][column_name]: 
-        #            df_excel.iloc[-1] = df_new.iloc[0]
-        #            df_excel = pd.concat([df_excel, df_new.iloc[1:]])
-        #    else:
-        #        df_excel = pd.concat([df_excel, df_new])
-        #    '''
-        #    df_excel[column_name] = df_excel[column_name].apply(lambda x: pd.to_datetime(x))
-        #    df_excel = df_excel.dropna()
-        #    df_excel = df_excel.reset_index(drop = True)
-        #    data_old[key] = df_excel
-        #    count += 1
-        #    data_new = Dict_Operations(data_old).replace_keys_in_dict(list_of_replacements)
-        #self.to_file(data_new)
-        #return data_new
     
     
     @staticmethod
@@ -511,18 +448,27 @@ class Dict_Operations:
     
     def convert_column_with_date(self, col_name_with_date):
         """
-        Converts Date 2021-01-01 to January 2021
+            Converts Date 2021-01-01 to January 2021
         """
-        dates = {}
-        column_dates_new = {}
+        months_ru = {
+            1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель',
+            5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
+            9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
+        }
+        
         for key, df in self.dictionary.items():
-            dates[key] = df[col_name_with_date].to_list()
-
-        for key, date in dates.items():
-            column_dates_new[key] = []
-            for i in date:
-                column_dates_new[key].append(i.strftime('%B') + ' ' + i.strftime('%Y'))
-            self.dictionary[key][col_name_with_date] = column_dates_new[key]
+            new_dates = []
+            
+            for date_val in df[col_name_with_date]:
+                if pd.notna(date_val):
+                    month_num = date_val.month
+                    year = date_val.year
+                    new_dates.append(f"{months_ru[month_num]} {year}")
+                else:
+                    new_dates.append('')
+            
+            self.dictionary[key][col_name_with_date] = new_dates
+        
         return self.dictionary
     
     
