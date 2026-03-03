@@ -346,31 +346,42 @@ class EmployeeExportService:
         # 6. Обновление файла с историческими данными
         for key, df in df_dict.items():
             df_dict[key][date_column] = df_dict[key][date_column].apply(lambda x: pd.to_datetime(x))
-        data_old = File(historical_filepath_by_days).from_file(0)
+
+        #data_old = File(historical_filepath_by_days).from_file(0)
         data_new = File(filename = historical_filepath_by_days).update_file(
-                                                            dataframe = df_dict,
-                                                            column_name = date_column, 
-                                                            list_of_replacements = DataConfig.BCA_LIST
+                                                            df_dict,
+                                                            date_column, 
+                                                            DataConfig.BCA_LIST
                                                                 )
+        
+        try:
+            # Установка внешнего вида итоговой таблицы по дням за последние 28 дней
+            writer = pd.ExcelWriter(historical_filepath_by_days, engine = 'xlsxwriter')
+            for key, df in data_new.items():
+                Table(df = df).make_style_of_table(writer = writer, sheet_name = key, width_col_1 = 4.5, width_col_2 = 17.57, width_col_3 = 15.86)
+            writer.close()
+            print("✅ Файл с историческими данными успешно сохранен")
+        except Exception as e:
+            print(f"⚠️ Ошибка при сохранении: {e}")
+        
+
+
         df_dict_tail = {}
         for bca, df in df_dict.items():
-            if len(list(df_dict['All 18+'])) < LAST_N_DAYS:
+            if len(df_dict[bca]) < LAST_N_DAYS:
                 raise ValueError('Количество выгружаемых дней не соответствует количеству дней, записываемых в файл. Выберите другой временной период')
             df_dict_tail[bca] = df.tail(LAST_N_DAYS) #Записывает последние 30 значений из выгрузки
         
         # 6. Сохранение последних 28 дней в файл
         File(filename = filepath_last_n_days).to_file(df_dict_tail)
 
-        #df_dict = File(filepath_last_n_days).from_file(0, 0)
-        data = Dict_Operations(df_dict_tail).replace_keys_in_dict(list_of_replacements = DataConfig.BCA_LIST)
-
         try:
             # Установка внешнего вида итоговой таблицы по дням за последние 28 дней
             writer = pd.ExcelWriter(filepath_last_n_days, engine = 'xlsxwriter')
-            for key, df in data.items():
+            for key, df in df_dict_tail.items():
                 Table(df = df).make_style_of_table(writer = writer, sheet_name = key, width_col_1 = 4.5, width_col_2 = 17.57, width_col_3 = 15.86)
             writer.close()
-            print("✅ Файл успешно сохранен")
+            print("✅ Файл с выгрузкой по дням успешно сохранен")
         except Exception as e:
             print(f"⚠️ Ошибка при сохранении: {e}")
         
@@ -611,6 +622,7 @@ class EmployeeExportService:
             print(f"⚠️ Ошибка при сохранении: {e}")
 
         return dict_data_new
+
 
     @staticmethod
     def update_monthly_data(current_year: int, df: pd.DataFrame, columns_order: str, filepath_by_months: str):

@@ -37,10 +37,7 @@ class GeneralTextCleaner:
         - Суббота
         - Че
         - Мир
-        - Спас
         - Ю
-        - ТВЦ
-        - Звезда
     """
     
 
@@ -60,7 +57,7 @@ class GeneralTextCleaner:
         # ============================================================================
 
         # Группа 1: Каналы с документальными фильмами/сериалами
-        self.DOC_CHANNELS = {'СПАС', 'ЗВЕЗДА', 'ТВЦ'}
+        #self.DOC_CHANNELS = {'СПАС', 'ЗВЕЗДА', 'ТВЦ'}
 
         # Группа 2: Детские/анимационные каналы
         self.KIDS_CHANNELS = {'СОЛНЦЕ', 'КАРУСЕЛЬ', 'СУББОТА', 'СТСЛав', '2X2'}
@@ -103,7 +100,10 @@ class GeneralTextCleaner:
             'stop_words': {'документальный', 'док.', 'сериал', 'мультфильм'},
             'patterns': [
                 r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'(?<!\w)х\W*ф(?!\w)',  r'\bв\W*[сc]\b',
-                r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*', r'\bсериал\b', r'\bмультфильм\b']
+                r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*', r'\bмультфильм\b',
+                r'\bдокументальный\b', r'\bфильм\b', r'\(\s*(?:сериал|серия|сезон|часть)\s*\d*\s*\)',
+                r'\d+\s*сез\b', r'\bсез\s*\d+\b'
+                ]
         }
 
         # Для детских/анимационных каналов
@@ -445,26 +445,29 @@ class GeneralTextCleaner:
 
             if ('док.фильм' in text or 'д/ф' in text or 'худ.фильм' in text or 'х/ф' in text):
                 
-                # Ищем текст в кавычках
-                quote_match = re.search(r'[«"“„]([^»"”“]+)[»"”“]', text)
-                if quote_match:
-                    quoted = quote_match.group(1).strip()
-                    # Берем текст до первой точки
-                    extracted = quoted.split('.')[0].strip() if '.' in quoted else quoted
-                    text = extracted.lower()
-                    return True, text.strip()
+                # Убираем маркеры
+                text = re.sub(r'(д/ф|х/ф|сериал|документальный|док|фильм|худ|художественный)\s*', '', text, flags = re.IGNORECASE)
+
+                # Удаляем тире, чтобы '80-х' -> '80х'
+                text = re.sub(r'[-—–]', '', text)
                 
-                # Если нет кавычек, ищем в скобках
-                elif '(' in text and ')' in text:
-                    bracket_match = re.search(r'\(([^)]+)\)', text)
-                    if bracket_match:
-                        bracket = bracket_match.group(1).strip()
-                        # Убираем маркеры
-                        bracket = re.sub(r'(д/ф|х/ф|сериал)\s*', '', bracket, flags=re.IGNORECASE)
-                        # Берем текст до первой точки
-                        extracted = bracket.split('.')[0].strip() if '.' in bracket else bracket
-                        text = extracted.lower()
-                        return True, text.strip()
+                # Удаляем всю пунктуацию, оставляем цифры и буквы
+                text = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', text)
+            
+            elif 'специальный репортаж' in text:
+                pattern = r'\b' + re.escape('специальный репортаж') + r'\b'
+                text = re.sub(pattern, '', text, flags = re.IGNORECASE)
+                return True, text
+            
+            # Сначала проверяем специальные фразы
+            special_phrases = [
+                '10 самых', '90е', 'девяностые'
+                ]
+            
+            for phrase in special_phrases:
+                if phrase in text:
+                    cleaned_phrase = self.clean_title(phrase)
+                    return True, cleaned_phrase
             
             return False, text
         
@@ -648,10 +651,8 @@ class GeneralTextCleaner:
         result = text_lower
 
         # Паттерн для возрастных рейтингов, включая варианты со скобками
-        result = re.sub(
-            r'(?<!\S)\(?\s*(\+?(?:0|6|12|14|16|18)\+?)\s*\)?(?!\S)', 
-            ' ', result, flags=re.IGNORECASE
-        )
+        pattern = r'\b\s*\(?\s*\+?(0|6|12|14|16|18)\+?\s*\)?\s*\b'
+        result = re.sub(pattern, ' ', result, flags = re.IGNORECASE)
         if debug:
             print(f"Удалены возрастные рейтинги: '{result}'")
 
@@ -827,6 +828,170 @@ class GeneralTextCleaner:
         
         # Возвращаем список уникальных очищенных программ
         return list(set(mapping.values())), data
+    
+
+
+class DocumentaryChannelCleaner:
+    """
+        Класс для очистки названий телепередач с документальным посылом.
+
+        !!! ВАЖНО !!!
+        Данный класс предназначен для работы с каналами ЗВЕЗДА, СПАС и ТВЦ
+    """
+    def __init__(self, channel):
+        self.channel = channel
+
+        self.SPECIAL_NAMES = [
+            'специальный репортаж', 'мультфильм', 'док сериал фильм', 'док фильм сериал', 'худ фильм сериал',
+            'документальный фильм', 'юмористический концерт', 'сериал х ф', 'анимационный фильм'
+        ]
+
+
+        self.STOP_PATTERNS_GENERAL = [
+            r'\bдокументальный\b', r'\bюмористический\b', r'\bспециальный\b', r'\bанимационный\b', 
+            r'\bфильм\b', r'\bсериал\b', r'\bконцерт\b', r'\bрепортаж\b', 
+            r'\bмультфильм\b', r'\bспец\b', r'\bд\W*ф\b', r'\bх\W*ф\b', r'\bм\W*ф\b', 
+            r'\bm\W*ф\b', r'\bдок\.?\s*', r'\bхуд\.?\s*'
+        ]
+
+
+        self.PROGRAMS_TO_REMAIN = {
+            'ТВЦ': ['10 самых'],
+            'ЗВЕЗДА': ['голоса победы', 'дневники памяти']
+        }
+
+
+        self.STOP_PATTERNS_CHANNELS = {
+            'ЗВЕЗДА': [r'\bцикл\b'],
+            
+            'СПАС': [r'\bцикл\b']
+        }
+
+    
+    def general_cleaner(self, text: str, debug = False):
+        """
+            Предварительный очиститель
+        """
+        
+        if debug:
+            print(f"\n{'='*80}")
+            print(f'ЗАПУСКАЮ ДЕББАГЕР ДЛЯ СТРОКИ:      {text}')
+            print(f"{'='*80}")
+            print('\n')
+
+        # 1. Приведение текста к нижнему регистру, а также замена буквы ё на е
+        text_lower = text.lower().strip().replace('ё', 'е')
+        if debug:
+            print(f'После приведения к нижнему регистру: {text_lower}')
+
+        # 2. Удаление подстрок типа '№5', '№09'
+        text_lower = re.sub(r'[#№]\d+', '', text_lower)
+        if debug:
+            print(f'После удаления символов с №: {text_lower}')
+
+        # Зачистка от любых 1-2 буквенных обозначений в скобках
+        pattern_remove = r'\s*\([а-яa-z]{1,2}\)\s*'
+        text_lower = re.sub(pattern_remove, ' ', text_lower, flags=re.IGNORECASE)
+
+        # 3. Удаление пунктуации
+        # Удаляем тире, чтобы '80-х' -> '80х'
+        text_lower = re.sub(r'[-—–]', '', text_lower)
+        # Удаляем всю пунктуацию, оставляем цифры и буквы
+        text_lower = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', text_lower)
+        text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+        if debug:
+            print(f'После удаления пунктуации: {text_lower}')
+
+        # 4. Проверка на специальные имена
+        for special_name in self.SPECIAL_NAMES:
+            if text_lower == special_name.lower().strip():
+                if debug:
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {text_lower}')
+                return special_name
+
+
+        if self.channel in self.PROGRAMS_TO_REMAIN and self.PROGRAMS_TO_REMAIN[self.channel]:
+            for program_to_remain in self.PROGRAMS_TO_REMAIN[self.channel]:
+                if program_to_remain in text_lower:
+                    if debug:
+                        print(Color.GREEN + f'Нашёл программу с ключевым именем: {text_lower}')
+                    return program_to_remain
+                
+
+        # 5. Удаляем номера частей 
+        pattern = r'\b(?:\d+\s+(?:часть|части|ч)\b|\b(?:часть|части|ч)\s+\d+(?:\s+\d+)*)\b'
+
+        text_lower = re.sub(pattern, '', text_lower, flags=re.IGNORECASE)
+
+        # 6. Удаляем номера серий (включая перечисления через пробел)
+        pattern = r'\b(?:\d+(?:\s+\d+)*\s+(?:серия|серии|сер|с)\b|\b(?:серия|серии|сер|с)\s+\d+(?:\s+\d+)*)\b'
+        
+        text_lower = re.sub(pattern, '', text_lower, flags=re.IGNORECASE)
+
+        # 7. Удаляем номеров фильмов (включая перечисления через пробел)
+        pattern = r'\b(?:\d+\s+(?:фильм|фильма|фильмов|ф)\b|\b(?:фильм|фильма|фильмов|ф)\s+\d+(?:\s+\d+)*)\b'
+
+        text_lower = re.sub(pattern, '', text_lower, flags=re.IGNORECASE)
+        if debug:
+            print(f'После удаления номеров серий и частей: {text_lower}')
+
+
+        sorted_patterns = sorted(self.STOP_PATTERNS_GENERAL, key = len, reverse = True)
+        for pattern in sorted_patterns:
+            text_lower = re.sub(r'\s*' + pattern + r'\s*', ' ', text_lower, flags = re.IGNORECASE)
+
+        text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+
+        # Удаление специальных паттернов для каналов
+        if self.channel in self.STOP_PATTERNS_CHANNELS and self.STOP_PATTERNS_CHANNELS[self.channel]:
+            sorted_special_patterns = sorted(self.STOP_PATTERNS_CHANNELS[self.channel], key = len, reverse = True)
+            for pattern in sorted_special_patterns:
+                text_lower = re.sub(r'\s*' + pattern + r'\s*', ' ', text_lower, flags = re.IGNORECASE)
+
+            text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+            
+        if debug:
+            print(f'После удаления стоп-паттернов: {text_lower}')
+
+
+        # Удаление последовательности из 4х и более цифр (МОЖЕТ БЫТЬ СТОИТ ПОМЕНЯТЬ ДЛЯ КАНАЛА "ЗВЕЗДА")
+        text_lower = re.sub(r'\b\d{4,}\b', ' ', text_lower)
+
+        if debug:
+            print(f'После удаления последовательности цифр: "{text_lower}"')
+
+        if text_lower == '':
+            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+            return ''
+            
+        else:
+            if debug:
+                print(f"\n{'='*80}")
+                print(f'ПОСЛЕ ФИНАЛЬНОЙ ОЧИСТКИ:           {text_lower}')
+                print(f"{'='*80}")
+            return text_lower
+    
+
+    def clean_dataframe(self, df, program_name_column: str = 'Название программы'):
+        """
+            Финальный метод для предобработки текста. В процессе работы метода создаётся дополнительный столбец в датафрейме, в 
+            который записывается очищенное название программы.
+        """
+        data = df.copy()
+
+        # Создаем сет уникальных программ
+        unique_programs = data[program_name_column].unique()
+
+        # Создаем словарь маппинга уникальных программ
+        mapping = {prog: self.general_cleaner(prog) for prog in unique_programs}
+        
+        # Применяем маппинг к DataFrame. Записываем очищенные названия программ в новый столбец под названием 'program_name'.
+        data['program_name'] = data[program_name_column].map(mapping)
+        
+        # Возвращаем список уникальных очищенных программ
+        return list(set(mapping.values())), data
+
+    
 
 
 
@@ -1814,7 +1979,8 @@ class MusicChannelCleaner:
         self.channel = channel
 
         self.STOP_PATTERNS = [
-            r'\bспец\b', r'\bд\W*ф\b', r'\bдок\.\s*', r'(?:нон|non)[\s\-]?(?:стоп|stop)', r'\bbest\b', r'\bлучшее\b'
+            r'\bдокументальный\b', r'\bфильм\b',
+            r'\bспец\b', r'\bд\W*ф\b', r'\bдок\.?\s*', r'(?:нон|non)[\s\-]?(?:стоп|stop)', r'\bbest\b', r'\bлучшее\b'
         ]
 
     def divide_programs_by_categories(self, df: pd.DataFrame):
@@ -1822,9 +1988,6 @@ class MusicChannelCleaner:
             Метод для разделения программ на различные группы в зависимости от названия передачи
         """
         categories = {
-            # Категория для программ, содержащих слово 'концерт' в своем названии
-            'concert': ['концерт'],
-
             # Категория для программ, содержащих следующие слова в своем названии.
             # Названия будут зачищаться таким образом, чтобы на выходе оставались только словосочетания, указанные в скобках
             'charts': [
@@ -1832,12 +1995,17 @@ class MusicChannelCleaner:
                 'новогодний чарт', 'приехали!', 'самый лучший день',
                 'лихие хиты', 'моя волна', 'очень караочен',
                 'звезда на замене', 'янамузтв', 'премия муз-тв', 'топ 30',
-                'тор 30'
+                'тор 30', 'концерт муз-тв в день города', 'концерт муз-тв ко дню города',
+                'день всех влюбленных на муз-тв', 'праздничный концерт муз-тв'
             ],
-            
+
+            # Категория для программ, содержащих слово 'концерт' в своем названии
+            'concert': ['концерт'],
+
             # Категория для программ, содержащих слово 'ВК' в своем названии
             'vk': [
-                'громкий вопрос', 'контакты', 'меломан', 'меломаны', 'натальная карта'
+                'громкий вопрос', 'контакты', 'меломан',
+                'меломаны', 'натальная карта', 'фест', 'под шубой'
             ],
 
              # Категория для фильмов
@@ -1846,29 +2014,29 @@ class MusicChannelCleaner:
             ]    
         }
 
+        variants_pattern = '|'.join(categories['vk'])
+        patterns_vk = rf'ВК\s*[\(\[{{]?\s*(?:{variants_pattern})\s*[\)\]}}]?'
+
+        vk_mask = df['Название программы'].str.contains(patterns_vk, case = False, na = False, regex = True)
+        df_vk = df[vk_mask]
+        
+        # Оставшийся вимб
+        df_remained = df[~vk_mask]
+
         # Создаем паттерны одной строкой
         patterns = {k: '|'.join(v) for k, v in categories.items()}
 
         # Классификация одной строкой (создаем словарь с результатами)
         result = {}
-        remaining = df
-        for cat in ['concert', 'charts', 'films']:
+        remaining = df_remained
+        for cat in ['charts', 'concert', 'films']:
             mask = remaining['Название программы'].str.contains(patterns[cat], case = False, na = False)
             result[cat] = remaining[mask]
             remaining = remaining[~mask]
         result['other'] = remaining
 
-        # Распаковываем результаты
-        df_concert, df_charts, df_films, df_other = result.values()
-
-        variants_pattern = '|'.join(categories['vk'])
-        patterns_vk = rf'ВК\s*[\(\[{{]?\s*(?:{variants_pattern})\s*[\)\]}}]?'
-
-        vk_mask = df_other['Название программы'].str.contains(patterns_vk, case = False, na = False, regex = True)
-        df_vk = df_other[vk_mask]
-        
-        # Оставшийся вимб
-        df_other = df_other[~vk_mask]
+         # Распаковываем результаты
+        df_charts, df_concert, df_films, df_other = result.values()
 
         # Словарь с данными и названиями
         data_frames = {
@@ -1898,7 +2066,7 @@ class MusicChannelCleaner:
             Метод по общей обработке текста
         """
         # Приведение к нижнему регистру
-        text_lowered  = text.lower().strip()
+        #text_lowered  = text.lower().strip()
     
         # Замена буквы е на ё
         text_lower = text.lower().strip().replace('ё', 'е')
@@ -1929,7 +2097,16 @@ class MusicChannelCleaner:
         result = text
         # Основная предобработка
         result = self.general_preprocess_text(result)
-    
+
+        if 'концерт муз-тв ко дню города' in result:
+            return 'концерт муз-тв ко дню города'
+        
+        elif 'концерт муз-тв в день города' in result:
+            return 'концерт муз-тв в день города'
+
+        elif 'вк фест' in result:
+            return 'вк фест'
+        
         # Удаляем стоп-слова
         stop_words_special = ['концерт', 'вк']
         for stop_word in stop_words_special:
@@ -1976,6 +2153,10 @@ class MusicChannelCleaner:
         if debug:
             print(f'После удаления одиночных цифр: "{result}"')
         
+        if 'премия музтв' in result:
+            return 'премия музтв'
+    
+        
         # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
         result = re.sub(r'\s+', ' ', result).strip()
         if debug:
@@ -2011,8 +2192,10 @@ class MusicChannelCleaner:
         special_words = [
             '10 самых', 'хит сториз', 'битва поколений', 'новогодний чарт', 'приехали',
             'вк меломан', 'вк громкий вопрос', 'вк натальная карта', 'вк контакты',
-            'самый лучший день', 'лихие хиты', 'моя волна', 'очень караочен',
-            'звезда на замене', 'янамузтв', 'премия музтв', 'топ 30', 'тор 30'
+            'вк фест', 'вк под шубой', 'самый лучший день', 'лихие хиты', 'моя волна', 'очень караочен',
+            'звезда на замене', 'янамузтв', 'премия музтв', 'топ 30', 'тор 30',
+            'концерт музтв в день города', 'концерт музтв ко дню города', 'день всех влюбленных на музтв',
+            'праздничный концерт музтв'
         ]
         for special_word in special_words:
             if special_word in result:
@@ -2090,8 +2273,10 @@ class MusicChannelCleaner:
         result = re.sub(r'\b\d{4,}\b', ' ', result)
         if debug:
             print(f'После удаления последовательности цифр: "{result}"')
-    
-        if 'вк' in result:
+
+
+        words = result.lower().split()
+        if 'вк' in words:
             return 'вк контакты'
     
         # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами

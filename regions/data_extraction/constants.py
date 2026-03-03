@@ -158,7 +158,7 @@ class Constants:
             DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-30, -17]).date_filter
             
             # ПОСЛЕДНИЕ 50 ДНЕЙ
-            date_start = datetime.now() + timedelta(days=-51)
+            date_start = datetime.now() + timedelta(days=-71)
             start_date = date_start.strftime('%Y-%m-%d')
             date_stop = datetime.now() + timedelta(days=-3)
             stop_date = date_stop.strftime('%Y-%m-%d')
@@ -174,7 +174,7 @@ class Constants:
             DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-29, -16]).date_filter
             
             # ПОСЛЕДНИЕ 50 ДНЕЙ
-            date_start = datetime.now() + timedelta(days=-50)
+            date_start = datetime.now() + timedelta(days=-70)
             start_date = date_start.strftime('%Y-%m-%d')
             date_stop = datetime.now() + timedelta(days=-2)
             stop_date = date_stop.strftime('%Y-%m-%d')

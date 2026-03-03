@@ -397,7 +397,7 @@ class LeaderShipDataExtractor:
             #####################################################################################################
             results[period] = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
 
-            time.sleep(120)
+            time.sleep(45)
     
         return results
         
