@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
-from OMA_tools.io_data.operations import Dates_Operations
-from OMA_tools.io_data.time_series import TimeSeriesTransformer
+from io_data.operations import Dates_Operations
+from io_data.time_series import TimeSeriesTransformer
 
 from sklearn.preprocessing import LabelEncoder
 import json
@@ -166,7 +166,7 @@ class PrimitiveModel:
         if len(series) == 0:
             return 0.0
         clean_shares = TimeSeriesTransformer(series).replace_outliers_with_median()
-        return np.mean(clean_shares)
+        return np.mean(clean_shares) ##################################################3
 
 
     @staticmethod
@@ -361,14 +361,14 @@ class PrimitiveModel:
                 if len(current_year) != 0:
                     if len(current_year) > 2:
                         last_two_values = historical_data['Share'].iloc[-2:]
-                        average_last_two = last_two_values.mean()
+                        average_last_two = last_two_values.mean() ###################################
                         future_data['Share'] = future_data['Share'].replace('', average_last_two)
                     else:
-                        share_mean = np.mean(current_year['Share'])
+                        share_mean = np.mean(current_year['Share']) ################################
                         # Заполняем Share для всех строк с этой комбинацией
                         future_data['Share'] = future_data['Share'].replace('', share_mean)
                 else:
-                    share_mean = np.mean(historical_data['Share'])
+                    share_mean = np.mean(historical_data['Share']) ################################
                     # Заполняем Share для всех строк с этой комбинацией
                     future_data['Share'] = future_data['Share'].replace('', share_mean)
                     
@@ -493,3 +493,100 @@ class PrimitiveModel:
             res_not_found[new_pr] = future_data
 
         return pd.concat(res_not_found.values(), ignore_index = True)
+
+
+class HolidayAdjuster:
+    def __init__(self, forecast_df, history_df, holidays_json_path,
+                 coef_year="2023", forecast_year="2024", window_days=14):
+        """
+        Класс для прогноза доли в праздничные дни.
+        За основу берется доля такого же праздничного дня в прошлом году и рассчитывается "праздничный
+        коэффициент" - отношение доли праздничного дня к среднему значению доли window_days непраздничных дней вокруг
+        этого праздника. Полученный "праздничный коэффициент" применяется к доли прогнозного праздничного дня.
+
+            Args:
+                forecast_df: датафрейм с полученным прогнозом доли без учета праздников.
+                history_df: исторические данные из паломарса.
+                holidays_json_path: путь к JSON со всеми праздниками.
+                coef_year: прошлый год, по которому считаем коэффициент.
+                forecast_year: прогнозный год, к которому применяем коэффициент.
+                window_days: сколько дней брать вокруг праздника для среднего расчета средней доли непраздничного дня.
+
+            Returns:
+                pd.DataFrame: DataFrame с скорректированным прогнозом долей в праздничные дни.
+
+        """
+        self.forecast_df = forecast_df.copy()
+        self.history_df = history_df.copy()
+        self.window_days = window_days
+        self.coef_year = coef_year
+        self.forecast_year = forecast_year
+
+        with open(holidays_json_path, 'r', encoding='utf-8') as f:
+            holidays_dict = json.load(f)
+
+        self.holidays_coef = set(pd.to_datetime(holidays_dict[coef_year]).strftime('%Y-%m-%d'))
+        self.holidays_forecast = set(pd.to_datetime(holidays_dict[forecast_year]).strftime('%Y-%m-%d'))
+
+    @staticmethod
+    def daily_share(df):
+        df = df.copy()
+        df['Дата'] = pd.to_datetime(df['Дата'])
+        return df.groupby('Дата')['Share'].sum()
+
+    # Расчет праздничных коэффициентов по прошлому году
+    def calculate_daily_coefficients(self):
+        hist_daily = self.daily_share(self.history_df).reset_index()
+        hist_daily['Дата_str'] = hist_daily['Дата'].dt.strftime('%Y-%m-%d')
+
+        coef_dict = {}
+
+        for holiday_str in self.holidays_coef:
+            holiday_date = pd.to_datetime(holiday_str)
+
+            # доля праздничного дня
+            holiday_share = hist_daily.loc[hist_daily['Дата'] == holiday_date, 'Share']
+            if holiday_share.empty:
+                continue
+            holiday_share = holiday_share.iloc[0]
+
+            # окно window_days вокруг праздничного дня
+            start = holiday_date - timedelta(days=self.window_days)
+            end = holiday_date + timedelta(days=self.window_days)
+            window_days_df = hist_daily[
+                (hist_daily['Дата'] >= start) &
+                (hist_daily['Дата'] <= end)
+            ]
+            # исключаем все праздники
+            window_days_df = window_days_df[~window_days_df['Дата_str'].isin(self.holidays_coef)]
+            if window_days_df.empty:
+                continue
+
+            regular_mean = window_days_df['Share'].mean()
+            coef = holiday_share / regular_mean
+
+            coef_dict[holiday_str] = coef
+
+        # Переносим коэффициенты на прогнозный год
+        coef_dict_shifted = {}
+        for date_str, coef in coef_dict.items():
+            month_day = pd.to_datetime(date_str).strftime('%m-%d')
+            new_date_str = f"{self.forecast_year}-{month_day}"
+            coef_dict_shifted[new_date_str] = coef
+
+        return coef_dict_shifted
+
+    # Применение коэффициентов к прогнозу
+    def apply(self):
+        coef_dict_shifted = self.calculate_daily_coefficients()
+
+        forecast_daily = self.daily_share(self.forecast_df).reset_index()
+        forecast_daily['Дата_str'] = forecast_daily['Дата'].dt.strftime('%Y-%m-%d')
+        forecast_daily['Доля_скорр'] = forecast_daily['Share']
+
+        for date_str in self.holidays_forecast:
+            mask = forecast_daily['Дата_str'] == date_str
+            coef = coef_dict_shifted.get(date_str, 1.0)  # default=1 если нет коэффициента
+            forecast_daily.loc[mask, 'Доля_скорр'] = forecast_daily.loc[mask, 'Share'] * coef
+
+        return forecast_daily[['Дата', 'Share', 'Доля_скорр']]
