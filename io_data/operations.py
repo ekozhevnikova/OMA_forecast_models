@@ -70,7 +70,7 @@ class File:
     
        
     
-    def update_file(self, dataframe, column_name: str, list_of_replacements):
+    def update_file(self, data_new, column_name: str, list_of_replacements):
         """
         Function that updates your file with data
         Args:
@@ -83,65 +83,59 @@ class File:
 
         """
         data_old = self.from_file(skiprows = 0, index_col = 0)
+        data_old = Dict_Operations(data_old).replace_keys_in_dict(list_of_replacements)     
 
-        count = 0
-        for (key, df_new), (key, df_excel) in zip(dataframe.items(), data_old.items()):
-            for col_name in df_new.columns:
-                if 'Unnamed' in col_name:
-                    df_new = df_new.drop(columns = [col_name])
-            for col_name in df_excel.columns:
-                if 'Unnamed' in df_excel:
-                    df_excel = df_excel.drop(columns = [col_name])
-            is_inserted = False
+        updated = {}
+
+        # Итерируемся по ключам из нового словаря
+        for key in data_new.keys():
+
+            new = pd.DataFrame()
+
             
+            if key not in data_old:
+                print(f"Ключ {key} не найден в старом файле")
+                continue
+
+            df_new = data_new[key].copy()
+            df_excel = data_old[key].copy()  # Используем обновляемый словарь
+
+            df_new[column_name] = pd.to_datetime(df_new[column_name], errors = 'coerce')
+            df_excel[column_name] = pd.to_datetime(df_excel[column_name], errors = 'coerce')
+
+
+            new_unique_dates = df_new[column_name].unique()
+            old_unique_dates = df_excel[column_name].unique()
+
+            old_ones = []
+
+            # Фильтруем даты, которые уже присутствуют в данных
+            for new_date in new_unique_dates:
+                    
+                if new_date in old_unique_dates:
+                    old_ones.append(pd.to_datetime(new_date))
+
+            if len(old_ones) != 0:
+                min_date_str = min(old_ones).strftime('%Y-%m-%d')
+
+                # Оставляем только те даты, которые не встречаются в новых, если таковые нашлись
+                filtered = df_excel[df_excel[column_name] < min_date_str]
+
+                if len(filtered) != 0:
             
-            for i, row_i in df_new.iterrows():
-                if not df_excel[df_excel[column_name] == row_i[0]].empty:
-                    row_num_excel = df_excel[df_excel[column_name] == row_i[0]].index[0]
-                    rows_to_add = len(df_new) - i + 1
-                    
-                    up = df_excel.iloc[:row_num_excel]
-                    middle = df_new.iloc[i:]
-                    down = df_excel.iloc[row_num_excel + rows_to_add:]
-                    
-                    df_excel = pd.concat([up, middle, down])
-                    is_inserted = True
-                    break
-                    #df_excel.iloc[df_excel[column_name] == row_i[0]] = df_new[df_new[column_name] == row_i[0]]
-                #else:
-                    #df_excel = pd.concat([df_excel, df_new[df_new[column_name] == row_i[0]]], ignore_index = True)
-                    #df_excel.reset_index()
-            if not is_inserted:
-                try:
-                    df_new.iloc[0][0] = Dates_Operations.convert_dates_from_str_to_datetime_format(df_new, column_name, '%B %Y')
-                    df_excel.iloc[-1][0] = Dates_Operations.convert_dates_from_str_to_datetime_format(df_excel, column_name, '%B %Y')
-                    time_delta = df_new.iloc[0][0] - df_excel.iloc[-1][0]
-                    if time_delta.month == 1:
-                        df_excel = pd.concat([df_excel, df_new])
-                except Exception as ex:
-                    if type(ex) != type(ValueError()):
-                        time_delta = df_new.iloc[0][0] - df_excel.iloc[-1][0]
-                        if time_delta.month == 1:
-                            df_excel = pd.concat([df_excel, df_new])
-                    else:
-                        raise ValueError("Выберете другой временной период.")
-                        
-                #raise ValueError("Выберете другой временной период.")
-            '''
-            if df_excel.iloc[-1][column_name] == df_new.iloc[0][column_name]: 
-                    df_excel.iloc[-1] = df_new.iloc[0]
-                    df_excel = pd.concat([df_excel, df_new.iloc[1:]])
+                    # Обновляем таблицу с фактическими данными
+                    new = pd.concat([filtered, df_new]).reset_index(drop = True)
+            
+            # В противном случае просто добавляем новые данные в конец старой таблицы
             else:
-                df_excel = pd.concat([df_excel, df_new])
-            '''
-            df_excel[column_name] = df_excel[column_name].apply(lambda x: pd.to_datetime(x))
-            df_excel = df_excel.dropna()
-            df_excel = df_excel.reset_index(drop = True)
-            data_old[key] = df_excel
-            count += 1
-            data_new = Dict_Operations(data_old).replace_keys_in_dict(list_of_replacements)
-        self.to_file(data_new)
-        return data_new
+                new = pd.concat([df_excel, df_new]).reset_index(drop = True)
+
+            updated[key] = new
+        
+        # Сохраняем в файл
+        self.to_file(updated)
+        
+        return updated
     
     
     @staticmethod
@@ -284,7 +278,15 @@ class Table:
         return data_old
     
 
-    def make_style_of_table(self, writer, sheet_name: str, width_col_1: float, width_col_2: float, width_col_3: float, num_format = '0.0000', column_start = 2):
+    def make_style_of_table(
+            self, 
+            writer, 
+            sheet_name: str, 
+            width_col_1: float, 
+            width_col_2: float, 
+            width_col_3: float, 
+            num_format = '0.0000', 
+            column_start = 2):
         """
         Args:
             filename: file with dataframe
@@ -446,18 +448,27 @@ class Dict_Operations:
     
     def convert_column_with_date(self, col_name_with_date):
         """
-        Converts Date 2021-01-01 to January 2021
+            Converts Date 2021-01-01 to January 2021
         """
-        dates = {}
-        column_dates_new = {}
+        months_ru = {
+            1: 'Январь', 2: 'Февраль', 3: 'Март', 4: 'Апрель',
+            5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
+            9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь'
+        }
+        
         for key, df in self.dictionary.items():
-            dates[key] = df[col_name_with_date].to_list()
-
-        for key, date in dates.items():
-            column_dates_new[key] = []
-            for i in date:
-                column_dates_new[key].append(i.strftime('%B') + ' ' + i.strftime('%Y'))
-            self.dictionary[key][col_name_with_date] = column_dates_new[key]
+            new_dates = []
+            
+            for date_val in df[col_name_with_date]:
+                if pd.notna(date_val):
+                    month_num = date_val.month
+                    year = date_val.year
+                    new_dates.append(f"{months_ru[month_num]} {year}")
+                else:
+                    new_dates.append('')
+            
+            self.dictionary[key][col_name_with_date] = new_dates
+        
         return self.dictionary
     
     
@@ -482,7 +493,6 @@ class Dict_Operations:
         """
         res = {}
         for (key, df_1), (key, df_2) in zip(dict_1.items(), dict_2.items()):
-            res[key] = pd.concat([df_1, df_2])
-            res[key] = res[key].reset_index(drop = True)
+            res[key] = pd.concat([df_1, df_2]).reset_index(drop = True)
         return res
 

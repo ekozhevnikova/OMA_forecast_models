@@ -26,6 +26,8 @@ logging.getLogger("log").propagate = False
 logging.getLogger("cmdstanpy").disabled = True
 from OMA_tools.regions.ttv_forecast.constants import Holidays, Prophet_Constants
 
+from OMA_tools.io_data.colors import *
+
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -151,6 +153,7 @@ class TTV_Calculation:
                 filename_output: путь к файлу, в котором будет храниться выгрузка по фактическим данным.
             Returns:
         """
+        print(Color.BOLD + Color.BLUE + '=== 🕑 НАЧИНАЮ ВЫГРУЗКУ ФАКТИЧЕСКОЙ ЧАСТИ МЕСЯЦА ДЛЯ TTV ===' + Color.END)
         # 1. Выгрузка данных для всевозможных групп
         data_api = LeaderShipDataExtractor.process_tasks_with_validation(
                                 self.tasks_json,
@@ -162,8 +165,6 @@ class TTV_Calculation:
         full_data = data_api[['prj_name', 'TTVRtgPer']]
         full_data = full_data[full_data['TTVRtgPer'] != 0]
         full_data.rename(columns = {'prj_name': 'Регион', 'TTVRtgPer': 'TTV'}, inplace = True)
-
-        full_data.to_excel('C:/Users/EOKozhevnikova/Documents/Test_ttv.xlsx')
 
         # 2. Формирование выходной таблицы с фактическими данными, исходя из распределения БЦА и каналов-городов между ответственными девочками.
         df_dict = File(girls_cities).from_file(0)
@@ -177,7 +178,13 @@ class TTV_Calculation:
             df_ = df.set_index('Регион').T
             new_dict[girl] = df_
 
-        File(filename_output).to_file(new_dict)
+        try:
+            File(filename_output).to_file(new_dict)
+            print('✅ Файл успешно сохранен')
+            
+        except Exception as e:
+            print(f"⚠️ Ошибка при сохранении: {e}")
+
         return new_dict
 
 
@@ -241,7 +248,7 @@ class TTV_Forecast:
         return dict_of_total, ds_dict
     
 
-    def get_cond__and__train_df(self, ds_dict, dict_of_total, last_fact_date, list_of_replacements = ['0', '1', '2', '3', '4', '5', '6']):
+    def get_cond__and__train_df(self, ds_dict, dict_of_total, last_fact_date):
         """
         This function returns condition and datasets of training data which were selected by condition.
         
@@ -280,10 +287,10 @@ class TTV_Forecast:
                 cond_df[idx] = condition
                 train_df[idx] = dict_of_total_converted[idx][condition]
         
-        return cond_df, train_df
+        return train_df
     
 
-    def get_forecast(self, dict_of_total, train_df, predictions, last_fact_date):
+    def get_forecast(self, train_df, predictions, last_fact_date):
         """
             Осуществление процесса прогнозирвоания для каждой БЦА.
         """
@@ -291,14 +298,14 @@ class TTV_Forecast:
             bca, df = bca_data
             results = pd.DataFrame()
             for icol, col in enumerate(df.columns[1:]):
-                tmp_df = pd.concat([df['ds'], df.iloc[:, icol + 1]], axis=1, keys=['ds', 'y'])
+                tmp_df = pd.concat([df['ds'], df.iloc[:, icol + 1]], axis = 1, keys = ['ds', 'y'])
                 
                 m = Prophet()
                 if self.proph_consts.cond_holidays[bca]:
                     m = Prophet(holidays = Holidays().holidays)
                 m.fit(tmp_df)
                 
-                future = m.make_future_dataframe(periods=predictions)
+                future = m.make_future_dataframe(periods = predictions)
                 forecast = m.predict(future)
                 
                 tmp_df.columns = ['ds', 'yhat']
@@ -311,7 +318,7 @@ class TTV_Forecast:
                 result = pd.concat([tmp_df, forecast_cut], axis=0)
                 result['bca'] = df.columns[icol + 1]
                 
-                results = pd.concat([result, results])
+                results = pd.concat([result, results]).reset_index(drop = True)
             return bca, results
         
         # Используем многопоточность для параллельной обработки BCA
@@ -326,20 +333,25 @@ class TTV_Forecast:
         """
             Пайплайн для прогнозирования регионального TTV
         """
+        print(Color.BOLD + Color.VIOLET + '=== 🚀 НАЧИНАЮ МАШИННЫЙ ПРОГНОЗ TTV ===' + Color.END)
+        print('\n')
+
         predictions, last_fact_date = self.get_predictions('All 4-45')
         df, ds_dict = self.convert_columns_to_prophet_format()
-        cond_df, train_df = self.get_cond__and__train_df(
+        train_df = self.get_cond__and__train_df(
                                                 ds_dict = ds_dict,
                                                 dict_of_total = df,
                                                 last_fact_date = last_fact_date)
         results_df = self.get_forecast(
-                                dict_of_total = df,
                                 train_df = train_df,
                                 predictions = predictions,
                                 last_fact_date = last_fact_date)  
-        #File(filename_result_data).to_file(results_df)
+        
+        print('Прогноз завершён! Сохраняю результаты в выходные файлы. Проверьте соответствующую папку. Файлы должны обновиться.')
         File.to_file_from_dict(
                         path = path,
                         dict_data = results_df,
                         file_names = file_names)
+        
+        print(Color.BOLD + Color.VIOLET + '=== Данные выгружены и сохранены. Спасибо за ваше ожидание! 😊 ===' + Color.END)
 

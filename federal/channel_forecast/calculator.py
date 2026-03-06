@@ -371,11 +371,41 @@ class TVShareCalculator:
                 coefficient = np.sum(coeffs)
                 df.at[i, 'Share_weighted'] = share * coefficient
 
-        #if self.channel == 'МатчТВ':
-        #    res = df[['Канал', 'Дата', 'Название программы', 'Описание программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
-        #else:
-        res = df[['Канал', 'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'Share_weighted', 'Жанр', 'День недели']]
-        #res.rename(columns = {'Share_NEW': 'Share'}, inplace = True)
+        res = df[
+            [
+                'Канал', 'Дата', 'Название программы', 
+                'Время выхода', 'Время окончания',
+                'Share', 'Share_weighted', 'Жанр', 'День недели'
+                ]
+            ]
+        
+        # Подсчет длительностей программ
+        res['Время выхода_dt'] = pd.to_datetime(res['Время выхода'])
+        res['Время окончания_dt'] = pd.to_datetime(res['Время окончания'])
+
+        # Автоматически корректируем переход через полночь
+        res['Время окончания_dt'] = np.where(
+            res['Время окончания_dt'] < res['Время выхода_dt'],
+            res['Время окончания_dt'] + pd.Timedelta(days = 1),
+            res['Время окончания_dt']
+        )
+
+        res['Продолжительность'] = (
+            pd.to_datetime(res['Время окончания_dt']) - pd.to_datetime(res['Время выхода_dt'])
+        ).dt.total_seconds()
+
+        # Форматирование
+        res['Продолжительность'] = res['Продолжительность'].apply(
+            lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+        )
+
+        res = df[
+            [
+                'Канал', 'Дата', 'Название программы', 
+                'Время выхода', 'Время окончания', 'Продолжительность',
+                'Share', 'Share_weighted', 'Жанр', 'День недели'
+                ]
+            ]
         # Расчёт суммарной доли по дню
         share_sum = np.sum(list(res['Share_weighted']))
         return res, share_sum
@@ -670,6 +700,32 @@ class TVScheduleProcessor:
                             'Время выхода _vimb', 'Время окончания _vimb'])
 
         result = result[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']].reset_index(drop = True)
+
+        # Считаем длительности программ
+        result['Время выхода_dt'] = pd.to_datetime(result['Время выхода'])
+        result['Время окончания_dt'] = pd.to_datetime(result['Время окончания'])
+
+        # Автоматически корректируем переход через полночь
+        result['Время окончания_dt'] = np.where(
+            result['Время окончания_dt'] < result['Время выхода_dt'],
+            result['Время окончания_dt'] + pd.Timedelta(days=1),
+            result['Время окончания_dt']
+        )
+
+        result['Продолжительность'] = (
+            pd.to_datetime(result['Время окончания_dt']) - pd.to_datetime(result['Время выхода_dt'])
+        ).dt.total_seconds()
+
+        # Форматирование
+        result['Продолжительность'] = result['Продолжительность'].apply(
+            lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+        )
+
+        result = result[
+            [
+                'Дата', 'Название программы', 'Время выхода', 
+                'Время окончания', 'Продолжительность', 'Share']
+            ].reset_index(drop = True)
 
         share_end = result['Share'].sum()
 
