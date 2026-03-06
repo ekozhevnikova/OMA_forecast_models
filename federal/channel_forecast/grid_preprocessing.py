@@ -2035,27 +2035,48 @@ class ProgramMatcher(BaseParser):
             # Отбираем дату, которую будем анализировать
             palomars = plmrs[plmrs['Дата'] == target_date].reset_index(drop = True)
 
+            vimb_prgms = []
+            vimb_df = pd.DataFrame()
+
+            palomars_prgms = []
+            palomars_df = pd.DataFrame()
             ######################## НОВЫЙ КУСОК ########################
-            # 1. Программы в VIMB
-            vimb_prepr = GeneralTextCleaner(self.channel, vimb)
-            vimb_prgms, vimb_df = vimb_prepr.clean_dataframe()
+            if self.channel in [
+                'СОЛНЦЕ', 'КАРУСЕЛЬ', 'СУББОТА', 'СТСЛав', 
+                '2X2', 'ТНТ4', 'ЧЕ', 'МИР', 'Ю', 'ЗВЕЗДА', 
+                'ТВЦ', 'СПАС']:
 
+                #print(f'Для канала {self.channel} использую общий очиститель "GeneralTextCleaner"')
 
-            # 2. Программы в PALOMARS
-            palomars_prepr = GeneralTextCleaner(self.channel, palomars)
-            palomars_prgms, palomars_df = palomars_prepr.clean_dataframe()
+                # 1. Программы в VIMB
+                cleaner = GeneralTextCleaner(self.channel)
+                vimb_prgms, vimb_df = cleaner.clean_dataframe(vimb)
+
+                # 2. Программы в PALOMARS
+                palomars_prgms, palomars_df = cleaner.clean_dataframe(palomars)
+            
+            elif self.channel == 'МатчТВ':
+                
+                #print(f'Для канала {self.channel} использую спортивный очиститель "SportChannelCleaner"')
+                # 1. Программы в VIMB
+                sport_cleaner = SportChannelCleaner(self.channel)
+                vimb_prgms, vimb_df = sport_cleaner.clean_programs(vimb, 'vimb')
+
+                # 2. Программы в PALOMARS
+                palomars_prgms, palomars_df = sport_cleaner.clean_programs(palomars, 'palomars')
+            
+            elif self.channel == 'МузТВ':
+                
+                #print(f'Для канала {self.channel} использую музыкальный очиститель "MusicChannelCleaner"')
+                # 1. Программы в VIMB
+                music_cleaner = MusicChannelCleaner(self.channel)
+                vimb_prgms, vimb_df = music_cleaner.clean_programs(vimb)
+
+                # 2. Программы в PALOMARS
+                palomars_prgms, palomars_df = music_cleaner.clean_programs(palomars)
 
             ######################## КОНЕЦ НОВОГО КУСКА ########################
 
-            #text_prepr = TextPreprocessor()
-            
-            #Программы в Palomars
-            #plmrs_modified, data_plmrs, not_found_plmrs = text_prepr.clean_text(palomars, 'Название программы')
-            #plmrs_modified_ = list(set(plmrs_modified))
-            
-            #Программы в VIMB
-            #vimb_modified, vimb_cleaned, not_found_vimb = text_prepr.clean_text(vimb, 'Название программы')
-            #vimb_modified_ = list(set(vimb_modified))
             
             # Делаем поиск по схожим программам
             similar = CosineSimilarity(palomars_prgms, vimb_prgms, palomars_df, vimb_df)
@@ -2087,7 +2108,7 @@ class ProgramMatcher(BaseParser):
             Pal['Название программы'] = Pal['Название программы'].str.lower()
 
             
-            VIMB = vimb[['Дата', 'program_name', 'Время выхода', 'Время окончания']]
+            VIMB = vimb_df[['Дата', 'program_name', 'Время выхода', 'Время окончания']]
             VIMB.rename(columns = {'program_name': 'Название программы'}, inplace = True)
 
             VIMB_init = VIMB.copy()
