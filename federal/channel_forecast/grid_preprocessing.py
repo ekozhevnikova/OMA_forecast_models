@@ -722,7 +722,7 @@ class MediascopeParser(BaseParser):
                 df.loc[mask_doc, 'Название программы'] = df.loc[mask_doc, 'Название программы'] + ' ' + df.loc[mask_doc, 'Описание программы']
 
                 # Удаляем подстроку 'Сезон N/A / ' из названия программы (для всех строк)
-                df['Название программы'] = df['Название программы'].str.replace('Сезон N/A / ', '', regex = False)
+                #df['Название программы'] = df['Название программы'].str.replace('Сезон N/A / ', '', regex = False)
                 df['Название программы'] = df['Название программы'].str.replace('Личное дело', '', regex = False)
 
                 # Оставляем нужные колонки
@@ -748,9 +748,10 @@ class MediascopeParser(BaseParser):
                 
 
                 # Удаляем 'Сезон N/A / ' из столбца "Описание программы"
-                df['Описание программы'] = df['Описание программы'].str.replace('Сезон N/A / ', '', regex = False)
-                df['Описание программы'] = df['Описание программы'].str.replace('Серия N/A', '', regex = False)
-                df['Описание программы'] = df['Описание программы'].str.replace('Сезон N/A', '', regex = False)
+                #df['Описание программы'] = (df['Описание программы']
+                #                            .str.replace('Сезон N/A / ', '', regex = False)
+                #                            .str.replace('Серия N/A', '', regex = False)
+                #                            .str.replace('Сезон N/A', '', regex = False))
 
                 # Удаляем 'Документальное кино Леонида Млечина' из столбца "Название программы"
                 # До 2025.12.31 в районе 02:10 вместо документого фильма стояла программа 'Документальное кино Леонида Млечина'.
@@ -787,8 +788,8 @@ class MediascopeParser(BaseParser):
                 
 
                 # Удаляем 'Сезон N/A / ' из столбца "Описание программы"
-                df['Описание программы'] = df['Описание программы'].str.replace('Сезон N/A / ', '', regex = False)
-                df['Описание программы'] = df['Описание программы'].str.replace('Серия N/A / ', '', regex = False)
+                #df['Описание программы'] = df['Описание программы'].str.replace('Сезон N/A / ', '', regex = False)
+                #df['Описание программы'] = df['Описание программы'].str.replace('Серия N/A / ', '', regex = False)
 
                 # Удаляем 'Документальное кино Леонида Млечина' из столбца "Название программы"
                 # До 2025.12.31 в районе 02:10 вместо документого фильма стояла программа 'Документальное кино Леонида Млечина'.
@@ -822,7 +823,13 @@ class MediascopeParser(BaseParser):
                     'programCategoryName': 'Жанр',
                     'researchWeekDay': 'День недели'}, inplace = True)
 
-            
+
+            # Удаляем 'Сезон N/A / ' из столбца "Описание программы"
+            df['Название программы'] = (df['Название программы']
+                                        .str.replace('Сезон N/A / ', '', regex = False)
+                                        .str.replace('Серия N/A', '', regex = False)
+                                        .str.replace('Сезон N/A', '', regex = False))
+                 
             time_slots_columns = ['Время выхода', 'Время окончания']
             for i in range(len(time_slots_columns)):
                 df[time_slots_columns[i]] = df[time_slots_columns[i]].dt.time

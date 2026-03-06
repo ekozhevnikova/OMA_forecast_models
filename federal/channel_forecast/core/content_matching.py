@@ -22,846 +22,109 @@ SPECIAL_CHARS_TO_REMOVE_GLOBAL = [
         ]
 
 
-class GeneralTextCleaner:
-    """
-        Класс для очистки названий телепередач от служебных пометок,
-        стоп-слов и лишних символов в зависимости от канала.
-
-        !!! ВАЖНО !!!
-        Данный класс предназначен для работы с каналами:
-        - ТНТ4
-        - 2Х2
-        - СТСЛав
-        - Солнце
-        - Карусель
-        - Суббота
-        - Че
-        - Мир
-        - Ю
-    """
+class GeneralClassCleaner:
     
-
-    def __init__(self, channel, df):
+    def __init__(self, channel):
         """
             Инициализация класса и сборка финальных словарей
             Args:
                 channel: название канала
                 df: датафрейм, в котором будем добавлять дополнительный столбец 'program_name' с очищенным названием программы
         """
+        # Список допустимых названий каналов
+        allowed_channels = [
+            'СОЛНЦЕ', 'КАРУСЕЛЬ', 'СУББОТА', 
+            'СТСЛав', '2X2', 'ТНТ4', 'ЧЕ', 'МИР', 'Ю',
+            'ЗВЕЗДА', 'СПАС', 'ТВЦ'
+            ]
+        
+        # Проверка наличия канала в списке допустимых
+        if channel not in allowed_channels:
+            raise ValueError(
+                f"Канал '{channel}' не существует. Выберите канал из списка: {', '.join(allowed_channels)}"
+            )
+        
         self.channel = channel
-        self.df = df
-
-
-        # ============================================================================
-        # ГРУППЫ КАНАЛОВ ПО ТИПАМ
-        # ============================================================================
-
-        # Группа 1: Каналы с документальными фильмами/сериалами
-        #self.DOC_CHANNELS = {'СПАС', 'ЗВЕЗДА', 'ТВЦ'}
-
-        # Группа 2: Детские/анимационные каналы
+    
+        # Группа 1: Детские/анимационные каналы
         self.KIDS_CHANNELS = {'СОЛНЦЕ', 'КАРУСЕЛЬ', 'СУББОТА', 'СТСЛав', '2X2'}
-
-        # Группа 3: Развлекательные каналы
+    
+        # Группа 2: Развлекательные каналы
         self.ENTERTAINMENT_CHANNELS = {'ТНТ4', 'ЧЕ', 'МИР', 'Ю'}
 
-        # ============================================================================
-        # БАЗОВЫЕ НАБОРЫ ДЛЯ КАЖДОЙ ГРУППЫ
-        # ============================================================================
+        # Группа 3: "Документальные" каналы
+        self.DOCUMENTARY_CHANNELS = {'ЗВЕЗДА', 'ТВЦ', 'СПАС'}
+
+        # Группы каналов
+        self.GROUPS = {
+            'GROUP_1': [self.KIDS_CHANNELS, self.ENTERTAINMENT_CHANNELS],
+            'GROUP_2': self.DOCUMENTARY_CHANNELS
+        }
+
 
         # Базовые специальные названия
-        self.BASE_SPECIAL_NAMES = {
-            'мультфильм', 'сериал', 'художественный фильм', 'документальный фильм',
-            'мультсериал', 'худ. фильм', 'фильм, фильм, фильм'
-        }
-
-        # Базовые стоп-слова
-        self.BASE_STOP_WORDS = {
-            'сериал', 'серия', 'часть', 'сезон', 'фильм', 'художественный'
-        }
-
-        # Базовые паттерны
-        self.BASE_PATTERNS = [
-            r'\sх\W*ф\s', r'№\s*\d+', r'\bсериал\b', r'\bсерия\b', r'\bсезон\b', 
-            r'\bчасть\b', r'\d+\s*серия\b', r'\d+\s*сезон\b', r'\d+\s*часть\b'
+        self.BASE_SPECIAL_NAMES = [
+                'художественный фильм', 'документальный фильм', 'документальный сериал', 
+                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'мультфильм', 
+                'мультфильмы', 'юмористический концерт', 'короткометражные х фильмы', 'мультсериал', 
+                'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
+                'сериал фильм', 'сериал х ф', 'х фильмы'
         ]
 
-        # ============================================================================
-        # СПЕЦИАЛИЗИРОВАННЫЕ НАБОРЫ ДЛЯ ГРУПП
-        # ============================================================================
-
-        # Для документальных каналов
-        self.DOC_SPECIFIC = {
-            'special_names': {
-                'док. фильм/сериал', 'сериал/х.ф. (п)', 'сериал/фильм (п)', 'худ.фильм/сериал',
-                'сериал/фильм', 'док. сериал/фильм (п)', 'док. сериал/фильм', 'док.фильм/сериал',
-                'сериал/х.ф.'
-            },
-            'stop_words': {'документальный', 'док.', 'сериал', 'мультфильм'},
-            'patterns': [
-                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', r'(?<!\w)х\W*ф(?!\w)',  r'\bв\W*[сc]\b',
-                r'\(\s*[а-яё]+\s*\)', r'\bдок\.\s*', r'\bхуд\.\s*', r'\bмультфильм\b',
-                r'\bдокументальный\b', r'\bфильм\b', r'\(\s*(?:сериал|серия|сезон|часть)\s*\d*\s*\)',
-                r'\d+\s*сез\b', r'\bсез\s*\d+\b'
-                ]
-        }
-
-        # Для детских/анимационных каналов
-        self.KIDS_SPECIFIC = {
-            'special_names': {'мультфильм', 'мультсериал'},
-            'stop_words': {
-                'большая анимация', 'анимационный', 'мультфильм', 'мультсериал',
-                'огр', 'муз', 'р/б', 'т/с', 'а/с'
-            },
-            'patterns': [
-                # Удаление сочетаний 'мф', 'mф', 'аф', 'мс', 'тс', 'ас', если это они отдельно стоящие 
-                r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bа\W*ф\b', r'\bд\W*ф\b', 
-                r'\bм\W*[сc]\b', r'\bт\W*[сc]\b', r'\bа\W*[сc]\b',  # [сc] - русская или латинская с
-                r'\d{4}(?:\s*г(?:од)?\.?)?', r'\bмультфильм\b', r'\bсоюзмультфильм\b', r'\bповтор\b',
-                r'\(\s*(?:сериал|серия|сезон|часть)\s*\d*\s*\)',
-                r'\d+\s*сез\b', r'\bсез\s*\d+\b'
-            ]
-        }
-
-        # Для развлекательных каналов
-        self.ENTERTAINMENT_SPECIFIC = {
-            'special_names': {},
-            'stop_words': {'комедийный', 'концерт', 'спец', 'реалити'},
-            'patterns': [
-                r'\bкомедийный\b', r'\bконцерт\b', r'\bреалити[- ]?шоу\b', r'\bдок\.\s*',
-                r'\bреалити\b', r'\bспец\b', r'\bм\W*ф\b', r'\bm\W*ф\b', r'\bд\W*ф\b', 
-                r'\bм\W*[сc]\b', r'\bт\W*[сc]\b', r'\bа\W*[сc]\b'
-            ]
-        }
-
-        # ============================================================================
-        # ИНДИВИДУАЛЬНЫЕ НАСТРОЙКИ ДЛЯ КАНАЛОВ (ПЕРЕОПРЕДЕЛЕНИЯ)
-        # ============================================================================
-
-        self.CHANNEL_SPECIFIC = {
-            'ТНТ4': {
-                'special_names': {'комедийный сериал'},
-                'patterns': [r'\bкомедийный\b']
-            },
-            'ЧЕ': {
-                'patterns': [r'\bмультфильм\b']
-            },
-            '2X2': {
-                'patterns': [r'\bхуд\.\s*', r'\bдокументальный\b']
-            },
-            'МИР': {
-                'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b']
-            },
-            'ЗВЕЗДА': {
-                'special_names': {'1812'} 
-            },
-            'ТВЦ': {
-                'patterns': [r'\bтелесериал\b', r'\bсериал\b']
-            },
-            'СПАС': {
-                'patterns': [r'\bдокументальный\b', r'\bхуд\.\s*', r'\bмультфильм\b'],
-                'special_names': {'старцы'} 
-            },
-            'Ю': {
-                'stop_words': {'реалити'},
-                'patterns': [r'\bреалити[- ]?шоу\b', r'\bреалити\b', r'\bмультфильм\b', r'\bмультсериал\b']
-            },
-            'СОЛНЦЕ': {
-                'patterns': [
-                    r'\bх\W*ф\b',  # дополнительный паттерн для Солнца
-                ],
-                'special_names': {'фильм.фильм.фильм', 'фильм фильм фильм'} 
-            }
-        }
-
-
-        self.special_names_global = self._build_special_names()
-        self.stop_words_global = self._build_stop_words()
-        self.stop_patterns_global = self._build_stop_patterns()
-
-
-    def _build_special_names(self) -> Dict[str, Set[str]]:
-        """
-            Собирает SPECIAL_NAMES_GLOBAL из групп и индивидуальных настроек
-        """
-        special_names = {}
-        
-        for channel in self.DOC_CHANNELS:
-            special_names[channel] = self.BASE_SPECIAL_NAMES | self.DOC_SPECIFIC['special_names']
-            if channel in self.CHANNEL_SPECIFIC and 'special_names' in self.CHANNEL_SPECIFIC[channel]:
-                special_names[channel] |= self.CHANNEL_SPECIFIC[channel]['special_names']
-        
-        for channel in self.KIDS_CHANNELS:
-            special_names[channel] = self.BASE_SPECIAL_NAMES | self.KIDS_SPECIFIC['special_names']
-            if channel in self.CHANNEL_SPECIFIC and 'special_names' in self.CHANNEL_SPECIFIC[channel]:
-                special_names[channel] |= self.CHANNEL_SPECIFIC[channel]['special_names']
-        
-        for channel in self.ENTERTAINMENT_CHANNELS:
-            special_names[channel] = self.BASE_SPECIAL_NAMES.copy()
-            if channel in self.CHANNEL_SPECIFIC and 'special_names' in self.CHANNEL_SPECIFIC[channel]:
-                special_names[channel] |= self.CHANNEL_SPECIFIC[channel]['special_names']
-        
-        return special_names
-    
-
-    def _build_stop_words(self) -> Dict[str, Set[str]]:
-        """
-            Собирает STOP_WORDS_GLOBAL из групп и индивидуальных настроек
-        """
-        stop_words = {}
-        
-        for channel in self.DOC_CHANNELS:
-            stop_words[channel] = self.BASE_STOP_WORDS | self.DOC_SPECIFIC['stop_words']
-            if channel in self.CHANNEL_SPECIFIC and 'stop_words' in self.CHANNEL_SPECIFIC[channel]:
-                stop_words[channel] |= self.CHANNEL_SPECIFIC[channel]['stop_words']
-        
-        for channel in self.KIDS_CHANNELS:
-            stop_words[channel] = self.BASE_STOP_WORDS | self.KIDS_SPECIFIC['stop_words']
-            if channel in self.CHANNEL_SPECIFIC and 'stop_words' in self.CHANNEL_SPECIFIC[channel]:
-                stop_words[channel] |= self.CHANNEL_SPECIFIC[channel]['stop_words']
-        
-        for channel in self.ENTERTAINMENT_CHANNELS:
-            stop_words[channel] = self.BASE_STOP_WORDS | self.ENTERTAINMENT_SPECIFIC['stop_words']
-            if channel in self.CHANNEL_SPECIFIC and 'stop_words' in self.CHANNEL_SPECIFIC[channel]:
-                stop_words[channel] |= self.CHANNEL_SPECIFIC[channel]['stop_words']
-        
-        return stop_words
-    
-
-    def _build_stop_patterns(self) -> Dict[str, List[str]]:
-        """
-            Собирает STOP_PATTERNS_GLOBAL из групп и индивидуальных настроек
-        """
-        stop_patterns = {}
-        
-        for channel in self.DOC_CHANNELS:
-            stop_patterns[channel] = self.BASE_PATTERNS + self.DOC_SPECIFIC['patterns']
-            if channel in self.CHANNEL_SPECIFIC and 'patterns' in self.CHANNEL_SPECIFIC[channel]:
-                stop_patterns[channel].extend(self.CHANNEL_SPECIFIC[channel]['patterns'])
-        
-        for channel in self.KIDS_CHANNELS:
-            stop_patterns[channel] = self.BASE_PATTERNS + self.KIDS_SPECIFIC['patterns']
-            if channel in self.CHANNEL_SPECIFIC and 'patterns' in self.CHANNEL_SPECIFIC[channel]:
-                stop_patterns[channel].extend(self.CHANNEL_SPECIFIC[channel]['patterns'])
-        
-        for channel in self.ENTERTAINMENT_CHANNELS:
-            stop_patterns[channel] = self.BASE_PATTERNS + self.ENTERTAINMENT_SPECIFIC['patterns']
-            if channel in self.CHANNEL_SPECIFIC and 'patterns' in self.CHANNEL_SPECIFIC[channel]:
-                stop_patterns[channel].extend(self.CHANNEL_SPECIFIC[channel]['patterns'])
-        
-        return stop_patterns
-    
-
-    def _get_default_stop_words(self) -> Set[str]:
-        result = self.stop_words_global.get(self.channel, set())
-        # ДОБАВЬТЕ ДЕБАГ:
-        #print(f"DEBUG _get_default_stop_words: channel={self.channel}, result={result}")
-        return result
-    
-    def _get_default_stop_patterns(self) -> List[str]:
-        """Возвращает паттерны для текущего канала"""
-        result = self.stop_patterns_global.get(self.channel, [])
-        #print(f"DEBUG _get_default_stop_patterns: channel={self.channel}, найдено {len(result)} паттернов")
-        return result
-    
-    def _get_default_special_names(self) -> Set[str]:
-        """Возвращает специальные имена для текущего канала"""
-        result = self.special_names_global.get(self.channel, set())
-        #print(f"DEBUG _get_default_special_names: channel={self.channel}, result={result}")
-        return result
-    
-
-    def _replace_whole_word(self, text: str, old_word: str, new_word: str) -> str:
-        """
-            Заменяет целые слова в тексте
-        """
-        pattern = r'\b' + re.escape(old_word) + r'\b'
-        return re.sub(pattern, new_word, text)
-    
-
-    def clean_title(self, title: str) -> str:
-        """
-            Очищает название от служебных пометок
-        """
-        # Удаляем внутренние пометки
-        title = re.sub(r'\s*\([^)]*\)\s*', ' ', title)
-        
-        # Удаляем паттерны типа т/с, а/с, м/с, a/ф
-        title = re.sub(r'\s*[а-яa-z]+/[а-яa-z]+\s*', ' ', title, flags = re.IGNORECASE)
-        
-        # Слова для удаления с номерами
-        words = ['сезон', 'серия', 'фильм']
-        
-        for word in words:
-            # Варианты: "1 сезон", "сезон 1", "1-й сезон", "сезон 1-й"
-            patterns = [
-                rf'\s*\d+\s*{word}\s*',
-                rf'\s*{word}\s*\d+\s*',
-                rf'\s*\d+[-яй]?\s*{word}\s*',
-                rf'\s*{word}\s*\d+[-яй]?\s*',
-                rf'\.?\s*{word}\s*\d+\s*$',
-                rf'\s*\d+\s*{word}\s*$',
-            ]
-            
-            for pattern in patterns:
-                title = re.sub(pattern, ' ', title, flags=re.IGNORECASE)
-        
-        # Схлопываем пробелы
-        title = re.sub(r'\s+', ' ', title).strip()
-        
-        # Убираем точку в конце
-        if title.endswith('.'):
-            title = title[:-1].strip()
-        
-        return title
-
-
-    def _handle_special_cases(self, text: str, text_lower: str) -> tuple[bool, str]:
-        """
-            Обрабатывает специальные случаи для конкретных каналов
-        """
-
-        # ===== УНИВЕРСАЛЬНАЯ ПРОВЕРКА НА СБОРНИКИ МУЛЬТФИЛЬМОВ =====
-        # Проверяем для ЛЮБОГО канала
-        mf_count = text_lower.count('м/ф') + text_lower.count('m/ф')
-        if mf_count >= 2:
-            # Можно добавить дополнительные проверки
-            # Например, проверять наличие слова "мультфильм" в тексте
-            if 'мультфильм' in text_lower or 'мультсериал' in text_lower:
-                return True, 'мультфильм'
-            # Или просто возвращать при 2+ мультфильмах
-            return True, 'мультфильм'
-
-        # Специальная обработка для МИР. Обрабатывает названия по типу 
-        # 'Худ.фильм/Сериал (Сериал "Меч". ("ЕДИНСТВЕННЫЙ ВЫХОД") 14, 15, 16, 17 серии)' -> 'меч'
-        if self.channel == 'МИР':
-            # Ищем название в кавычках после слова "сериал"
-            patterns = [
-                r'сериал\s+"([^"]+)"',           # сериал "Название"
-                r'сериал\s+«([^»]+)»',           # сериал «Название»
-                r'сериал\s+([а-яё\s]+?)(?:\s*\(|\.|$)',  # сериал Название (до точки или скобки)
-                r'"([^"]+)"',                      # просто "Название"
-                r'«([^»]+)»',                      # просто «Название»
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, text, flags=re.IGNORECASE)
-                if match:
-                    title = match.group(1).strip()
-                    # Очищаем от лишних символов
-                    title = re.sub(r'[^\w\s-]', '', title)
-                    title = re.sub(r'\s+', ' ', title).strip()
-                    if title and len(title) > 1:
-                        return True, title
-            
-            # Если не нашли в кавычках, пробуем извлечь из скобок
-            match = re.search(r'\([^)]*"([^"]+)"[^)]*\)', text)
-            if match:
-                title = match.group(1).strip()
-                return True, title
-
-
-            special_phrases = [
-                'специальный репортаж', 'славянский базар в витебске'
-                ]
-            
-            for phrase in special_phrases:
-                # Создаем паттерн с границами слов для каждого слова во фразе
-                if ' ' in phrase:
-                    # Для многословных фраз проверяем точное вхождение
-                    if phrase in text_lower:
-                        cleaned_phrase = self.clean_title(phrase)
-                        return True, cleaned_phrase
-                else:
-                    # Для однословных используем границы слов
-                    pattern = r'\b' + re.escape(phrase) + r'\b'
-                    if re.search(pattern, text_lower):
-                        cleaned_phrase = self.clean_title(phrase)
-                        return True, cleaned_phrase
-            
-            return False, text
-        
-        
-        # Специальная обработка для 2X2
-        if self.channel == '2X2' and 'фильм, фильм, фильм' in text_lower:
-            # Проверяем, не является ли это специальным именем
-            match = re.search(r'фильм,\s*фильм,\s*фильм\.?\s*"([^"]+)"', text_lower)
-            if match:
-                # Извлекаем название в кавычках
-                return True, self.clean_title(match.group(1).strip())
-            
-            # Если это просто "фильм, фильм, фильм" без названия
-            if text_lower.strip() == 'фильм, фильм, фильм' or 'фильм, фильм, фильм' in text_lower:
-                return True, 'фильм, фильм, фильм'
-        
-        # Специальная обработка для ТНТ4
-        if self.channel == 'ТНТ4' and 'комеди' in text:
-            if 'комеди' in text and 'комедийный' not in text:
-                return True, self._replace_whole_word(text, 'комеди', 'камеди')
-            
-            return False, text
-        
-
-        # Специальная обработка для Ю
-        if self.channel == 'Ю':
-            special_phrases = [
-                'маша и медведь', 'супермама', 'ждули'
-            ]
-
-            for phrase in special_phrases:
-                # Создаем паттерн с границами слов для каждого слова во фразе
-                if ' ' in phrase:
-                    # Для многословных фраз проверяем точное вхождение
-                    if phrase in text_lower:
-                        cleaned_phrase = self.clean_title(phrase)
-                        return True, cleaned_phrase
-                else:
-                    # Для однословных используем границы слов
-                    pattern = r'\b' + re.escape(phrase) + r'\b'
-                    if re.search(pattern, text_lower):
-                        cleaned_phrase = self.clean_title(phrase)
-                        return True, cleaned_phrase
-        
-
-        # Специальная обработка для ЗВЕЗДА
-        if self.channel == 'ЗВЕЗДА':
-            # Сначала проверяем специальные фразы
-            special_phrases = [
-                'голоса победы', 'дневники памяти', 'люди донбасса', 
-                'военный врач', 'восход победы', 'операция', 'проект "альфа"',
-                'армия "трясогузки"'
-                ]
-            
-            for phrase in special_phrases:
-                if phrase in text_lower:
-                    cleaned_phrase = self.clean_title(phrase)
-                    return True, cleaned_phrase
-            
-            # 5. Если ничего не нашли, идем в общий алгоритм
-            return False, text
-        
-        # Специальная обработка для ТВЦ
-        if self.channel == 'ТВЦ':
-
-            if ('док.фильм' in text or 'д/ф' in text or 'худ.фильм' in text or 'х/ф' in text):
-                
-                # Убираем маркеры
-                text = re.sub(r'(д/ф|х/ф|сериал|документальный|док|фильм|худ|художественный)\s*', '', text, flags = re.IGNORECASE)
-
-                # Удаляем тире, чтобы '80-х' -> '80х'
-                text = re.sub(r'[-—–]', '', text)
-                
-                # Удаляем всю пунктуацию, оставляем цифры и буквы
-                text = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', text)
-            
-            elif 'специальный репортаж' in text:
-                pattern = r'\b' + re.escape('специальный репортаж') + r'\b'
-                text = re.sub(pattern, '', text, flags = re.IGNORECASE)
-                return True, text
-            
-            # Сначала проверяем специальные фразы
-            special_phrases = [
-                '10 самых', '90е', 'девяностые'
-                ]
-            
-            for phrase in special_phrases:
-                if phrase in text:
-                    cleaned_phrase = self.clean_title(phrase)
-                    return True, cleaned_phrase
-            
-            return False, text
-        
-
-        # Специальная обработка для СПАС
-        if self.channel == 'СПАС':
-            special_phrases = [
-                'старцы', 'лики богородицы', 'день ангела', 'искатели', 'утреня', 'дом у большой реки',
-                'люди донбасса', 'дети донбасса', 'детство. возвращение', 'апостолы',
-                'святые воины', 'лето господне', 'неизвестная европа', 'пилигрим',
-                'византия. жизнь после смерти', 'паисий святогорец', 'бесогон', 'ной',
-                'патриаршая литературная премия', 'военкоры', 'русские праведники',
-                'тропами алании', 'митрополит антоний сурожский', 'притчи', 'знаменный распев',
-                'глобус православия', 'добровидение', 'восход победы', 'голос церкви',
-                'проповедники'
-                ]
-            
-            for phrase in special_phrases:
-                # Создаем паттерн с границами слов для каждого слова во фразе
-                if ' ' in phrase:
-                    # Для многословных фраз проверяем точное вхождение
-                    if phrase in text_lower:
-                        cleaned_phrase = self.clean_title(phrase)
-                        return True, cleaned_phrase
-                else:
-                    # Для однословных используем границы слов
-                    pattern = r'\b' + re.escape(phrase) + r'\b'
-                    if re.search(pattern, text_lower):
-                        cleaned_phrase = self.clean_title(phrase)
-                        return True, cleaned_phrase
-
-            
-        
-        # Специальная обработка для СОЛНЦЕ
-        if self.channel == 'СОЛНЦЕ':
-            # ===== СПЕЦИАЛЬНАЯ ПРОВЕРКА ДЛЯ "ФИЛЬМ.ФИЛЬМ.ФИЛЬМ" =====
-            film_patterns = [
-                r'фильм\.фильм\.фильм',
-                r'фильм\s+фильм\s+фильм',
-                r'фильм[.\s]+фильм[.\s]+фильм',
-            ]
-            
-            for pattern in film_patterns:
-                if re.search(pattern, text, flags=re.IGNORECASE):
-                    if 'фильм.фильм.фильм' in text.lower():
-                        return True, 'фильм.фильм.фильм'
-                    else:
-                        return True, 'фильм фильм фильм'
-    
-            cleaned = text
-            
-            # Удаляем м/с, мс, м/с, мс в разных вариациях
-            # Паттерны: м/с, мс, м/с, мс (с точкой или без, с пробелами или без)
-            ms_patterns = [
-                r'\bм/?с\b',           # м/с, мс
-                r'\bм\.?\s*с\.?\b',    # м.с, м с, м. с.
-                r'\(\s*м/?с\s*\)',      # (м/с), (мс)
-                r'\s+м/?с\s+',          # м/с с пробелами
-            ]
-            
-            for pattern in ms_patterns:
-                cleaned = re.sub(pattern, ' ', cleaned, flags=re.IGNORECASE)
-            
-            # Удаляем (с) в любом виде: (с), (С), (c) латиницей
-            if re.search(r'\(\s*[сcСC]\s*\)', cleaned):
-                cleaned = re.sub(r'\s*\(\s*[сcСC]\s*\)\s*', ' ', cleaned)
-            
-            # Схлопываем пробелы после удалений
-            cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-            
-            # Проверяем, не осталось ли других служебных пометок
-            if 'киносолнце' in cleaned.lower() or 'кино солнце' in cleaned.lower():
-                return True, 'киносолнце'
-            
-            # Извлекаем из кавычек если есть
-            match = re.search(r'"([^"]+)"', cleaned)
-            if match:
-                return True, self.clean_title(match.group(1).strip())
-            
-            # Если были какие-то удаления, возвращаем очищенный текст
-            if cleaned != text:
-                return True, self.clean_title(cleaned)
-        
-        return False, text
-
-
-    def final_clean(self, text: str):
-        """
-            Метод для финальной очистки текста от всех ненужных символов.
-        """
-        result = text
-
-        # Финальное схлопывание пробелов        
-        result = re.sub(r'\s+', ' ', result).strip()
-        result = re.sub(r'\.', ' ', result)  # точка в любом месте
-        result = re.sub(r'\,', ' ', result)  # запятая в любом месте
-        result = re.sub(r'\b\d{8,}\b', ' ', result) #удаление последовательности из 8ми и более цифр
-        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result) # удаление всех символов, кроме букв и цифр
-
-        # Паттерн 1: слово + пробел + число + пробел + й/я/е/ё (фильм 5 й)
-        result = re.sub(r'\b([а-яё]+)\s+(\d+)\s+([йяеё])\b', r'\1', result, flags=re.IGNORECASE)
-        
-        # Паттерн 2: слово + пробел + число + дефис + й/я/е/ё (фильм 5-й)
-        result = re.sub(r'\b([а-яё]+)\s+(\d+)[-–—]?([йяеё])\b', r'\1', result, flags=re.IGNORECASE)
-
-        # Удаляем паттерны типа "1 я ч", "2 я ч"
-        result = re.sub(r'\b\d+\s+я\s+ч\b', ' ', result, flags = re.IGNORECASE)
-        result = re.sub(r'\b\d+\s+я\b', '', result, flags = re.IGNORECASE)
-        result = re.sub(r'\s+', ' ', result).strip() # Финальное форматирование пробелов. Оставляем ровно 1 пробел между словами
-
-        return result
-
-
-    def clean(
-            self,
-            text: str, 
-            stop_words: Optional[Set[str]] = None, 
-            stop_patterns: Optional[List[str]] = None,
-            special_names: Optional[Set[str]] = None,
-            special_chars: list = SPECIAL_CHARS_TO_REMOVE_GLOBAL,
-            debug: bool = False
-        ) -> str | None:
-        """
-        Args:
-            text: исходный текст
-            channel: название канала
-            stop_words: стоп-слова для канала
-            stop_patterns: паттерны для канала
-            special_names: специальные имена
-            special_chars: спецсимволы для удаления
-            debug: если True, выводит отладочную информацию
-        """
-        self.df['program_name'] = ''
-
-        # Сохраняем исходный текст для дебага
-        original_text = text
-        
-        # ===== ШАГ 1: ИНИЦИАЛИЗАЦИЯ ПАРАМЕТРОВ =====
-        if debug:
-            print(f"\n{'='*60}")
-            print(f"ДЕБАГГЕР: remove_stop_words для канала '{self.channel}'")
-            print(f"{'='*60}")
-            print(f"Исходный текст: '{original_text}'")
-            
-
-        ##############################################################################
-        # Если параметры не переданы, берем настройки для канала
-        if special_names is None:
-            special_names = self._get_default_special_names()
-            if debug:
-                print(f"special_names загружены: {special_names}")
-        
-        if stop_words is None:
-            stop_words = self._get_default_stop_words()
-            if debug:
-                print(f"stop_words загружены: {stop_words}")  # ЭТО НЕ ВИДНО ВО ВТОРОМ СЛУЧАЕ!
-        
-        if stop_patterns is None:
-            stop_patterns = self._get_default_stop_patterns()
-            if debug:
-                print(f"stop_patterns загружены: {len(stop_patterns)} паттернов")
-                for i, p in enumerate(stop_patterns[:3]):
-                    print(f"  паттерн {i+1}: {p}")
-                if len(stop_patterns) > 3:
-                    print(f"  ... и еще {len(stop_patterns)-3}")
-        
-        if special_chars is None:
-            special_chars = SPECIAL_CHARS_TO_REMOVE_GLOBAL
-        
-        # ДОБАВИТЬ ПРОВЕРКУ!
-        if debug:
-            print(f"ИТОГОВЫЕ НАСТРОЙКИ:")
-            print(f"  special_names: {special_names}")
-            print(f"  stop_words: {stop_words}")
-            print(f"  stop_patterns: {len(stop_patterns)} паттернов")
-        ##############################################################################
-        
-
-        # ===== ШАГ 2: ПОДГОТОВКА ТЕКСТА =====
-        text_lower = text.lower().strip().replace('ё', 'е')
-        result = text_lower
-
-        # Паттерн для возрастных рейтингов, включая варианты со скобками
-        pattern = r'\b\s*\(?\s*\+?(0|6|12|14|16|18)\+?\s*\)?\s*\b'
-        result = re.sub(pattern, ' ', result, flags = re.IGNORECASE)
-        if debug:
-            print(f"Удалены возрастные рейтинги: '{result}'")
-
-        old_result = result
-        result = re.sub(r'\(\s*[а-яa-z]{1,3}\s*\)', ' ', result, flags=re.IGNORECASE)
-        if debug and old_result != result:
-            print(f"Удалены одиночные буквы в скобках: '{result}'")
-
-       
-        # Универсальный паттерн для удаления любых комбинаций цифр и слова "серии"
-        #################################### Удаление серий ####################################
-        if re.search(r'сери[яи]|часть|части|сезон', result, flags=re.IGNORECASE):
-            old_result = result
-            result = re.sub(
-                r'\s*(?:\d+(?:\s*,\s*\d+\s*)*\s*)?сери[яиюе]{1,2}(?:\s*\d+(?:\s*,\s*\d+\s*)*)?\s*|\s*\d+(?:\s*,\s*\d+\s*)*\s*',
-                ' ', result, flags=re.IGNORECASE
-            )
-            if debug and old_result != result:
-                print(f"Удалены номера с серий: '{result}'")
-        ########################################################################################
-        
-        # Удаляем номера с символом № или n
-        old_result = result
-        result = re.sub(r'\s*[#№]\s*\d+\s*', ' ', result, flags=re.IGNORECASE)
-        if debug and old_result != result:
-            print(f"Удалены номера с №/n: '{result}'")
-        
-        if debug:
-            print(f"\n--- ШАГ 2: Подготовка текста ---")
-            print(f"После lower() и strip(): '{result}'")
-
-        # ===== ШАГ 3: ПРОВЕРКА СПЕЦИАЛЬНЫХ СЛУЧАЕВ =====
-        if debug:
-            print(f"\n--- ШАГ 3: Проверка специальных случаев ---")
-        # Удаление кавычек
-        result = result.replace('"', '').replace("'", '').replace('«', '').replace('»', '')
-
-        handled, special_result = self._handle_special_cases(result, text_lower)
-        if handled:
-            if debug:
-                print(f"Сработал специальный случай!")
-                print(f"Результат: '{special_result}'")
-                print(f"{'='*60}\n")
-
-            # Удаляем специальные символы из списка
-            for char in special_chars:
-                special_result = special_result.replace(char, ' ')
-
-            special_result = self.final_clean(special_result)
-            return special_result
-        
-        elif debug:
-            print(f"Специальных случаев не найдено")
-
-        # ===== ШАГ 4: ПРОВЕРКА НА СПЕЦИАЛЬНЫЕ ИМЕНА =====
-        if debug:
-            print(f"\n--- ШАГ 4: Проверка на специальные имена ---")
-            print(f"Текст: '{result.strip()}'")
-            print(f"Ищем в special_names: {result.strip() in special_names}")
-        
-        if result.strip() in special_names:
-            if debug:
-                print(f"Найдено специальное имя!")
-                print(f"Результат: '{result.strip()}'")
-                print(f"{'='*60}\n")
-
-            result = self.final_clean(result)
-            return result
-        elif debug:
-            print(f"Не является специальным именем")
-
-        # ===== ШАГ 5: ИЗВЛЕЧЕНИЕ ИЗ КАВЫЧЕК =====
-        if debug:
-            print(f"\n--- ШАГ 6: Извлечение из кавычек ---")
-        
-        result = result.replace('"', '').replace("'", '').replace('«', '') \
-                .replace('»', '').replace('(', '').replace(')', '')
-
-        if debug:
-            print(f"После: '{result}'")
-
-        # ===== ШАГ 8: УДАЛЕНИЕ СТОП-ПАТТЕРНОВ =====
-        if debug:
-            print(f"\n--- ШАГ 8: Удаление стоп-паттернов ---")
-        
-        sorted_patterns = sorted(stop_patterns, key = len, reverse = True)
-        
-        for i, pattern in enumerate(sorted_patterns, 1):
-            old_result = result
-            result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE)
-            if debug and old_result != result:
-                print(f"  Паттерн {i}: '{pattern[:30]}...' -> '{result}'")
-
-        # ===== ШАГ 9: УДАЛЕНИЕ КАВЫЧЕК И СКОБОК =====
-        if debug:
-            print(f"\n--- ШАГ 9: Удаление кавычек и скобок ---")
-            print(f"До: '{result}'")
-        
-        result = result.replace('"', '').replace("'", '').replace('«', '') \
-                    .replace('»', '').replace('(', '').replace(')', '')
-        
-        if debug:
-            print(f"После: '{result}'")
-
-        # ===== ШАГ 10: УДАЛЕНИЕ СТОП-СЛОВ =====
-        if debug:
-            print(f"\n--- ШАГ 10: Удаление стоп-слов ---")
-        
-        for stop_word in stop_words:
-            pattern = r'\b' + re.escape(stop_word) + r'\b'
-            old_result = result
-            result = re.sub(pattern, '', result, flags = re.IGNORECASE)
-            if debug and old_result != result:
-                print(f"  Удалено стоп-слово '{stop_word}': '{result}'")
-
-        # ===== ШАГ 11: ФИНАЛЬНАЯ ОЧИСТКА =====
-        if debug:
-            print(f"\n--- ШАГ 11: Финальная очистка ---")
-            print(f"До: '{result}'")
-        
-        # Убираем множественные пробелы
-        result = re.sub(r'\s+', ' ', result).strip()
-        
-        # Удаляем специальные символы из списка
-        for char in special_chars:
-            old_result = result
-            result = result.replace(char, ' ')
-            if debug and old_result != result and char.strip():
-                print(f"  Удален символ '{char}': '{result}'")
-        
-        # Удаляем упоминания сезонов и серий в конце строки
-        old_result = result
-        result = re.sub(r'\.?\s*(?:\d+\s*(?:сез(?:он|я)?|часть)|(?:сез(?:он|я)?|часть)\s*\d+)\s*$', 
-                        '', result, flags=re.IGNORECASE)
-        if debug and old_result != result:
-            print(f"  Удалены сезоны/серии в конце: '{result}'")
-        
-        # Удаляем точку в конце
-        old_result = result
-        result = re.sub(r'\.$', '', result).strip()
-        if debug and old_result != result:
-            print(f"  Удалена точка в конце: '{result}'")
-        
-        result = self.final_clean(result)
-        
-        if debug:
-            print(f"После финальной очистки: '{result}'")
-            print(f"\n{'='*60}")
-            print(f"ИТОГОВЫЙ РЕЗУЛЬТАТ: '{result}'")
-            print(f"{'='*60}\n")
-
-        if result == '':
-            print(Color.BOLD + Color.RED + f'‼️ Для {self.channel} строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
-        
-        return result
-    
-
-    def clean_dataframe(self, program_name_column: str = 'Название программы'):
-        """
-            Финальный метод для предобработки текста. В процессе работы метода создаётся дополнительный столбец в датафрейме, в 
-            который записывается очищенное название программы.
-        """
-        data = self.df.copy()
-
-        # Создаем сет уникальных программ
-        unique_programs = data[program_name_column].unique()
-
-        # Создаем словарь маппинга уникальных программ
-        mapping = {prog: self.clean(prog) for prog in unique_programs}
-        
-        # Применяем маппинг к DataFrame. Записываем очищенные названия программ в новый столбец под названием 'program_name'.
-        data['program_name'] = data[program_name_column].map(mapping)
-        
-        # Возвращаем список уникальных очищенных программ
-        return list(set(mapping.values())), data
-    
-
-
-class DocumentaryChannelCleaner:
-    """
-        Класс для очистки названий телепередач с документальным посылом.
-
-        !!! ВАЖНО !!!
-        Данный класс предназначен для работы с каналами ЗВЕЗДА, СПАС и ТВЦ
-    """
-    def __init__(self, channel):
-        self.channel = channel
-
-        self.SPECIAL_NAMES = [
-            'специальный репортаж', 'мультфильм', 'док сериал фильм', 'док фильм сериал', 'худ фильм сериал',
-            'документальный фильм', 'юмористический концерт', 'сериал х ф', 'анимационный фильм', 'х фильмы',
-            'короткометражные х фильмы'
-        ]
-
-
+        # Базовые стоп-паттерны названия
         self.STOP_PATTERNS_GENERAL = [
-            r'\bдокументальный\b', r'\bюмористический\b', r'\bспециальный\b', r'\bанимационный\b', 
-            r'\bкороткометражные\b', r'\bфильм\b', r'\bсериал\b', r'\bрепортаж\b', r'\bтелесериал\b', 
-            r'\bх[\s\-–—/]*фильм[ы]?\b', r'\bмультфильм\b', r'\bспец\b', r'\b[дхмmx][^а-яА-Яa-zA-Z0-9]+ф\b',
-            r'\bдок\.?\s*', r'\bхуд\.?\s*', r'\bк[\s\-–—/]*хф\b'
+            r'\bхудожественный\b', r'\bдокументальный\b', r'\bанимационный\b', r'\bсоюзмультфильм\b', 
+            r'\bкомедийный\b', r'\bтелесериал\b', r'\bмультфильм\b', r'\bмультсериал\b', 
+            r'\bтелесериал\b', r'\bюмористический\b', r'\bкороткометражные\b', r'\bфильм\b', 
+            r'\bсериал\b', r'\bхуд\.?\s*',
+            r'\b[aадхмmx][^а-яА-Яa-zA-Z0-9]+ф\b', # всевозможные комбинации дф, мф, mф, аф
         ]
 
+        
+        # Стоп-паттерны названия по группам
+        self.STOP_PATTERNS_GROUPS = {
+            'GROUP_1': [ 
+                r'\bреалити[- ]?шоу\b', r'\bнереалити[- ]?шоу\b', r'\bповтор\b',
+                r'\bм\W*[сc]\b', r'\bт\W*[сc]\b', r'\bа\W*[сc]\b', # всевозможные комбинации мс, тс, ас
+            ],
+            
+            'GROUP_2': [
+                r'\bспециальный\b', r'\bрепортаж\b', r'\bх[\s\-–—/]*фильм[ы]?\b',  
+                r'\bспец\b', r'\b[дхмmx][^а-яА-Яa-zA-Z0-9]+ф\b',
+                r'\bдок\b', r'\bдок\.?\s*', r'\bк[\s\-–—/]*хф\b'
+            ]
+        }
+    
+    
+        self.STOP_WORDS = {
+            'KIDS_CHANNELS': [
+                'большая анимация', 'анимационный', 'мультфильм', 'мультсериал',
+                'р б', 'т с',
+            ],
+    
+            'ENTERTAINMENT_CHANNELS': [
+                'праздничный', 'комедийный', 'концерт', 'реалити',
+            ]
+        }
 
+        self.PROGRAMS_TO_REMAIN_GENERAL = [
+            'фильм фильм фильм', 'минута молчания', 'военный парад', 
+            'парад победы', 'новогоднее обращения президента'
+        ]
+        
         self.PROGRAMS_TO_REMAIN = {
-            'ТВЦ': ['10 самых', 'военный парад'],
+            '2X2': ['русские мультфильмы'],
+            'МИР': ['специальный репортаж', 'славянский базар в витебске'],
+            'Ю': ['маша и медведь', 'супермама', 'ждули'],
+            'СОЛНЦЕ': ['киносолнце', 'кино солнце'],
+            'КАРУСЕЛЬ': ['простоквашино', 'кремлевская елка', 'главные герои'],
+            'ЧЕ': ['параграф 78'],
+            'ТВЦ': ['10 самых', 'военный парад', 'документальное кино леонида млечина'],
             'ЗВЕЗДА': [
                 'голоса победы', 'дневники памяти', 'битва за небо', 
                 'секретные материалы', 'хроника победы', 'загадки века',
-                'подпольщики', 'шедевры военных музеев', 'битва за днепр'],
+                'подпольщики', 'шедевры военных музеев', 'битва за днепр',
+                'цивилизации', '1812', 'праздничный концерт'],
             'СПАС': [
                 'бесогон', 'голос церкви', 'лествица', 
                 'добровидение', 'тропами алании', #'святой', 
@@ -871,145 +134,287 @@ class DocumentaryChannelCleaner:
                 ]
         }
 
-
         self.STOP_PATTERNS_CHANNELS = {
             'ТВЦ': [r'\bконцерт\b', r'\bсезон\b'],
-            'ЗВЕЗДА': [r'\bцикл\b', r'\bконцерт\b'],
+            'ЗВЕЗДА': [r'\bцикл\b' ],
+            'МИР': [r'\bсерия\b', r'\bсерии\b', r'\bч\.?\s*'],
             
             'СПАС': [r'\bцикл\b', r'\bкорреспондент\b']
         }
 
-    
-    def general_cleaner(self, text: str, debug = False):
+
+    def _get_channel_group(self):
         """
-            Предварительный очиститель
+            Вспомогательный метод для определения принадлежности канала к группе
         """
+        if self.channel in self.KIDS_CHANNELS:
+            return 'GROUP_1'
+            
+        elif self.channel in self.ENTERTAINMENT_CHANNELS:
+            return 'GROUP_1'
+            
+        elif self.channel in self.DOCUMENTARY_CHANNELS:
+            return 'GROUP_2'
+        else:
+            return 'UNKNOWN'
+        
+
+    def _replace_whole_word(self, text: str, old_word: str, new_word: str) -> str:
+        """
+            Заменяет целые слова в тексте
+        """
+        pattern = r'\b' + re.escape(old_word) + r'\b'
+        return re.sub(pattern, new_word, text)
+
+
+    def preparatory_cleaner(self, text: str, debug = False):
+        """
+            Метод для очистки
+        """
+        # Определяем группу канала
+        group = self._get_channel_group()
         
         if debug:
             print(f"\n{'='*80}")
             print(f'ЗАПУСКАЮ ДЕББАГЕР ДЛЯ СТРОКИ:      {text}')
+            print(f'КАНАЛ {self.channel} ПРИНАДЛЕЖИТ ГРУППЕ {group}')
             print(f"{'='*80}")
             print('\n')
-
-        # 1. Приведение текста к нижнему регистру, а также замена буквы ё на е
+            
+        # ******** ЭТАП 1. Приведение текста к нижнему регистру, а также замена буквы ё на е, если требуется *******
         text_lower = text.lower().strip().replace('ё', 'е')
         if debug:
             print(f'После приведения к нижнему регистру: {text_lower}')
 
+        # Вводим новую переменную для удобства
+        result = text_lower
         
-        # ===== УНИВЕРСАЛЬНАЯ ПРОВЕРКА НА СБОРНИКИ МУЛЬТФИЛЬМОВ =====
+        # ========================== УНИВЕРСАЛЬНАЯ ПРОВЕРКА НА СБОРНИКИ МУЛЬТФИЛЬМОВ ======================
         # Проверяем для ЛЮБОГО канала
-        mf_count = text_lower.count('м/ф') + text_lower.count('m/ф')
+        mf_count = result.count('м/ф') + result.count('m/ф')
         if mf_count >= 2:
             # Можно добавить дополнительные проверки
             # Например, проверять наличие слова "мультфильм" в тексте
-            if 'мультфильм' in text_lower or 'мультсериал' in text_lower:
+            if 'мультфильм' in result or 'мультсериал' in result:
                 return 'мультфильм'
             # Или просто возвращать при 2+ мультфильмах
             return 'мультфильм'
 
 
-        # 2. Удаление подстрок типа '№5', '№09'
-        text_lower = re.sub(r'[#№]\d+', '', text_lower)
+        # ========================== ПРИНУДИТЕЛЬНАЯ ЗАМЕНА СЛОВА ДЛЯ КАНАЛА ТНТ4 ==========================
+        if self.channel == 'ТНТ4' and 'комеди' in result:
+            if 'комеди' in result and 'комедийный' not in result:
+                result = self._replace_whole_word(result, 'комеди', 'камеди')
+                
+            if debug:
+                print(f"Специальная замена 'комеди' на 'камеди' для канала {self.channel}: {result}")
+
+        # **************** ЭТАП 2. Удаление подстрок типа '№5', '№09' ****************
+        result = re.sub(r'[n#№]\d+', '', result)
         if debug:
-            print(f'После удаления символов с №: {text_lower}')
+            print(f'После удаления символов с №: {result}')
 
-        # 3. Удаление возрастных ограничений
-        pattern = r'\b\s*\(?\s*\+?(0|6|12|14|16|18)\+?\s*\)?\s*\b'
-        text_lower = re.sub(pattern, ' ', text_lower, flags = re.IGNORECASE)
+
+        # **************** ЭТАП 2. Удаление подстрок типа '№5', '№09' ****************
+        result = re.sub(r'[n#№]\d+', '', result)
         if debug:
-            print(f"Удалены возрастные рейтинги: '{text_lower}'")
+            print(f'После удаления символов с №: {result}')
 
-        # Зачистка от любых 1-2 буквенных обозначений в скобках
-        pattern_remove = r'\s*\([а-яa-z]{1,2}\)\s*'
-        text_lower = re.sub(pattern_remove, ' ', text_lower, flags=re.IGNORECASE)
 
-        # 3. Удаление пунктуации
+        # **************** ЭТАП 3. Удаление одиночных букв в скобках, например, (п), (а) ****************
+        # Паттерн: буква в скобках (любой алфавит)
+        pattern_remove = r'\s*\([а-яa-z0-9]{1,2}\)\s*'
+        result = re.sub(pattern_remove, ' ', result, flags = re.IGNORECASE)
+        if debug:
+            print(f'После удаления одиночных букв в скобках: {result}')
+
+
+        # **************** ЭТАП 4. Удаление возрастных ограничений ****************
+        # Возрастной рейтинг в скобках (16+) 
+        pattern_brackets = r'\(\s*\+?(0|6|12|14|16|18)\+?\s*\)'
+        # Возрастной рейтинг с плюсом перед числом '+16' 
+        pattern_plus_before = r'(?:^|\s)\+(0|6|12|14|16|18)(?=\s|$)'
+        # Возрастной рейтинг с плюсом после числа '16+' 
+        pattern_plus_after = r'(?:^|\s)(0|6|12|14|16|18)\+(?=\s|$)'
+        # Возрастной рейтинг с указанием лет '16+ л' 
+        #pattern_years = r'\b(0|6|12|14|16|18)\+?\s+(?:лет|л\.|years?)\b'
+        pattern_plus_end = r'(0|6|12|14|16|18)\+$'
+        
+        result = re.sub(pattern_brackets, ' ', result, flags=re.IGNORECASE)
+        result = re.sub(pattern_plus_before, ' ', result, flags=re.IGNORECASE)
+        result = re.sub(pattern_plus_before, ' ', result, flags=re.IGNORECASE)
+        #result = re.sub(pattern_years, ' ', result, flags=re.IGNORECASE)
+        result = re.sub(pattern_plus_end, ' ', result, flags=re.IGNORECASE)
+        result = re.sub(r'\s+', ' ', result).strip()
+        if debug:
+            print(f"Удалены возрастные рейтинги: '{result}'")
+
+
+        # **************** ЭТАП 5. Удаление пунктуации ****************
         # Удаляем тире, чтобы '80-х' -> '80х'
-        #text_lower = re.sub(r'[-—–]', '', text_lower)
-        text_lower = re.sub(r'(\d+)[-—–]+|[-—–]+(\d+)', lambda m: m.group(1) or m.group(2), text_lower)
+        result = re.sub(r'(\d+)[-—–]+|[-—–]+(\d+)', lambda m: m.group(1) or m.group(2), result)
         # Удаляем всю пунктуацию, оставляем цифры и буквы
-        text_lower = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', text_lower)
-        text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result)
+        result = re.sub(r'\s+', ' ', result).strip()
         if debug:
-            print(f'После удаления пунктуации: {text_lower}')
+            print(f'После удаления пунктуации: {result}')
 
-        # 4. Проверка на специальные имена
-        for special_name in self.SPECIAL_NAMES:
-            if text_lower == special_name.lower().strip():
+        return result
+
+
+    def main_cleaner(self, text: str, debug = False):
+        result = text
+
+        # Определяем группу канала
+        group = self._get_channel_group()
+        
+        result = self.preparatory_cleaner(result, debug)
+
+        if debug:
+            print(f'ПОСЛЕ ПРЕДВАРИТЕЛЬНОЙ ОЧИСТКИ: {result}')
+
+
+        # **************** ЭТАП 1. Проверка на специальные имена ****************
+        for special_name in self.BASE_SPECIAL_NAMES:
+            if result == special_name.lower().strip():
                 if debug:
-                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {text_lower}')
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {result}')
                 return special_name
 
 
+        # **************** ЭТАП 2. Проверка на особые названия, которые необходимо сохранить ****************
+        for program_to_remain in self.PROGRAMS_TO_REMAIN_GENERAL:
+            if program_to_remain in result:
+                if debug:
+                    print(Color.GREEN + f'Нашёл программу с ключевым именем в общих: {result}')
+                return program_to_remain
+            
         if self.channel in self.PROGRAMS_TO_REMAIN and self.PROGRAMS_TO_REMAIN[self.channel]:
             for program_to_remain in self.PROGRAMS_TO_REMAIN[self.channel]:
-                if program_to_remain in text_lower:
+                if program_to_remain in result:
                     if debug:
-                        print(Color.GREEN + f'Нашёл программу с ключевым именем: {text_lower}')
+                        print(Color.GREEN + f'Нашёл программу с ключевым именем для канала {self.channel}: {result}')
                     return program_to_remain
-                
 
-        # 5. Удаляем номера частей 
-        pattern = r'\b(?:\d+\s+(?:часть|части|ч)\b|\b(?:часть|части|ч)\s+\d+(?:\s+\d+)*)\b'
-
-        text_lower = re.sub(pattern, '', text_lower, flags=re.IGNORECASE)
-
-        # 6. Удаляем номера серий (включая перечисления через пробел)
-        pattern = r'\b(?:\d+(?:\s+\d+)*\s+(?:серия|серии|сер|с)\b|\b(?:серия|серии|сер|с)\s+\d+(?:\s+\d+)*)\b'
-        
-        text_lower = re.sub(pattern, '', text_lower, flags=re.IGNORECASE)
-
-        # 7. Удаляем номеров фильмов (включая перечисления через пробел)
-        pattern = r'\b(?:\d+\s+(?:фильм|фильма|фильмов|ф)\b|\b(?:фильм|фильма|фильмов)\s+\d+(?:[-\s]*[йой])?(?:\s+\d+(?:[-\s]*[йой])?)*)\b'
-
-        text_lower = re.sub(pattern, '', text_lower, flags=re.IGNORECASE)
-
+        # **************** ЭТАП 3. УДАЛЕНИЕ НОМЕРОВ ЧАСТЕЙ, СЕРИЙ, ФИЛЬМОВ, СЕЗОНОВ ****************
+        # 3.1. Удаление номеров частей 
+        pattern = r'\b(?:(?:\d+|[ivxlcdm]+)\s+(?:часть|части|ч)\b|\b(?:часть|части|ч)\s+(?:\d+(?:\s+\d+)*|[ivxlcdm]+))\b'
+        result = re.sub(pattern, '', result, flags = re.IGNORECASE)
         if debug:
-            print(f'После удаления номеров серий и частей: {text_lower}')
+            print(f'После удаления номеров частей: {result}')
 
+        # 3.2. Удаление номеров серий
+        #pattern = r'\b(?:\d+(?:\s+\d+)*\s+(?:серия|серии|сер|с)\b|\b(?:серия|серии|сер)\s+\d+(?:\s+\d+)*)\b'
+        pattern = r'\b(?:(?:\d+|[ivxlcdm]+)(?:\s+(?:\d+|[ivxlcdm]+))*\s+(?:серия|серии|сер)\b|\b(?:серия|серии|сер)\s+(?:\d+|[ivxlcdm]+)(?:\s+(?:\d+|[ivxlcdm]+))*)\b'
+        result = re.sub(pattern, '', result, flags = re.IGNORECASE)
+        if debug:
+            print(f'После удаления номеров серий: {result}')
 
+        # 3.3. Удаление номеров сезонов
+        #pattern = r'\b(?:\d+\s*(?:сезон|сезона|сезонов|s)\b|\b(?:сезон|сезона|сезонов)\s+\d+(?:\s+\d+)*)\b'
+        pattern = r'\b(?:(?:\d+|[ivxlcdm]+)\s*(?:сезон|сезона|сезонов)\b|\b(?:сезон|сезона|сезонов)\s+(?:\d+|[ivxlcdm]+)(?:\s+(?:\d+|[ivxlcdm]+))*)\b'
+        result = re.sub(pattern, '', result, flags = re.IGNORECASE)
+        if debug:
+            print(f'После удаления номеров сезонов: {result}')
+
+        # 3.4. Удаление номеров фильмов
+        #pattern = r'\b(?:\d+\s+(?:фильм|фильма|фильмов|ф)\b|\b(?:фильм|фильма|фильмов)\s+\d+(?:[-\s]*[йой])?(?:\s+\d+(?:[-\s]*[йой])?)*)\b'
+        pattern = r'\b(?:фильм|фильма|фильмов)\s+(?:\d+|[ivxlcdm]+)(?:[-\s]*[йой])?(?:\s+(?:\d+|[ivxlcdm]+)(?:[-\s]*[йой])?)*\b'
+        #pattern = r'\b(?:(?:\d+|[ivxlcdm]+)\s+(?:фильм|фильма|фильмов|ф)\b|\b(?:фильм|фильма|фильмов)\s+(?:\d+|[ivxlcdm]+)(?:[-\s]*[йой])?(?:\s+(?:\d+|[ivxlcdm]+)(?:[-\s]*[йой])?)*)\b'
+        result = re.sub(pattern, '', result, flags = re.IGNORECASE)
+        if debug:
+            print(f'После удаления номеров фильмов: {result}')
+
+        # **************** ЭТАП 4. УДАЛЕНИЕ СТОП-ПАТТЕРНОВ ОБЩИХ ****************
         sorted_patterns = sorted(self.STOP_PATTERNS_GENERAL, key = len, reverse = True)
         for pattern in sorted_patterns:
-            text_lower = re.sub(r'\s*' + pattern + r'\s*', ' ', text_lower, flags = re.IGNORECASE)
+            result = re.sub(pattern, ' ', result, flags = re.IGNORECASE)
+        result = re.sub(r'\s+', ' ', result).strip()
 
-        text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+        if debug:
+            print(f'После удаления ОБЩИХ стоп-паттернов: {result}')
 
-        # Удаление специальных паттернов для каналов
+        # **************** ЭТАП 5. УДАЛЕНИЕ СТОП-ПАТТЕРНОВ ДЛЯ ГРУПП ****************
+        if group in self.STOP_PATTERNS_GROUPS:
+            sorted_patterns = sorted(self.STOP_PATTERNS_GROUPS[group], key=len, reverse=True)
+            for pattern in sorted_patterns:
+                result = re.sub(pattern, ' ', result, flags = re.IGNORECASE)
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        if debug:
+            print(f'После удаления стоп-паттернов для канала {self.channel} из {group}: {result}')
+            
+
+        # **************** ЭТАП 6. УДАЛЕНИЕ СТОП-ПАТТЕРНОВ ДЛЯ ВЫБОРОЧНЫХ КАНАЛОВ С ОСОБЕННОСТЯМИ ****************
         if self.channel in self.STOP_PATTERNS_CHANNELS and self.STOP_PATTERNS_CHANNELS[self.channel]:
             sorted_special_patterns = sorted(self.STOP_PATTERNS_CHANNELS[self.channel], key = len, reverse = True)
             for pattern in sorted_special_patterns:
-                text_lower = re.sub(r'\s*' + pattern + r'\s*', ' ', text_lower, flags = re.IGNORECASE)
+                result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE)
 
-            text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+            result = re.sub(r'\s+', ' ', result).strip()
             
-        if debug:
-            print(f'После удаления стоп-паттернов: {text_lower}')
+            if debug:
+                print(f'После удаления стоп-паттернов для канала {self.channel}: {result}')
 
 
-        # Удаление последовательности из 4х и более цифр (МОЖЕТ БЫТЬ СТОИТ ПОМЕНЯТЬ ДЛЯ КАНАЛА "ЗВЕЗДА")
-        if self.channel != 'ЗВЕЗДА':
-            text_lower = re.sub(r'\b\d{4,}\b', ' ', text_lower)
+        # **************** ЭТАП 7. УДАЛЕНИЕ СТОП-СЛОВ ОБЩИХ ****************
+        if self.channel in self.KIDS_CHANNELS:
+            
+            sorted_patterns = sorted(self.STOP_WORDS['KIDS_CHANNELS'], key = len, reverse = True)
+            for pattern in sorted_patterns:
+                result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE)
+            result = re.sub(r'\s+', ' ', result).strip()
+            
+            if debug:
+                print(f'После удаления стоп-слов: {result}')
+
+        elif self.channel in self.ENTERTAINMENT_CHANNELS:
+            
+            sorted_patterns = sorted(self.STOP_WORDS['ENTERTAINMENT_CHANNELS'], key = len, reverse = True)
+            for pattern in sorted_patterns:
+                result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE)
+            result = re.sub(r'\s+', ' ', result).strip()
+            
+            if debug:
+                print(f'После удаления стоп-слов: {result}')
+
+        # **************** ЭТАП 8. УДАЛЕНИЕ ПОСЛЕДОВАТЕЛЬНОСТИ ЦИФР ****************
+        if self.channel not in ['МИР', 'ЗВЕЗДА', 'ЧЕ']:
+            #result = re.sub(r'\d{4}\s*(?:[гГ]\.?)?', ' ', result)
+            result = re.sub(r'\d{4,}\s*(?:[гГ]\.?)?(?=\s|$)', ' ', result)
+            if debug:
+                print(f'После удаления последовательности из 4х и более цифр для канала {self.channel}: {result}')
 
         else:
-            text_lower = re.sub(r'\b\d{6,}\b', ' ', text_lower)
+            #result = re.sub(r'(\d{5})(?:\s*([гГ]\.?))?', lambda m: f' {m.group(1)} ' + (f' {m.group(2)} ' if m.group(2) else ''), result)
+            #result = re.sub(r'\d{5,}\s*(?:[гГ]\.?)?(?=\s|$)', ' ', result)
+            pattern = r'\d{5,}(?:\s*[гГ]\.?\s*)+'
+            result = re.sub(pattern, ' ', result)
+            if debug:
+                print(f'После удаления последовательности из 5ти и более цифр для канала {self.channel}: {result}')
 
-
+        # **************** ЭТАП 9. УДАЛЕНИЕ ПАТТЕРНА ЦИФРЫ + ДЕФИС (ОПЦИОНАЛЬНО) + ОДНА ИЛИ ДВЕ БУКВЫ ****************
+        result = re.sub(r'\b\d+[-]?[а-яА-Я]{1,2}\b', ' ', result)
+        result = re.sub(r'\s+', ' ', result).strip()
+        
         if debug:
-            print(f'После удаления последовательности цифр: "{text_lower}"')
+            print(f'После удаления последовательности цифр и окончаний для канала {self.channel}: {result}')
+            
 
-        if text_lower == '':
+        # **************** ЭТАП 9. ФИНАЛЬНОЕ ФОРМАТИРОВАНИЕ ПРОБЕЛОВ. ОСТАВЛЯЕМ РОВНО 1 ПРОБЕЛ МЕЖДУ СЛОВАМИ ****************
+        result = re.sub(r'\s+', ' ', result).strip()
+
+        if result == '':
             print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
             return ''
-            
-        else:
-            if debug:
-                print(f"\n{'='*80}")
-                print(f'ПОСЛЕ ФИНАЛЬНОЙ ОЧИСТКИ:           {text_lower}')
-                print(f"{'='*80}")
-            return text_lower
-    
 
+        if debug:
+            print(f"\n{'='*80}")
+            print(f'ПОСЛЕ ФИНАЛЬНОЙ ОЧИСТКИ:           {result}')
+            print(f"{'='*80}")
+        return result
+
+    
     def clean_dataframe(self, df, program_name_column: str = 'Название программы'):
         """
             Финальный метод для предобработки текста. В процессе работы метода создаётся дополнительный столбец в датафрейме, в 
@@ -1021,16 +426,13 @@ class DocumentaryChannelCleaner:
         unique_programs = data[program_name_column].unique()
 
         # Создаем словарь маппинга уникальных программ
-        mapping = {prog: self.general_cleaner(prog) for prog in unique_programs}
+        mapping = {prog: self.main_cleaner(prog) for prog in unique_programs}
         
         # Применяем маппинг к DataFrame. Записываем очищенные названия программ в новый столбец под названием 'program_name'.
         data['program_name'] = data[program_name_column].map(mapping)
         
         # Возвращаем список уникальных очищенных программ
         return list(set(mapping.values())), data
-
-    
-
 
 
 
