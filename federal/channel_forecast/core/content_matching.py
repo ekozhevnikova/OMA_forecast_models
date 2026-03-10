@@ -153,7 +153,11 @@ class GeneralTextCleaner:
                 'голоса победы', 'дневники памяти', 'битва за небо', 
                 'секретные материалы', 'хроника победы', 'загадки века',
                 'подпольщики', 'шедевры военных музеев', 'битва за днепр',
-                'цивилизации', '1812', 'праздничный концерт'],
+                'цивилизации', '1812', 'праздничный концерт', 'код доступа', 
+                'война миров', 'ссср знак качества', 'легенды госбезопасности', 'улика из прошлого',
+                'лучшие цирковые артисты мира'
+
+                ],
             'СПАС': [
                 'бесогон', 'голос церкви', 'лествица', 
                 'добровидение', 'тропами алании', #'святой', 
@@ -998,7 +1002,7 @@ class SportChannelCleaner:
         result = re.sub(pattern, ' ', result).strip()
 
         variants = [
-            'полуфинал', 'полуфинал', 'четвертьфинал', 'финал', 'жен', 'муж', 'премьера'
+            'полуфинал', 'четвертьфинал', 'финал', 'жен', 'муж', 'премьера'
         ]
         for variant in variants:
             result = re.sub(r'\s*' + variant + r'\s*', ' ', result, flags = re.IGNORECASE).strip()
@@ -1042,6 +1046,12 @@ class SportChannelCleaner:
 
             elif 'переходные матчи' in result:
                 result = self._replace_whole_word(result, 'переходные матчи', 'стыковые матчи первой лиги и рпл')
+
+            elif 'международный турнир кубок легенд имени константина еременко' in result:
+                result = self._replace_whole_word(result, 'международный турнир кубок легенд имени константина еременко', 'кубок легенд')
+            
+            elif 'международный турнир кубок легенд' in result:
+                result = self._replace_whole_word(result, 'международный турнир кубок легенд', 'кубок легенд')
             
 
         # **************** ЭТАП 6. ПРОВЕРКА НА "КЛЮЧЕВЫЕ" НАЗВАНИЯ ****************
@@ -1051,27 +1061,8 @@ class SportChannelCleaner:
                     print(Color.GREEN + f'Нашёл программу с ключевым именем в общих: {result}')
                 return program_to_remain
         
-        # **************** ЭТАП 7. УДАЛЕНИЕ НАЗВАНИЙ ГОРОДОВ ****************
 
-        country_map = {
-            'россии': 'Россия',
-            'испании': 'Испания',
-            'италии': 'Италия', 
-            'германии': 'Германия'
-        }
-
-        for keyword, country in country_map.items():
-            if keyword in result:
-                result = self.remove_cities(result, cities_dict[country], debug)
-                break
-                
-        result = re.sub(r'\s+', ' ', result).strip()
-        
-        if debug:
-            print('\n')
-            print(f'После удаления названий городов: {result}')
-
-        # **************** ЭТАП 8. УДАЛЕНИЕ СТОП-ПАТТЕРНОВ ****************
+        # **************** ЭТАП 7. УДАЛЕНИЕ СТОП-ПАТТЕРНОВ ****************
         sorted_sport_patterns = sorted(self.STOP_PATTERNS['sport'], key = len, reverse = True)
         for pattern in sorted_sport_patterns:
             result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE)
@@ -1082,7 +1073,7 @@ class SportChannelCleaner:
             print(f'После удаления стоп-паттернов для канала {self.channel}: {result}')
 
 
-        # **************** ЭТАП 9. УДАЛЕНИЕ СТОП-СЛОВ ****************
+        # **************** ЭТАП 8. УДАЛЕНИЕ СТОП-СЛОВ ****************
         sorted_sport_stop_words = sorted(self.STOP_WORDS['sport'], key = len, reverse = True)
         for pattern in sorted_sport_stop_words:
             result = re.sub(r'\s*' + pattern + r'\s*', ' ', result, flags = re.IGNORECASE)
@@ -1090,7 +1081,36 @@ class SportChannelCleaner:
 
         if debug:
             print(f'После удаления стоп-слов: {result}')
+        
 
+        # **************** ЭТАП 9. УДАЛЕНИЕ НАЗВАНИЙ ГОРОДОВ ****************
+
+        country_map = {
+            'россии': 'Россия',
+            'испании': 'Испания',
+            'италии': 'Италия', 
+            'германии': 'Германия'
+        }
+
+        # Ищем по названию страны. Например, если встретилось 'кубок россии', то используется список городов России cities_dict['Россия'].
+        for keyword, country in country_map.items():
+            if keyword in result:
+                result = self.remove_cities(result, cities_dict[country], debug)
+                break
+                
+            # Если название страны не указано в названии программы, то по дефолту предполагаем, что это Россия.
+            else:
+                result = re.sub(r'\s+', ' ', result).strip()
+                if len(result) > 20:
+                    result = self.remove_cities(result, cities_dict['Россия'], debug)
+                    break
+
+        result = re.sub(r'\s+', ' ', result).strip()
+        
+        if debug:
+            print('\n')
+            print(f'После удаления названий городов: {result}')
+        
         # **************** ЭТАП 10. УДАЛЕНИЕ ПАТТЕРНА БУКВЫ ЦИФРЫ, например, "u17" ****************
         pattern = r'[a-zA-Z]+\d+(?!\S)'
         result = re.sub(pattern, ' ', result).strip()
@@ -1117,22 +1137,22 @@ class SportChannelCleaner:
 
         if category_type == 'sport':
             result = self.clean_sport_programs(text, cities_dict, debug)
-            if result == 'неделя легкой атлетики спринт':
+            if result == 'футбол кубок легенд имени константина еременко локомотив москва зенит':
                 print(f'СПОРТ: {text}')
 
         elif category_type == 'not_sport':
             result = self.clean_not_sport(text, debug)
-            if result == 'неделя легкой атлетики спринт':
+            if result == 'футбол кубок легенд имени константина еременко локомотив москва зенит':
                 print(f'not_sport: {text}')
 
         elif category_type == 'films':
             result = self.clean_films(text, debug)
-            if result == 'неделя легкой атлетики спринт':
+            if result == 'футбол кубок легенд имени константина еременко локомотив москва зенит':
                 print(f'films: {text}')
 
         elif category_type == 'other':
             result = self.clean_not_sport(text, debug)
-            if result == 'неделя легкой атлетики спринт':
+            if result == 'футбол кубок легенд имени константина еременко локомотив москва зенит':
                 print(f'other: {text}')
             
         return result
@@ -1204,7 +1224,7 @@ class MusicChannelCleaner:
             # Категория для программ, содержащих следующие слова в своем названии.
             # Названия будут зачищаться таким образом, чтобы на выходе оставались только словосочетания, указанные в скобках
             'charts': [
-                '10 самых', 'хит сториз', 'битва поколений', 
+                '10 самых', '10самых', 'хит сториз', 'битва поколений', 
                 'новогодний чарт', 'приехали!', 'самый лучший день',
                 'лихие хиты', 'моя волна', 'очень караочен',
                 'звезда на замене', 'янамузтв', 'премия муз-тв', 'топ 30',
@@ -1408,7 +1428,7 @@ class MusicChannelCleaner:
     
     
         special_words = [
-            '10 самых', 'хит сториз', 'битва поколений', 'новогодний чарт', 'приехали',
+            '10 самых', '10самых', 'хит сториз', 'битва поколений', 'новогодний чарт', 'приехали',
             'вк меломан', 'вк громкий вопрос', 'вк натальная карта', 'вк контакты',
             'вк фест', 'вк под шубой', 'самый лучший день', 'лихие хиты', 'моя волна', 'очень караочен',
             'звезда на замене', 'янамузтв', 'премия музтв', 'топ 30', 'тор 30',
@@ -1544,7 +1564,7 @@ class MusicChannelCleaner:
         return result
 
 
-    def clean_programs(self, df, program_name_column: str = 'Название программы'):
+    def clean_dataframe(self, df, program_name_column: str = 'Название программы'):
 
         # ЭТАП 1: Разбивка программ по категориям
         self.programs = self.divide_programs_by_categories(df)
