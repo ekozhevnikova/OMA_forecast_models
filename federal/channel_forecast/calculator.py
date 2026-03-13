@@ -5,6 +5,7 @@ from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
 from difflib import SequenceMatcher
 from OMA_tools.federal.channel_forecast.core.simple_models import *
+from OMA_tools.io_data.colors import *
 import traceback
 traceback.print_exc()
 
@@ -473,12 +474,22 @@ class TVScheduleProcessor:
     
 
 
-    def join_broadcasts(self, data, include_share: bool = True):
+    def join_broadcasts(self, data, type: str, include_share: bool = True):
         """
             Метод реализует объединение трансляций в рамках одного дня.
             Учитывает эфирные сутки (05:00-04:59).
             Объединяет смежные сегменты одной программы.
+
+            Args:
+                data: pd.DataFrame: датафрейм, для которого будем проводить схлопывание программ.
+                type: str: тип таблицы: либо VIMB, либо PALOMARS. Нужно для того, чтобы было легче ориентироваться в столбцах с оригинальными 
+                "Время начала" и "Время окончания" программ. 
+                    - Если type == vimb, то делается пометка "Время начала оригинальное vimb". Аналогично с "Время окончания".
+                    - Если type == palomars, то делается пометка "Время начала оригинальное palomars". Аналогично с "Время окончания".
         """
+        if type not in ['vimb', 'palomars']:
+            raise ValueError(f"Недопустимое значение типа таблицы type = {type}. Допустимые значения: 'vimb', 'palomars'")
+        
         if data.empty:
             columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
             if include_share:
@@ -486,6 +497,10 @@ class TVScheduleProcessor:
             return pd.DataFrame(columns = columns)
         
         df = data.copy()
+
+        # Создаем копии столбцов с оригинальными временами выхода и окончания программ
+        df[f'Время выхода оригинальное {type}'] = df['Время выхода']
+        df[f'Время окончания оригинальное {type}'] = df['Время окончания']
         
         df = self.adjust_end_time(df)
         
@@ -515,6 +530,13 @@ class TVScheduleProcessor:
         # Добавляем колонку с временем в минутах для сравнения
         df['start_minutes'] = df['Время выхода'].apply(time_to_minutes)
         df['end_minutes'] = df['Время окончания'].apply(time_to_minutes)
+
+
+        # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+        # Добавляем колонку с временем в минутах для сравнения
+        df['start_minutes_init'] = df[f'Время выхода оригинальное {type}'].apply(time_to_minutes)
+        df['end_minutes_init'] = df[f'Время окончания оригинальное {type}'].apply(time_to_minutes)
+        # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
         
         results = []
         
@@ -533,10 +555,17 @@ class TVScheduleProcessor:
             current_group = {
                 'Дата': program_data.iloc[0]['Дата'],
                 'Название программы': program_name,
+                f'Название программы {type}': program_data.iloc[0][f'Название программы {type}'],
                 'Время выхода': program_data.iloc[0]['Время выхода'],
                 'Время окончания': program_data.iloc[0]['Время окончания'],
                 'start_minutes': program_data.iloc[0]['start_minutes'],
                 'end_minutes': program_data.iloc[0]['end_minutes'],
+                # НОВЫЙ КУСОК
+                'start_minutes_init': program_data.iloc[0]['start_minutes_init'],
+                'end_minutes_init': program_data.iloc[0]['end_minutes_init'],
+                f'Время выхода оригинальное {type}': program_data.iloc[0][f'Время выхода оригинальное {type}'],
+                f'Время окончания оригинальное {type}': program_data.iloc[0][f'Время окончания оригинальное {type}'],
+                # КОНЕЦ НОВОГО КУСКА
             }
             
             if include_share:
@@ -547,14 +576,28 @@ class TVScheduleProcessor:
                 current_row = program_data.iloc[i]
                 next_start_minutes = current_row['start_minutes']
                 next_end_minutes = current_row['end_minutes']
+
+                # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+                next_start_minutes_init = current_row['start_minutes_init']
+                next_end_minutes_init = current_row['end_minutes_init']
+                # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
                 
                 # Проверка на смежность сегментов с учетом разницы в 1 минуту
                 time_gap = next_start_minutes - current_group['end_minutes']
+
+                # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+                time_gap_init = next_start_minutes_init - current_group['end_minutes_init']
+                # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
                 
                 # Ключевое изменение: Не объединяем через границу эфирных суток
                 # (кроме специального случая 04:59:59 → 05:00:00)
                 prev_end_time = current_group['Время окончания']
                 next_start_time = current_row['Время выхода']
+
+                # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+                prev_end_time_init = current_group[f'Время окончания оригинальное {type}']
+                next_start_time_init = current_row[f'Время выхода оригинальное {type}']
+                # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
                 
                 # Проверяем, не пересекаем ли мы границу эфирных суток
                 # (следующий сегмент начинается в новых эфирных сутках, а текущий заканчивается в старых)
@@ -562,6 +605,13 @@ class TVScheduleProcessor:
                     prev_end_time >= '00:00:00' and prev_end_time <= '04:59:59' and
                     next_start_time >= '05:00:00'
                 )
+
+                # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+                crosses_broadcast_day_init = (
+                    prev_end_time_init >= '00:00:00' and prev_end_time_init <= '04:59:59' and
+                    next_start_time_init >= '05:00:00'
+                )
+                # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
                 
                 # Условия объединения:
                 # 1. Нет разрыва (время окончания = время начала следующей) И не пересекаем границу
@@ -572,11 +622,28 @@ class TVScheduleProcessor:
                     (0 < time_gap <= 1 and not crosses_broadcast_day) or  # Разрыв не более 1 минуты и не пересекаем границу
                     (prev_end_time == '04:59:59' and next_start_time == '05:00:00')  # Допустимый переход через границу
                 )
+
+
+                # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+                is_adjacent_init = (
+                    (time_gap_init == 0 and not crosses_broadcast_day_init) or  # Нет разрыва и не пересекаем границу
+                    (0 < time_gap_init <= 1 and not crosses_broadcast_day_init) or  # Разрыв не более 1 минуты и не пересекаем границу
+                    (prev_end_time_init == '04:59:59' and next_start_time_init == '05:00:00')  # Допустимый переход через границу
+                )
+                # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
                 
-                if is_adjacent:
+
+                # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
+                if is_adjacent and is_adjacent_init:
                     # Объединяем с текущей группой
                     current_group['Время окончания'] = current_row['Время окончания']
                     current_group['end_minutes'] = next_end_minutes
+
+                    # ------------- новый кусок -------------
+                    current_group[f'Время окончания оригинальное {type}'] = current_row[f'Время окончания оригинальное {type}']
+                    current_group['end_minutes_init'] = next_end_minutes_init
+                    # ------------- конец нового куска -------------
+
                     if include_share:
                         current_group['shares'].append(current_row['Share'])
                 else:
@@ -584,8 +651,11 @@ class TVScheduleProcessor:
                     result_entry = {
                         'Дата': current_group['Дата'],
                         'Название программы': current_group['Название программы'],
+                        f'Название программы {type}': current_group[f'Название программы {type}'],
                         'Время выхода': current_group['Время выхода'],
                         'Время окончания': current_group['Время окончания'],
+                        f'Время выхода оригинальное {type}': current_group[f'Время выхода оригинальное {type}'],
+                        f'Время окончания оригинальное {type}': current_group[f'Время окончания оригинальное {type}']
                     }
                     
                     if include_share:
@@ -598,22 +668,35 @@ class TVScheduleProcessor:
                     current_group = {
                         'Дата': current_row['Дата'],
                         'Название программы': program_name,
+                        f'Название программы {type}': current_row[f'Название программы {type}'],
                         'Время выхода': current_row['Время выхода'],
                         'Время окончания': current_row['Время окончания'],
                         'start_minutes': next_start_minutes,
                         'end_minutes': next_end_minutes,
+                        'start_minutes_init': next_start_minutes_init,
+                        'end_minutes_init': next_end_minutes_init,
+                        f'Время выхода оригинальное {type}': current_row[f'Время выхода оригинальное {type}'],
+                        f'Время окончания оригинальное {type}': current_row[f'Время окончания оригинальное {type}']
                     }
                     
                     if include_share:
                         current_group['shares'] = [current_row['Share']]
-            
+
+                # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
+
+            # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
             # Сохраняем последнюю группу
             result_entry = {
                 'Дата': current_group['Дата'],
                 'Название программы': current_group['Название программы'],
+                f'Название программы {type}': current_group[f'Название программы {type}'],
                 'Время выхода': current_group['Время выхода'],
-                'Время окончания': current_group['Время окончания']
+                'Время окончания': current_group['Время окончания'],
+                f'Время выхода оригинальное {type}': current_group[f'Время выхода оригинальное {type}'],
+                f'Время окончания оригинальное {type}': current_group[f'Время окончания оригинальное {type}']
+
             }
+            # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
             
             if include_share:
                 result_entry['Share'] = sum(current_group['shares'])
@@ -623,7 +706,9 @@ class TVScheduleProcessor:
         
         # Формирование итогового DataFrame
         if not results:
-            columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
+            columns = [
+                'Дата', 'Название программы', f'Название программы {type}', 'Время выхода', 
+                'Время окончания', f'Время выхода оригинальное {type}', f'Время окончания оригинальное {type}']
             if include_share:
                 columns.append('Share')
             return pd.DataFrame(columns = columns)
@@ -631,24 +716,31 @@ class TVScheduleProcessor:
         result_df = pd.DataFrame(results)
         
         # Сортировка результатов
-        result_df['sort_key'] = result_df['Время выхода'].apply(broadcast_time_key)
+        #result_df['sort_key'] = result_df['Время выхода'].apply(broadcast_time_key)
+
+        result_df['sort_key'] = result_df[f'Время выхода оригинальное {type}'].apply(broadcast_time_key)
         result_df = result_df.sort_values('sort_key').drop('sort_key', axis = 1)
         
         # Выбор нужных колонок
-        columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
+        columns = [
+            'Дата', 'Название программы', f'Название программы {type}', 
+            'Время выхода', 'Время окончания', 
+            f'Время выхода оригинальное {type}', f'Время окончания оригинальное {type}'
+            ]
+        
         if include_share:
             columns.append('Share')
         
         return result_df[columns].reset_index(drop = True)
     
 
-    def find_matches(self, minutes: int):
+    def find_matches(self, minutes: int, date):
         """
             Метод для поиска совпадающих программ. 
         """
 
-        vimb_joined = self.join_broadcasts(self.vimb_init, include_share = False)
-        plmrs_joined = self.join_broadcasts(self.palomars_init)
+        vimb_joined = self.join_broadcasts(self.vimb_init, type = 'vimb', include_share = False)
+        plmrs_joined = self.join_broadcasts(self.palomars_init, type = 'palomars')
 
         # Исходная суммарная доля по дню
         share_init = plmrs_joined['Share'].sum()
@@ -699,8 +791,42 @@ class TVScheduleProcessor:
         result = merged.drop(columns = ['Время выхода _plmrs', 'Время окончания _plmrs', 
                             'Время выхода _vimb', 'Время окончания _vimb'])
 
-        result = result[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']].reset_index(drop = True)
+        result = result[
+            [
+                'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 
+                'Название программы vimb', 'Название программы palomars',
+                'Время выхода оригинальное vimb', 'Время окончания оригинальное vimb',
+                'Время выхода оригинальное palomars', 'Время окончания оригинальное palomars',
+             ]
+            ].reset_index(drop = True)
 
+        result = result[
+            [
+                'Дата', 'Название программы', 'Время выхода', 
+                'Время окончания', 'Share', 'Название программы palomars',
+                'Время выхода оригинальное palomars', 'Время окончания оригинальное palomars'
+                ]
+            ].reset_index(drop = True)
+
+        result.rename(columns = {
+            'Название программы palomars': 'Название программы init',
+            'Время выхода оригинальное palomars': 'Время выхода init',
+            'Время окончания оригинальное palomars': 'Время окончания init'
+            },
+            inplace = True)
+        
+        for i in range(len(result)):
+            start_time = result.iloc[i]['Время выхода']
+            stop_time = result.iloc[i]['Время окончания']
+
+            start_time_init = result.iloc[i]['Время выхода init']
+            stop_time_init = result.iloc[i]['Время окончания init']
+
+            if start_time == stop_time:
+                result.at[i, 'Время выхода'] = start_time_init
+                result.at[i, 'Время окончания'] = stop_time_init
+
+            
         # Считаем длительности программ
         result['Время выхода_dt'] = pd.to_datetime(result['Время выхода'])
         result['Время окончания_dt'] = pd.to_datetime(result['Время окончания'])
@@ -708,7 +834,7 @@ class TVScheduleProcessor:
         # Автоматически корректируем переход через полночь
         result['Время окончания_dt'] = np.where(
             result['Время окончания_dt'] < result['Время выхода_dt'],
-            result['Время окончания_dt'] + pd.Timedelta(days=1),
+            result['Время окончания_dt'] + pd.Timedelta(days = 1),
             result['Время окончания_dt']
         )
 
@@ -721,16 +847,21 @@ class TVScheduleProcessor:
             lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
         )
 
+        result = self.adjust_end_time(result)
+    
         result = result[
             [
                 'Дата', 'Название программы', 'Время выхода', 
-                'Время окончания', 'Продолжительность', 'Share']
-            ].reset_index(drop = True)
+                'Время окончания', 'Продолжительность', 
+                'Share', 'Название программы init',
+                'Время выхода init', 'Время окончания init'
+            ]
+        ]
 
         share_end = result['Share'].sum()
 
         if share_init != share_end:
-            print('Нужен дополнительный анализ!')
+            print(Color.BOLD + Color.RED + f'‼️ Нужен дополнительный анализ! Доля для {date} после схлопывания оказалась неверной.' + Color.END)
         
         return result
 

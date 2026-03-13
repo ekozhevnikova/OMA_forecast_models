@@ -246,154 +246,6 @@ class BaseParser:
                 worksheet.freeze_panes(1, 0)
 
 
-class ShareParser(BaseParser):
-    """
-        Класс для предобработки и постобработки файла с фактическими показателями долей для всех каналов федерального ТВ(!!!)
-    """
-    def __init__(self, filepath: str, channels_id_file: str):
-        self.filepath = filepath
-        self.channels_id_file = channels_id_file
-
-        super().__init__(filepath)
-
-        # Вызываем ensure_file_exists с нужными колонками
-        self._ensure_file_exists(
-            [
-                'Дата', 'ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'НТВ', 'РЕН ТВ', 
-                'ПЯТЫЙ КАНАЛ', 'ТНТ', 'СТС', 'ДОМАШНИЙ', 'ТВ-3', 'ПЯТНИЦА', 
-                'РОССИЯ 24', 'ТВ ЦЕНТР', 'КАРУСЕЛЬ', 'ЗВЕЗДА', 'МУЗ ТВ', 
-                'СУББОТА', 'СТС LOVE', 'ТНТ 4', 'МАТЧ ТВ', 'ЧЕ', 'Ю',
-                'СОЛНЦЕ', '2X2', 'МИР', 'СПАС'
-
-           ])
-
-
-    def share_by_days(
-        self, date_filter, company_filter, 
-        statistics = ['Share'], basedemo_filter = None,
-        time_filter = TIME_FILTER,
-        options = OPTIONS,
-        weekday_filter = WEEKDAY_FILTER, daytype_filter = DAYTYPE_FILTER, 
-        targetdemo_filter = TARGETDEMO_FILTER, location_filter = LOCATION_FILTER,
-        slices = ['researchDate', 'tvCompanyName'],
-        sortings = {'researchDate': 'ASC', 'tvCompanyName': 'ASC'},
-        targets = {
-            'ВСЕ 14-59':'age >= 14 AND age <= 59',
-            'ВСЕ 18+':'age >= 18',
-            'ВСЕ 14-44':'age >= 14 AND age <= 44',
-            'ВСЕ 25-59':'age >= 25 AND age <= 59',
-            'ВСЕ 10-45':'age >= 10 AND age <= 45',
-            'ВСЕ 11-34':'age >= 11 AND age <= 34',
-            'ВСЕ 22-55':'age >= 22 AND age <= 55',
-            'Ж 25-59':'age >= 25 AND age <= 59 AND sex = 2',
-            'ВСЕ 25-49':'age >= 25 AND age <= 49',
-            'Ж 14-44':'age >= 14 AND age <= 44 AND sex = 2',
-            'ВСЕ 4-45':'age >= 4 AND age <= 45',
-            'М 14-59':'age >= 14 AND age <= 59 AND sex = 1',
-            'ВСЕ 18-44':'age >= 18 AND age <= 44',
-            'Ж 18-45':'age >= 18 AND age <= 45 AND sex = 2'
-        },
-
-    ):
-        # Формируем задачи в формате json
-        tasks = BaseDataService._build_timeband_common_params(
-                                                        date_filter = date_filter, company_filter = company_filter, 
-                                                        basedemo_filter = basedemo_filter, regions_id = None,          # работаем в Федеральной Базе
-                                                        targets = targets, time_filter = time_filter, 
-                                                        statistics = statistics, slices = slices, 
-                                                        sortings = sortings, options = options,
-                                                        location_filter = location_filter, weekday_filter = weekday_filter,
-                                                        daytype_filter = daytype_filter, targetdemo_filter = targetdemo_filter,
-                                                        add_city_to_basedemo_from_region = False,   # работаем в Федеральной Базе
-                                                        add_city_to_targetdemo_from_region = False  # работаем в Федеральной Базе
-                                                    )
-        # Отправляем задачи на расчет
-        df = BaseDataService._execute_tasks(tasks)
-
-        df.rename(columns = {'tvCompanyName': 'Channel'}, inplace = True)
-        df['Channel'] = df['Channel'].apply(lambda x: x.removesuffix(' (СЕТЕВОЕ ВЕЩАНИЕ)'))
-        df = df.drop(['prj_name'], axis = 1)
-        
-        #res = pd.merge(self.channels, df, on = 'Channel', how = 'inner')
-        res_data = pd.pivot_table(df, values = ['Share'],
-                                    index = ['researchDate'], 
-                                    columns = ['Channel'])
-        res_data = res_data.rename_axis(None, axis = 0)
-        res_data.columns = res_data.columns.droplevel(0)
-        res_data.reset_index(inplace = True)
-        res_data = res_data.rename(columns = {'index': 'Дата', 'Channel': ' '})
-        res_data['Дата'] = res_data['Дата'].apply(lambda x: pd.to_datetime(x))
-
-        columns = [
-                    'Дата', 'ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'НТВ', 'РЕН ТВ', 
-                    'ПЯТЫЙ КАНАЛ', 'ТНТ', 'СТС', 'ДОМАШНИЙ', 'ТВ-3', 'ПЯТНИЦА', 
-                    'РОССИЯ 24', 'ТВ ЦЕНТР', 'КАРУСЕЛЬ', 'ЗВЕЗДА', 'МУЗ ТВ', 
-                    'СУББОТА', 'СТС LOVE', 'ТНТ 4', 'МАТЧ ТВ', 'ЧЕ', 'Ю',
-                    'СОЛНЦЕ', '2X2', 'МИР', 'СПАС'
-
-            ]
-        data_final = res_data[columns]
-        return data_final
-    
-
-    def make_style_of_share_table(self, df: pd.DataFrame, sheet_name: str):
-        """
-            Функция для генерации внешнего вида таблицы с сеткой Mediascope.
-        """
-        channels = [
-            'Дата',
-            'ПЕРВЫЙ КАНАЛ', 'РОССИЯ 1', 'НТВ', 'РЕН ТВ', 'ПЯТЫЙ КАНАЛ',
-            'ТНТ', 'СТС', 'ДОМАШНИЙ', 'ТВ-3', 'ПЯТНИЦА', 'РОССИЯ 24',
-            'ТВ ЦЕНТР', 'КАРУСЕЛЬ', 'ЗВЕЗДА', 'МУЗ ТВ', 'СУББОТА',
-            'СТС LOVE', 'ТНТ 4', 'МАТЧ ТВ', 'ЧЕ', 'Ю', 'СОЛНЦЕ',
-            '2X2', 'МИР', 'СПАС'
-        ]
-
-        column_configs = [
-            {
-                'header': channel,
-                'width': 12.0 if channel == 'Дата' else 16.0,
-                'format': 'date' if channel == 'Дата' else 'general'
-            }
-            for channel in channels
-        ]
-        
-        self.make_style_of_table(
-            df = df,
-            sheet_name = sheet_name,
-            column_configs = column_configs,
-            date_columns = ['Дата']
-        )
-
-
-    def share_pipeline(self, date_filter):
-        """
-            Пайплайн для выгрузки и обновления файла с показателями Долей по дням
-        """
-        # 1. Чтение ID каналов и списка каналов
-        data = pd.read_excel(self.channels_id_file)
-        data_ = np.array(data['ID']).tolist()
-        self.data_id = list(map(lambda x: str(x), data_))
-
-        # 2. Задаем ID телекомпаний для запуска расчета
-        company_filter = f'tvCompanyId IN ({", ".join(self.data_id)})'
-
-        # 3. Выгрузка данных из БД
-        new_data = self.share_by_days(date_filter, company_filter)
-
-        # 4. Обновление таблицы
-        old_data = pd.read_excel(self.filepath, sheet_name = 'History')
-        old_data['Дата'] = pd.to_datetime(old_data['Дата'])
-
-        updated = Table.update_table(old_data, new_data, 'Дата')
-        
-        # 5. Приведение даты к строковому формату
-        updated['Дата'] = updated['Дата'].dt.strftime('%Y-%m-%d')
-
-        # 6. Обновление файла с фактическими данными
-        self.make_style_of_share_table(updated, 'History')
-
-
 class AuedienceParser(BaseParser):
     """
         Класс для предобработки и постобработки файлов с Total TV Auedience для ОДНОГО канала
@@ -2018,7 +1870,14 @@ class ProgramMatcher(BaseParser):
         return mapping
 
 
-    def match_vimb_with_palomars_grids(self, minutes = 10):
+    def match_vimb_with_palomars_grids(self, cities_path: str, minutes: int = 10):
+        """
+            Смэтчивает сетки VIMB и Palomars между собой.
+            Args:
+                cities_path: str: словарь из городов, где ключ - страна, значение - список городов, присущих этой стране.
+                minutes: int: количество минут, до которых округляем столбцы "Время начала", "Время окончания" программы. По дефолту равно 10.
+            Returns:
+        """
 
         vimb_full = self.vimb_grid.copy()
         plmrs = self.palomars_grid.copy()
@@ -2027,6 +1886,8 @@ class ProgramMatcher(BaseParser):
         dates_unique = vimb_full['Дата'].unique()
 
         result_webs = {}
+        not_matched_programs = {}   # список программ, которые встретились в VIMB, но не встретились в Palomars
+
         for target_date in dates_unique:
 
             # Отбор конкретной даты в ВИМБ
@@ -2046,8 +1907,6 @@ class ProgramMatcher(BaseParser):
                 '2X2', 'ТНТ4', 'ЧЕ', 'МИР', 'Ю', 'ЗВЕЗДА', 
                 'ТВЦ', 'СПАС']:
 
-                #print(f'Для канала {self.channel} использую общий очиститель "GeneralTextCleaner"')
-
                 # 1. Программы в VIMB
                 cleaner = GeneralTextCleaner(self.channel)
                 vimb_prgms, vimb_df = cleaner.clean_dataframe(vimb)
@@ -2057,31 +1916,34 @@ class ProgramMatcher(BaseParser):
             
             elif self.channel == 'МатчТВ':
                 
-                #print(f'Для канала {self.channel} использую спортивный очиститель "SportChannelCleaner"')
+                # Загрузка справочника с городами
+                cities_loaded = Dict_Operations.load_pkl_file(cities_path)
+                
                 # 1. Программы в VIMB
                 sport_cleaner = SportChannelCleaner(self.channel)
-                vimb_prgms, vimb_df = sport_cleaner.clean_programs(vimb, 'vimb')
+                vimb_prgms, vimb_df = sport_cleaner.clean_dataframe(vimb, 'vimb', cities_loaded)
 
                 # 2. Программы в PALOMARS
-                palomars_prgms, palomars_df = sport_cleaner.clean_programs(palomars, 'palomars')
+                palomars_prgms, palomars_df = sport_cleaner.clean_dataframe(palomars, 'palomars', cities_loaded)
             
             elif self.channel == 'МузТВ':
                 
-                #print(f'Для канала {self.channel} использую музыкальный очиститель "MusicChannelCleaner"')
                 # 1. Программы в VIMB
                 music_cleaner = MusicChannelCleaner(self.channel)
-                vimb_prgms, vimb_df = music_cleaner.clean_programs(vimb)
+                vimb_prgms, vimb_df = music_cleaner.clean_dataframe(vimb)
 
                 # 2. Программы в PALOMARS
-                palomars_prgms, palomars_df = music_cleaner.clean_programs(palomars)
+                palomars_prgms, palomars_df = music_cleaner.clean_dataframe(palomars)
 
             ######################## КОНЕЦ НОВОГО КУСКА ########################
-
             
             # Делаем поиск по схожим программам
             similar = CosineSimilarity(palomars_prgms, vimb_prgms, palomars_df, vimb_df)
             result, not_matched, comparison = similar.comparison(self.channel_vocabulary, min_similarity = 0.5, use_vocabulary = True)
-            #features_dict = similar.generate_similar_features(result, False)
+
+            # Добавляем ненайденные программы в список с ненайденными
+            if len(not_matched) != 0:
+                not_matched_programs[target_date] = not_matched
             
             # Заменяем названия передач, если какие-то не совпадают
             df = result[result['similarity'].round(5) != 1.00000]
@@ -2097,10 +1959,11 @@ class ProgramMatcher(BaseParser):
             palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)
             
             # Оставляем только нужные столбцы для анализа
-            Pal = palomars_df[['Дата', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted']]
+            Pal = palomars_df[['Дата', 'Название программы', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted']]
             
             Pal.rename(columns = 
                     {
+                        'Название программы': 'Название программы palomars',
                         'Базовое_название': 'Название программы', 
                         'Share_weighted': 'Share'
                     }, 
@@ -2108,13 +1971,16 @@ class ProgramMatcher(BaseParser):
             Pal['Название программы'] = Pal['Название программы'].str.lower()
 
             
-            VIMB = vimb_df[['Дата', 'program_name', 'Время выхода', 'Время окончания']]
-            VIMB.rename(columns = {'program_name': 'Название программы'}, inplace = True)
+            VIMB = vimb_df[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
+            VIMB.rename(columns = {
+                'Название программы': 'Название программы vimb',
+                'program_name': 'Название программы'
+                }, inplace = True)
 
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
 
-            result = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes)
+            result = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
 
             result_webs[target_date] = result
             
@@ -2142,7 +2008,7 @@ class ProgramMatcher(BaseParser):
 
         general_result['Share_weighted'] = general_result['Share_weighted'].round(6)
         
-        return general_result
+        return general_result, not_matched_programs
     
 
     def update_file(self, web_new):
