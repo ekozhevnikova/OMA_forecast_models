@@ -835,7 +835,6 @@ class Federal_Processing:
         comments_cleaned['Порог'] = comments_cleaned['Порог'].astype(int)
         comments_cleaned.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 
         comments_cleaned = comments_cleaned[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
-        
 
         res = []
 
@@ -891,9 +890,10 @@ class Federal_Processing:
             current_end = 0
             hist_start = 0
             hist_end = 0
+
             #Удаляем дублирующиеся комментарии за период. Оставляем нужные.
             for i in range(len(res_updated)):
-
+                
                 channel = res_updated.iloc[i]['Канал']
                 month = res_updated.iloc[i]['Месяц']
                 comments_per_week = res_updated.iloc[i]['Комментарий']
@@ -901,14 +901,18 @@ class Federal_Processing:
                 if not pd.isna(comments_per_week):
                     comment_per_week_splitted = comments_per_week.split('. ')
 
+
                     # Если комментарий не разделяется точками с пробелами, оставляем как есть
-                    if len(comment_per_week_splitted) <= 1 and '. ' not in comments_per_week:
+                    if len(comment_per_week_splitted) <= 1 and '. ' not in comments_per_week and 'доли' not in comments_per_week:
                         # Оставляем комментарий без изменений, если он не разделен точками
                         continue
 
                     filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
+
+
                     if len(filtered_df) != 0:
                         comments = list(filtered_df['Комментарий'])
+
 
                         def check_comments():
                             return all(map(lambda x: x is not None if isinstance(x, str) else not np.isnan(x), comments))
@@ -947,6 +951,9 @@ class Federal_Processing:
                                         # Приводим к типу данных float
                                         current_start = float(start_str)
                                         current_end = float(end_str)
+
+                                        #print('Последняя доля')
+                                        #print(current_start, current_end)
                                         
                                         #######################################################################
                                         
@@ -960,6 +967,9 @@ class Federal_Processing:
                                         # Приводим к типу данных float
                                         hist_start = float(start_hist_str)
                                         hist_end = float(end_hist_str)
+
+                                        #print('Историческая доля')
+                                        #print(hist_start, hist_end)
                         
                                         if 'Снижение' in current_part and 'Снижение' in hist_part:
                                             # Проверяем значения долей
@@ -970,6 +980,8 @@ class Federal_Processing:
                                             # Проверяем значения долей
                                             if current_start == hist_start:
                                                 new_comment = f'Рост доли с {hist_end} до {current_end}'
+                                        
+                                        #print(new_comment)
                                     
                                     # Если только в последних комментариях встретилось сообщение об изменении доли
                                     elif 'доли' in current_part:
@@ -985,11 +997,17 @@ class Federal_Processing:
                                         current_start = float(start_str)
                                         current_end = float(end_str)
 
+                                        #print('Свежая доля')
+                                        #print(current_start, current_end)
+
                                         if 'Снижение' in current_part:
                                             new_comment = f'Снижение доли с {current_start} до {current_end}'
                                         
                                         if 'Рост' in current_part:
                                             new_comment = f'Рост доли с {current_start} до {current_end}'
+                                        
+
+                                        #print(new_comment)
                                     
                             
                             # 2. Ищем все комментарии о долях. Заменяем комментарии в result_list

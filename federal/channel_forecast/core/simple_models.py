@@ -129,8 +129,8 @@ class PrimitiveModel:
         return mask
 
 
-    @staticmethod
     def find_shares_in_hierarchy(
+                        self,
                         slot, 
                         day, 
                         day_type, 
@@ -139,7 +139,8 @@ class PrimitiveModel:
                         source_priority = ['last_4_weeks', 'current_year', 'history']
                         ):
         """
-            Поиск данных по иерархии с возможностью настройки порядка источников
+            Поиск данных по иерархии с возвратом детальной информации об источниках
+            Возвращает: (shares_data, source_info, detailed_dates_info)
         """
         for level_name in search_hierarchy.keys():
             level_config = search_hierarchy[level_name]
@@ -149,13 +150,29 @@ class PrimitiveModel:
                     params = level_config[source_name]
                     data_source = data_sources[source_name]
                     
+                    if len(data_source) == 0:
+                        continue
+                    
                     mask = PrimitiveModel.create_mask(data_source, params, slot, day, day_type)
-                    shares_data = data_source[mask]['Share']
+                    filtered_data = data_source[mask]
+                    shares_data = filtered_data['Share']
+                    shares_data = shares_data[shares_data != '']
                     
                     if len(shares_data) > 0:
-                        return shares_data
+                        # Собираем детальную информацию о каждой записи
+                        detailed_info = []
+                        for idx, row in filtered_data.iterrows():
+                            if row['Share'] != '':
+                                detailed_info.append({
+                                    'date': row['Дата'],
+                                    'share': row['Share'],
+                                    'day_of_week': row['День недели'],
+                                    'time_slot': row['Время выхода']
+                                })
+                        
+                        return shares_data, (level_name, source_name, params, len(shares_data)), detailed_info
         
-        return pd.Series(dtype = float)
+        return pd.Series(dtype=float), ('not_found', None, None, 0), []
 
 
     @staticmethod
@@ -226,9 +243,6 @@ class PrimitiveModel:
             
         return share_mean
     
-    # Округление слотов
-    #for i in range(len(time_slot_columns)):
-    #    df[time_slot_columns[i]] = df[time_slot_columns[i]].apply(PrimitiveModel.round_time_to_str_advanced)
 
     def forecast_big_programs(self, big_programs_dict: dict, russian_holidays: str, search_hierarchy) -> pd.DataFrame:
         """
@@ -247,6 +261,12 @@ class PrimitiveModel:
         # Список для хранения прогнозов
         forecast_big = []
 
+        # Список для отслеживания источников
+        source_tracking = []
+
+        # Список для детальной информации о датах
+        detailed_dates = []
+
         for big_program in list(big_programs_dict.keys()):
             df = big_programs_dict[big_program]
 
@@ -257,11 +277,11 @@ class PrimitiveModel:
 
             tmp_df = df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'День недели', 'Тип дня', 'Share']]
             
-            # 2. Отбор исторических данных, начиная с 2021 г
+            # 2. Отбор исторических данных, начиная с 2023 г
             historical_data = tmp_df[tmp_df['Дата'] < self.start_date].reset_index(drop = True).copy()
             
             # 3. Отбор только текущего года
-            current_year = tmp_df[tmp_df['Дата'] < self.start_of_current_year].reset_index(drop = True).copy()
+            current_year = tmp_df[(tmp_df['Дата'] >= self.start_of_current_year) & (tmp_df['Дата'] < self.start_date)].reset_index(drop = True).copy()
             
             # 4. Отбор последних 4х недель, исходя из максимальной даты в фактических данных
             #start_date_ = pd.to_datetime(start_date)
@@ -292,16 +312,62 @@ class PrimitiveModel:
                         if not mask.any():
                             continue  # пропускаем несуществующие комбинации
                         
-                        # Ищем данные по иерархии
-                        shares_data = PrimitiveModel.find_shares_in_hierarchy(slot, day, day_type, search_hierarchy, data_sources)
-                        #print(shares_data)
+                        # Ищем данные с детальной информацией
+                        shares_data, source_info, detailed_info = self.find_shares_in_hierarchy(
+                            slot, day, day_type, search_hierarchy, data_sources
+                        )
+                        
+                        level_name, source_name, params, count = source_info
+                        
                         share_mean = PrimitiveModel.get_clean_mean(shares_data)
+                        
+                        # Сохраняем агрегированную информацию
+                        dates_for_mask = future_data.loc[mask, 'Дата'].tolist()
+                        for date in dates_for_mask:
+                            source_tracking.append({
+                                'program': big_program,
+                                'forecast_date': date,
+                                'slot': slot,
+                                'day_of_week': day,
+                                'day_type': day_type,
+                                'source_level': level_name,
+                                'source_name': source_name,
+                                'params_used': str(params) if params else '[]',
+                                'data_points_count': count,
+                                'calculated_share': round(share_mean, 3)
+                            })
+                        
+                        # Сохраняем детальную информацию о каждой использованной дате
+                        for detail in detailed_info:
+                            for forecast_date in dates_for_mask:
+                                detailed_dates.append({
+                                    'program': big_program,
+                                    'forecast_date': forecast_date,
+                                    'source_date': detail['date'],
+                                    'source_share': detail['share'],
+                                    'source_day_of_week': detail['day_of_week'],
+                                    'source_time_slot': detail['time_slot'],
+                                    'slot': slot,
+                                    'day_of_week': day,
+                                    'day_type': day_type,
+                                    'source_level': level_name,
+                                    'source_name': source_name
+                                })
                         
                         # Заполняем Share для всех строк с этой комбинацией
                         future_data.loc[mask, 'Share'] = share_mean
             forecast_big.append(future_data)
+
+        # Объединяем все прогнозы
+        if forecast_big:
+            final_forecast = pd.concat(forecast_big).reset_index(drop = True)
+        else:
+            final_forecast = pd.DataFrame()
+        
+        source_tracking_df = pd.DataFrame(source_tracking) if source_tracking else pd.DataFrame()
+        detailed_dates_df = pd.DataFrame(detailed_dates) if detailed_dates else pd.DataFrame()
             
-        return pd.concat(forecast_big).reset_index(drop = True)
+        return final_forecast, source_tracking_df, detailed_dates_df
     
 
     def forecast_small_programs(self, small_programs_dict: dict, russian_holidays: str) -> pd.DataFrame:

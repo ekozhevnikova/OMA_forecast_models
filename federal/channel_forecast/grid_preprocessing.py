@@ -639,15 +639,6 @@ class MediascopeParser(BaseParser):
                     'researchWeekDay': 'День недели'}, inplace = True)
                 
 
-                # Удаляем 'Сезон N/A / ' из столбца "Описание программы"
-                #df['Описание программы'] = df['Описание программы'].str.replace('Сезон N/A / ', '', regex = False)
-                #df['Описание программы'] = df['Описание программы'].str.replace('Серия N/A / ', '', regex = False)
-
-                # Удаляем 'Документальное кино Леонида Млечина' из столбца "Название программы"
-                # До 2025.12.31 в районе 02:10 вместо документого фильма стояла программа 'Документальное кино Леонида Млечина'.
-                # Если появится какая-то другая программа, то надо будет настроить удаление аналогичным образом
-                #df['Название программы'] = df['Название программы'].str.replace('Документальное кино Леонида Млечина', '', regex = False)
-
                 # Схлопываем столбцы с проверкой на пустые значения
                 df['Название программы'] = np.where(
                     (df['Описание программы'].notna()) & (df['Описание программы'] != ''),
@@ -1234,20 +1225,6 @@ class VIMBGridProcessor(BaseParser):
         elif self.channel_name == 'ТВЦ':
             VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
 
-            #times_to_keep = ['02:00:00', '02:05:00', '02:10:00', '02:40:00', '02:45:00']
-            ## Создаем условие для даты <= 2025-01-01
-            #date_mask = VIMB['Дата'] < '2025-01-01'
-#
-            ## Обновляем с учетом всех условий
-            #VIMB.loc[
-            #    date_mask & 
-            #    VIMB['Время выхода'].isin(times_to_keep) & 
-            #    VIMB['Название программы'].str.contains('док.фильм/сериал', case=False, na=False),
-            #    'Название программы'
-            #] = 'Документальное кино Леонида Млечина'
-    
-        
-
         return VIMB
 
 
@@ -1366,7 +1343,12 @@ class VIMBGridProcessor(BaseParser):
         # Удаляем временные колонки
         vimb = vimb.drop(['time_start_dt', 'time_end_dt'], axis = 1)
         
-        df = df[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели', 'original_index']]
+        df = df[
+            [
+                'Дата', 'Время выхода', 'Время окончания', 
+                'Прод-ть', 'Название программы', 'День недели', 'original_index'
+             ]
+        ]
     
         weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
@@ -1956,10 +1938,11 @@ class ProgramMatcher(BaseParser):
             
             # Находим базовые названия программ. Производим замену
             base_names = ProgramMatcher.find_common_base_names(palomars_df['program_name'].tolist())
+
             palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)
             
             # Оставляем только нужные столбцы для анализа
-            Pal = palomars_df[['Дата', 'Название программы', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted']]
+            Pal = palomars_df[['Дата', 'Название программы', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted', 'Жанр']]
             
             Pal.rename(columns = 
                     {
@@ -1980,9 +1963,129 @@ class ProgramMatcher(BaseParser):
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
 
-            result = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
+            # ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
+            # Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
+            if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
+                print(Color.BOLD + Color.VIOLET + f'Делаю предобработку "серии мультфильмов" для канала {self.channel}' + Color.END)
 
-            result_webs[target_date] = result
+                pr = TVScheduleProcessor(self.channel, VIMB_init, Pal_init)
+                # Схлопываем программы VIMB, чтобы более наглядно увидеть, где именно была "серия мультфильмов"
+                vimb_joined = pr.join_broadcasts(VIMB_init, 'vimb', include_share = False)
+
+                # Отбираем только те слоты, в которых фигурирует название 'серия мультфильмов'
+                cartoons_series = vimb_joined[vimb_joined['Название программы'] == 'серия мультфильмов'].reset_index(drop = True)
+
+                # Переводим время в Palomars в datetime для удобной фильтрации
+                Pal_init['time_start_dt'] = pd.to_datetime(Pal_init['Время выхода'], format = '%H:%M:%S')
+                Pal_init['time_end_dt'] = pd.to_datetime(Pal_init['Время окончания'], format = '%H:%M:%S')
+
+                # Коррекция перехода через полночь
+                mask_night = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
+                Pal_init.loc[mask_night, 'time_end_dt'] = Pal_init.loc[mask_night, 'time_end_dt'] + timedelta(days = 1)
+
+                # Создаем столбец с флагом. Если во встретившемся слоте Palomars в таблице VIMB в это время была "серия мультфильмов", то
+                # мы в новый столбец записываем "серия мультфильмов"
+                Pal_init['cartoon_series_flag'] = ''
+
+                for i in range(len(cartoons_series)):
+                    # Берем конкретную строку
+                    row = cartoons_series.iloc[i]
+                    
+                    # Преобразуем время
+                    start_time = pd.to_datetime(row['Время выхода'], format='%H:%M:%S')
+                    end_time = pd.to_datetime(row['Время окончания'], format='%H:%M:%S')
+                    
+                    # Обработка перехода через полночь для целевого интервала
+                    if end_time < start_time:
+                        end_time = end_time + timedelta(days = 1)
+                    
+                    # Интервал с запасом.
+                    # Не всегда "Время начала" в Palomars совпадает с "Время начала" в VIMB. Даём небольшой люфт.
+                    start_threshold = start_time - timedelta(minutes = 5)
+                    end_threshold = end_time + timedelta(minutes = 5)
+
+                    # Создаем копии для корректировки перехода через полночь в Pal_init
+                    Pal_init['time_start_temp'] = Pal_init['time_start_dt']
+                    Pal_init['time_end_temp'] = Pal_init['time_end_dt']
+                    
+                    # Корректируем время окончания для программ, идущих через полночь
+                    night_mask = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
+                    Pal_init.loc[night_mask, 'time_end_temp'] = Pal_init.loc[night_mask, 'time_end_dt'] + timedelta(days = 1)
+
+                    ################################################################################
+                    # Отбираем строки в интервале
+                    mask = (Pal_init['time_start_temp'] >= start_threshold) & \
+                        (Pal_init['time_end_temp'] <= end_threshold)
+                    result_indices = Pal_init[mask].index
+                    
+                    for idx in result_indices:
+                        pr_name = Pal_init.loc[idx, 'Название программы']
+                        start_time_pr = Pal_init.loc[idx, 'time_start_dt']
+                        end_time_pr = Pal_init.loc[idx, 'time_end_dt']
+                        
+                        # Корректировка для проверяемой программы
+                        if end_time_pr < start_time_pr:
+                            end_time_pr_check = end_time_pr + timedelta(days=1)
+                        else:
+                            end_time_pr_check = end_time_pr
+                        
+                        # Проверяем условие
+                        #condition = (start_time <= start_time_pr <= end_time) and (start_time <= end_time_pr_check <= end_time)
+                        #condition = (start_time_pr <= end_time) and (end_time_pr_check >= start_time)
+                        condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
+                        
+                        if condition:
+                            Pal_init.loc[idx, 'cartoon_series_flag'] = 'серия мультфильмов'
+                    
+                # Удаляем временные столбцы
+                Pal_init = Pal_init.drop(['time_start_temp', 'time_end_temp'], axis = 1)
+
+                # Производим замену названий. Если в столбце "cartoon_series_flag" фигурирует название "серия мультфильмов", то в столбце
+                # "Название программы" заменяем значение на "серия мультфильмов".
+                Pal_init.loc[Pal_init['cartoon_series_flag'].notna() & \
+                            (Pal_init['cartoon_series_flag'] != ''), 'Название программы'] = 'серия мультфильмов'
+
+                columns_to_remain = [
+                    'Дата', 'Название программы palomars', 'Название программы', 
+                    'Время выхода', 'Время окончания', 'Share', 'Жанр'
+                ]
+
+                # Оставляем только нужные столбцы для дальнейшего анализа
+                Pal_init = Pal_init[columns_to_remain]
+            # ========================================== КОНЕЦ НОВОГО КУСКА ==========================================
+
+            result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
+            
+            # Считаем длительности программ
+            result_df['Время выхода_dt'] = pd.to_datetime(result_df['Время выхода'])
+            result_df['Время окончания_dt'] = pd.to_datetime(result_df['Время окончания'])
+    
+            # Автоматически корректируем переход через полночь
+            result_df['Время окончания_dt'] = np.where(
+                result_df['Время окончания_dt'] < result_df['Время выхода_dt'],
+                result_df['Время окончания_dt'] + pd.Timedelta(days = 1),
+                result_df['Время окончания_dt']
+            )
+    
+            result_df['Продолжительность'] = (
+                pd.to_datetime(result_df['Время окончания_dt']) - pd.to_datetime(result_df['Время выхода_dt'])
+            ).dt.total_seconds()
+    
+            # Форматирование
+            result_df['Продолжительность'] = result_df['Продолжительность'].apply(
+                lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
+            )
+    
+            result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).adjust_end_time(result_df)
+
+            result_df = result_df[
+                [
+                    'Дата', 'Название программы', 'Время выхода', 'Время окончания',
+                    'Продолжительность', 'Share', 'Название программы init', 
+                    'Время выхода init', 'Время окончания init', 'Жанр'
+                    ]
+            ]
+            result_webs[target_date] = result_df
             
         webs_converted = pd.concat(result_webs.values(), ignore_index = True)
 
@@ -2101,8 +2204,12 @@ class ProgramMatcher(BaseParser):
             {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
             {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
             {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
-            #{'header': 'Продолжительность', 'width': 17.2, 'format': 'general'},
-            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'}
+            {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
+            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+            {'header': 'Название программы init', 'width': 72.0, 'format': 'general'},
+            {'header': 'Время выхода init', 'width': 14.0, 'format': 'general'},
+            {'header': 'Время окончания init', 'width': 14.2, 'format': 'general'},
+            {'header': 'Жанр', 'width': 40.0, 'format': 'general'}
         ]
         
         self.make_style_of_table(

@@ -93,7 +93,7 @@ class GeneralTextCleaner:
 
         # Базовые специальные названия
         self.BASE_SPECIAL_NAMES = [
-                'художественный фильм', 'документальный фильм', 'документальный сериал', 
+                'художественный фильм', 'документальный фильм', 'документальный сериал', 'серия мультфильмов',
                 'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'мультфильм', 
                 'мультфильмы', 'юмористический концерт', 'короткометражные х фильмы', 'мультсериал', 
                 'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
@@ -170,7 +170,7 @@ class GeneralTextCleaner:
         self.STOP_PATTERNS_CHANNELS = {
             'ТВЦ': [r'\bконцерт\b', r'\bсезон\b'],
             'ЗВЕЗДА': [r'\bцикл\b' ],
-            'МИР': [r'\bсерия\b', r'\bсерии\b', r'\bч\.?\s*'],
+            'МИР': [r'\bсерия\b', r'\bсерии\b', r'\bч\.?(?![а-я])\s*'],
             
             'СПАС': [r'\bцикл\b', r'\bкорреспондент\b']
         }
@@ -229,9 +229,9 @@ class GeneralTextCleaner:
             # Можно добавить дополнительные проверки
             # Например, проверять наличие слова "мультфильм" в тексте
             if 'мультфильм' in result or 'мультсериал' in result:
-                return 'мультфильмы'
+                return 'серия мультфильмов'
             # Или просто возвращать при 2+ мультфильмах
-            return 'мультфильмы'
+            return 'серия мультфильмов'
 
 
         # ========================== ПРИНУДИТЕЛЬНАЯ ЗАМЕНА СЛОВА ДЛЯ КАНАЛА ТНТ4 ==========================
@@ -275,7 +275,7 @@ class GeneralTextCleaner:
         
         result = re.sub(pattern_brackets, ' ', result, flags=re.IGNORECASE)
         result = re.sub(pattern_plus_before, ' ', result, flags=re.IGNORECASE)
-        result = re.sub(pattern_plus_before, ' ', result, flags=re.IGNORECASE)
+        result = re.sub(pattern_plus_after, ' ', result, flags=re.IGNORECASE)
         #result = re.sub(pattern_years, ' ', result, flags=re.IGNORECASE)
         result = re.sub(pattern_plus_end, ' ', result, flags=re.IGNORECASE)
         result = re.sub(r'\s+', ' ', result).strip()
@@ -543,7 +543,7 @@ class SportChannelCleaner:
                 'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 
                 'анимационный сериал фильм', 'анимационный фильм сериал', 'документальный цикл',
                 'документальный цикл', 'мультфильм', 'мультфильмы', 'юмористический концерт', 
-                'короткометражные х фильмы', 'мультсериал', 
+                'короткометражные х фильмы', 'мультсериал', 'серия мультфильмов',
                 'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
                 'сериал фильм', 'сериал х ф', 'х фильмы'
         ]
@@ -689,11 +689,12 @@ class SportChannelCleaner:
             VIMB_films, VIMB_not_sport, VIMB_sport, VIMB_other = result.values()
 
             # Списки из программ
+            # CHANGE: с распаковкой сета не происходит лополнительной аллокации памяти
             self.programs = {
-                'films': list(set(VIMB_films['Название программы'])),
-                'sport': list(set(VIMB_sport['Название программы'])),
-                'not_sport': list(set(VIMB_not_sport['Название программы'])),
-                'other': list(set(VIMB_other['Название программы']))
+                'films': [*set(VIMB_films['Название программы'])],
+                'sport': [*set(VIMB_sport['Название программы'])],
+                'not_sport': [*set(VIMB_not_sport['Название программы'])],
+                'other': [*set(VIMB_other['Название программы'])]
             }
             return self.programs
 
@@ -724,11 +725,12 @@ class SportChannelCleaner:
             plmrs_sport, plmrs_not_sport, plmrs_films, plmrs_other = plmrs_results.values()
         
             # Списки из программ
+            # CHANGE: тоже без дополнительных аллокаций
             self.programs = {
-                'films': list(set(plmrs_films['Название программы'])),
-                'sport': list(set(plmrs_sport['Название программы'])),
-                'not_sport': list(set(plmrs_not_sport['Название программы'])),
-                'other': list(set(plmrs_other['Название программы']))
+                'films': [*set(plmrs_films['Название программы'])],
+                'sport': [*set(plmrs_sport['Название программы'])],
+                'not_sport': [*set(plmrs_not_sport['Название программы'])],
+                'other': [*set(plmrs_other['Название программы'])]
             }
 
             return self.programs
@@ -757,9 +759,9 @@ class SportChannelCleaner:
             # Можно добавить дополнительные проверки
             # Например, проверять наличие слова "мультфильм" в тексте
             if 'мультфильм' in result or 'мультсериал' in result:
-                return 'мультфильмы'
+                return 'серия мультфильмов'
             # Или просто возвращать при 2+ мультфильмах
-            return 'мультфильмы'
+            return 'серия мультфильмов'
 
         # Удаление подстрок типа '№5', '№09'
         result = re.sub(r'[n#№]\s*\d+', '', result)
@@ -772,6 +774,7 @@ class SportChannelCleaner:
         # Возрастной рейтинг с плюсом перед числом '+16' 
         pattern_plus_before = r'(?:^|\s)\+(0|6|12|14|16|18)(?=\s|$)'
         # Возрастной рейтинг с плюсом после числа '16+' 
+        # CHANGE: убрать - не используется в коде
         pattern_plus_after = r'(?:^|\s)(0|6|12|14|16|18)\+(?=\s|$)'
         # Возрастной рейтинг с указанием лет '16+ л' 
         pattern_plus_end = r'(0|6|12|14|16|18)\+$'
@@ -1947,13 +1950,13 @@ class CosineSimilarity:
         #Отбираем колонки в исторической сетке Palomars
         plmrs_analysis = self.df_big[['Дата', 'program_name', 
                                     'Время выхода', 'Время окончания', 
-                                    'Share']]
+                                    'Share']].copy()
         plmrs_analysis = plmrs_analysis.rename(columns = {'program_name': 'Название программы'})
 
         #Отбираем колонки в новой сетке VIMB
         vimb_analysis = self.small_df[['Дата', 'program_name', 
                             'Время выхода', 'Время окончания'
-                            ]]
+                            ]].copy()
         vimb_analysis['Share'] = ''
         vimb_analysis = vimb_analysis.rename(columns = {'program_name': 'Название программы'})
 
@@ -1969,14 +1972,23 @@ class CosineSimilarity:
             program_plrms = similarity_df.iloc[i]['Программа Palomars']
             #Название программы в VIMB
             program_vimb = similarity_df.iloc[i]['Программа VIMB']
-            vimb_df = vimb_analysis.loc[vimb_analysis['Название программы'] == program_vimb]
+            vimb_df = vimb_analysis.loc[vimb_analysis['Название программы'] == program_vimb].copy()
+
+            # Если vimb_df пустой - пропускаем
+            if len(vimb_df) == 0:
+                print(f"Предупреждение: программа '{program_vimb}' не найдена в VIMB данных")
+                continue
+
             #Если названия Palomars и VIMB не совпадабт, то заменяем название в VIMB на название Palomars
             if program_vimb != program_plrms:
-                vimb_df['Название программы'].replace(program_vimb, program_plrms, inplace = True) 
+                vimb_df['Название программы'] = program_plrms  # Прямое присвоение
+            
             palomars = plmrs_analysis.loc[plmrs_analysis['Название программы'] == program_plrms]
-            full_data = pd.concat([palomars, vimb_df]).reset_index(drop = True)
-            full_data['Дата'] = pd.to_datetime(full_data['Дата'])
-            dict_analysis[program_plrms] = full_data
+
+            if len(palomars) > 0 or len(vimb_df) > 0:
+                full_data = pd.concat([palomars, vimb_df]).reset_index(drop = True)
+                full_data['Дата'] = pd.to_datetime(full_data['Дата'])
+                dict_analysis[program_plrms] = full_data
 
         if print_df:
             for program, data in dict_analysis.items():
