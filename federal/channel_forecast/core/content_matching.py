@@ -1935,7 +1935,11 @@ class CosineSimilarity:
     
 
 
-    def generate_similar_features(self, similarity_df, print_df = False) -> dict:
+    def generate_similar_features(
+                self, 
+                similarity_df: pd.DataFrame, 
+                print_df = False
+        ) -> dict:
         """
             Функция для генерации совокупных Датасетов из исторической и новой ТВ-сеток на основе данных косинусного сходства
             между программами. В ходе работы функции вычисляется матрица схожести, составляется таблица
@@ -1947,10 +1951,12 @@ class CosineSimilarity:
             Return:
                 dict_analysis: словарь, где ключ: название программы, значение: датафрейм, составленный из исторической и новой сеток.
         """
+        plmrs_analysis = pd.DataFrame()
+
         #Отбираем колонки в исторической сетке Palomars
         plmrs_analysis = self.df_big[['Дата', 'program_name', 
                                     'Время выхода', 'Время окончания', 
-                                    'Share']].copy()
+                                    'Share', 'Жанр']].copy()
         plmrs_analysis = plmrs_analysis.rename(columns = {'program_name': 'Название программы'})
 
         #Отбираем колонки в новой сетке VIMB
