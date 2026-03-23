@@ -2,8 +2,8 @@ import pandas as pd
 import numpy as np
 from collections import defaultdict
 from itertools import combinations
+import json
 
-from sklearn.preprocessing import LabelEncoder
 
 from OMA_tools.federal.channel_forecast.grid_preprocessing import *
 from OMA_tools.federal.channel_forecast.core.pipelines import *
@@ -524,85 +524,6 @@ class PrimitiveModel:
         
         share, _ = self.calculate_share(filtered_data, combined_mask, parent_df = data)
         return share, combined_mask if combined_mask.any() else None
-    
-
-    def find_by_duration_big(
-        self,
-        data: pd.DataFrame, 
-        dur_min: int, 
-        use_tolerance: bool = False,
-        base_mask: pd.Series = None,
-        day_of_week: str = None, 
-        day_type: int = None, 
-        day_of_week_col: str = 'День недели',
-        day_type_col: str = 'Тип дня'
-    ):
-        """
-            Поиск по длительности с возможной фильтрацией по дню недели и типу дня для прогнозирования КРУПНЫХ программ
-            
-            Параметры:
-            ----------
-            data : pd.DataFrame
-                Исходный датафрейм
-            dur_min : int
-                Целевая длительность
-            use_tolerance : bool
-                Использовать ли люфт (self.DURATION_TOLERANCE)
-            base_mask : pd.Series, optional
-                Базовая маска для комбинирования
-            day_of_week : str, optional
-                День недели для фильтрации (если None - не фильтровать)
-            day_type : str, optional
-                Тип дня для фильтрации (если None - не фильтровать)
-            day_of_week_col : str
-                Название столбца с днем недели
-            day_type_col : str
-                Название столбца с типом дня
-            
-            Returns:
-            -------
-            tuple: (share, mask)
-                share: рассчитанная доля
-                mask: комбинированная маска
-        """
-        
-        # 1. Фильтр по длительности
-        if use_tolerance:
-            duration_mask = (data['dur_min'] >= dur_min * self.DURATION_TOLERANCE) & \
-                            (data['dur_min'] <= dur_min / self.DURATION_TOLERANCE)
-        else:
-            duration_mask = data['dur_min'] == dur_min
-        
-        # 2. Фильтр по дню недели (если указан)
-        if day_of_week is not None:
-            day_mask = data[day_of_week_col] == day_of_week
-        else:
-            day_mask = pd.Series(True, index=data.index)
-        
-        # 3. Фильтр по типу дня (если указан)
-        if day_type is not None:
-            type_mask = data[day_type_col] == day_type
-        else:
-            type_mask = pd.Series(True, index=data.index)
-        
-        # Комбинируем все фильтры
-        combined_filters = duration_mask & day_mask & type_mask
-        
-        # Сохраняем индексы до reset_index
-        original_indices = data[combined_filters].index
-        
-        filtered_data = data[combined_filters].reset_index(drop = True)
-        
-        # Комбинируем с base_mask
-        if base_mask is not None:
-            final_mask = base_mask.copy()
-            final_mask[~final_mask.index.isin(original_indices)] = False
-        else:
-            final_mask = pd.Series(False, index = data.index)
-            final_mask[original_indices] = True
-        
-        share, _ = self.calculate_share(filtered_data, final_mask, parent_df = data)
-        return share, final_mask if final_mask.any() else None
 
 
     @staticmethod
@@ -737,21 +658,6 @@ class PrimitiveModel:
         # Шаг 3. Определение типа дня: 0 - Будни, 1 - Выходные
         data['Тип дня'] = data['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
         palomars_history['Тип дня'] = palomars_history['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
-
-        # Обучаем encoder на ВСЕХ возможных значениях из ОБОИХ столбцов
-        #all_day_types = list(set(data['Тип дня'].tolist() + 
-        #                        palomars_history['Тип дня'].tolist()))
-        #
-        #encoder = LabelEncoder()
-        #encoder.fit(all_day_types)
-
-        # Применяем уже обученный encoder
-        #data['Тип дня'] = encoder.transform(data['Тип дня'])
-        #palomars_history['Тип дня'] = encoder.transform(palomars_history['Тип дня'])
-
-        # Шаг 4. Определение типа части дня
-        # Создаем фиксированный маппинг
-        #day_part_mapping = {'утро': 0, 'день': 1, 'вечер': 2, 'ночь': 3}
 
         columns = ['Время выхода', 'Время окончания']
         for column in columns:
@@ -1034,16 +940,36 @@ class PrimitiveModel:
 
                     # Комбинируем условия
                     final_condition = day_part_mask
-                    filtered_data = data[final_condition]
+                    filtered_data = data[final_condition].reset_index(drop = True)
 
                     # Шаг 1. Попытка построить прогноз на основании найденной mask
                     if len(filtered_data) > 1:
-                        share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
-                        found = True
-                        if debug:
-                            print(
-                                f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы.'
-                            )
+                        target_dur = dur_min
+
+                        unique_durations = filtered_data['dur_min'].unique()
+                        deltas = {}
+                        for duration in unique_durations:
+                            delta = np.abs(duration - target_dur)
+                            deltas[duration] = delta
+                        
+                        min_key = min(deltas, key = deltas.get)
+
+                        filtered_data_ = filtered_data[filtered_data['dur_min'] == min_key].reset_index(drop = True)
+
+                        if len(filtered_data_) > 1:
+                            used_mask = final_condition & (filtered_data['dur_min'] == min_key)
+                            share_mean = np.median(list(filtered_data_['Share']))
+                            found = True
+                            if debug:
+                                print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
+                        
+                        else:
+                            share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
+                            found = True
+                            if debug:
+                                print(
+                                    f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы.'
+                                )
 
 
         # ========== ЧЕТВЕРТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ ==========
@@ -1052,14 +978,14 @@ class PrimitiveModel:
                 print('🔍 Пробую поиск ТОЛЬКО по длительности ...')
 
             duration_mask = (data['dur_min'] == dur_min)
-            filtered_data = data[duration_mask]
+            filtered_data = data[duration_mask].reset_index(drop = True)
 
             # Шаг 2. Попытка построить прогноз на основании найденной mask
-            if len(filtered_data) > 1:
+            if len(filtered_data) > 1:      
                 share_mean, used_mask = self.calculate_share(filtered_data, duration_mask)
                 found = True
                 if debug:
-                    print(f'✅ Найдено {len(filtered_data)} записей только по длительности')
+                    print(f'✅ Найдено {len(filtered_data_)} записей только по длительности.')
 
                 
         # ========== ПЯТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ С ЛЮФТОМ ±30%==========
@@ -1072,11 +998,11 @@ class PrimitiveModel:
 
             filtered_data = data[duration_backlash_mask]
             # Шаг 2. Попытка построить прогноз на основании найденной mask
-            if len(filtered_data) > 1:
-                share_mean, used_mask = self.calculate_share(filtered_data, duration_backlash_mask)
+            if len(filtered_data) > 1:    
+                share_mean, used_mask = self.calculate_share(filtered_data, duration_mask)
                 found = True
                 if debug:
-                    print(f'✅ Найдено {len(filtered_data)} записей по длительности с люфтом ±30%')
+                    print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с люфтом ±30%.')
                 
         # Если ничего не нашли, возвращаем нулевые значения
         if not found:
@@ -1179,8 +1105,6 @@ class PrimitiveModel:
                 used_mask:
                     Маска, которая использовалась для построения прогноза
         """
-        dur_min = search_values['dur_min']
-
         share_mean = 0.0
         used_mask = None
 
@@ -1190,86 +1114,12 @@ class PrimitiveModel:
                 print(f'Истории по текущему году нет. Использую историю Palomars.')
                 print(f'Генерируем всевозможные комбинации при условии, что параметр "Продолжительность" встречается в каждой.')
 
-            combinations_list = PrimitiveModel.generate_field_combinations(
-                            fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня'], 
-                            min_fields = 2,
-                            must_include = 'dur_min',
-                            exclude = None,
-                            debug = debug
-                        )
-        
-            for fields in combinations_list:
-                # Создаем маску для комбинации полей
-                condition = pd.Series(True, index = palomars_last_n_weeks.index)
-                for field in fields:
-                    if field in palomars_last_n_weeks.columns:
-                        condition &= (palomars_last_n_weeks[field] == search_values.get(field))
-                
-                if not condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
-                
-                filtered_data = palomars_last_n_weeks[condition]
-
-                # Шаг 2. Обработка в зависимости от размера выборки
-                ########################## Выборка небольшая ##########################
-                if len(filtered_data) <= self.SMALL_SAMPLE_SIZE:
-                    if len(filtered_data) == self.EXACT_MATCH_SIZE:
-                        share_mean, used_mask = self.calculate_share(
-                            filtered_data, condition, parent_df = palomars_last_n_weeks
-                        )
-                        if debug:
-                            print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
-                        break
-                
-                    if debug:
-                        print('Выборка слишком мала -> поиск по длительности...')
-                    
-                    share_mean, used_mask = self.find_by_duration(palomars_last_n_weeks, dur_min, base_mask = condition)
-                
-                    if np.isclose(share_mean, 0.0):
-                        if debug:
-                            print('🔄 Точное совпадение не найдено -> ищу с люфтом ±30%')
-                        share_mean, used_mask = share_mean, used_mask = self.find_by_duration(
-                            palomars_last_n_weeks, dur_min, use_tolerance = True, base_mask = condition
-                        )
-                
-                ########################## Выборка большая ##########################
-                else:
-                    # Фильтруем по минимальной длительности
-                    duration_mask = filtered_data['dur_min'] >= dur_min
-                    duration_filtered = filtered_data[duration_mask].reset_index(drop = True)
-
-                    if debug:
-                        print(f'Фильтрация по длительности ≥ {dur_min} мин: найдено {len(duration_filtered)} записей')
-                    
-                    if len(duration_filtered) > 0:
-
-                        # Комбинируем маски правильно
-                        combined_mask = condition.copy()
-                        # Оставляем только те индексы, которые прошли фильтр длительности
-                        valid_indices = filtered_data[duration_mask].index
-                        combined_mask[~combined_mask.index.isin(valid_indices)] = False
-                        
-                        share_mean, used_mask = self.calculate_share(
-                            duration_filtered, combined_mask, parent_df = palomars_last_n_weeks
-                        )
-                        
-                        if debug and share_mean > 0:
-                            print(f'📈 Найдено {len(duration_filtered)} записей с длительностью ≥{dur_min}мин')
-                    else:
-                        share_mean, used_mask = 0.0, None
-                
-
-                # Если нашли ненулевое значение, выходим из цикла
-                if not np.isclose(share_mean, 0.0):
-                    break
+            share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
+            
                 
             if np.isclose(share_mean, 0.0):
                 print(Color.RED + \
-                    f"❌ Не удалось найти релевантные данные для прогноза программы {program_name} на дату {date}. " + \
-                    f"Программа, возможно, новая, не встречалась ранее в истории Palomars за последние N недель." + \
+                    f"❌ Не удалось найти релевантные данные для прогноза программы {program_name} на дату {date}." + \
                     Color.END)
         
         else:
@@ -1298,7 +1148,6 @@ class PrimitiveModel:
             date: str,
             program_name: str,
             search_values: dict,
-            last_n_weeks: pd.DataFrame,
             palomars_last_n_weeks: pd.DataFrame,
             debug = False
         ):
@@ -1325,22 +1174,37 @@ class PrimitiveModel:
                 used_mask:
                     Маска, которая использовалась для построения прогноза
         """
+        found = False
+
         dur_min = search_values['dur_min']
+
+        # Определяем границы люфта
+        dur_min_lower = dur_min * 0.7  # -30%
+        dur_min_upper = dur_min * 1.3  # +30%
 
         share_mean = 0.0
         used_mask = None
 
         # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
-        combinations_list = PrimitiveModel.generate_field_combinations(
-                            fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня'], 
+        combinations_list_general = PrimitiveModel.generate_field_combinations(
+                            fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                             min_fields = 2,
                             must_include = 'dur_min',
                             exclude = None,
                             debug = debug
                         )
         
-        found = False
-        for fields in combinations_list:
+        # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
+        combinations_list_no_duration = PrimitiveModel.generate_field_combinations(
+                            fields = ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
+                            min_fields = 1,
+                            must_include = None,
+                            exclude = None,
+                            debug = debug
+                        )
+        
+        # ========== ПЕРВЫЙ ПРОХОД: БЕЗ ЛЮФТА ==========
+        for fields in combinations_list_general:
             # Создаем маску для комбинации полей
             condition = pd.Series(True, index = palomars_last_n_weeks.index)
             for field in fields:
@@ -1359,26 +1223,28 @@ class PrimitiveModel:
             if len(filtered_data) <= self.SMALL_SAMPLE_SIZE:
                 if len(filtered_data) == self.EXACT_MATCH_SIZE:
                     # Ровно 3 записи - используем точное среднее
-                    share_mean, used_mask = self.calculate_share(
-                        filtered_data, condition, parent_df = palomars_last_n_weeks
-                    )
+                    share_mean, used_mask = self.calculate_share(filtered_data, condition, parent_df = palomars_last_n_weeks)
+                    found = True
                     if debug:
                         print(f"  📊 Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
+                        print(f"  ✅ Нашёл совпалдения по полям: {fields}")
                 else:
                     # Меньше 3 записей - тоже используем среднее, но без маски
                     share_mean = PrimitiveModel.get_clean_mean(filtered_data['Share'])
                     used_mask = condition
+                    found = True
                     if debug:
                         print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
+                        print(f"  ✅ Нашёл совпалдения по полям: {fields}")
             
             # Случай 3: Большая выборка (> SMALL_SAMPLE_SIZE)
             else:
                 # Фильтруем по минимальной длительности
                 duration_mask = filtered_data['dur_min'] >= dur_min
-                duration_filtered = filtered_data[duration_mask].reset_index(drop=True)
+                duration_filtered = filtered_data[duration_mask].reset_index(drop = True)
                 
                 if debug:
-                    print(f"  📊 Фильтрация по длительности ≥{dur_min}мин: найдено {len(duration_filtered)} записей")
+                    print(f"  📊 Фильтрация по длительности ≥ {dur_min}мин: найдено {len(duration_filtered)} записей")
                 
                 if len(duration_filtered) > 0:
                     # Комбинируем маски
@@ -1386,42 +1252,76 @@ class PrimitiveModel:
                     valid_indices = filtered_data[duration_mask].index
                     combined_mask[~combined_mask.index.isin(valid_indices)] = False
                     
-                    share_mean, used_mask = self.calculate_share(
-                        duration_filtered, combined_mask, parent_df = palomars_last_n_weeks
-                    )
+                    share_mean, used_mask = self.calculate_share(duration_filtered, combined_mask, parent_df = palomars_last_n_weeks)
+                    found = True
                     
                     if debug and not np.isclose(share_mean, 0.0):
                         print(f"  📈 Рассчитано среднее: {share_mean:.4f}")
-                else:
-                    if debug:
-                        print("  ⚠️ Нет записей с достаточной длительностью, пробую поиск с люфтом")
-                    
-                    # Пробуем найти с люфтом
-                    share_mean, used_mask = self.find_by_duration(
-                        palomars_last_n_weeks, dur_min, use_tolerance = True, base_mask = condition
-                    )
-            
-            found = True
+        
             break
         
-        # Если ничего не нашли
-        if not found:
+        # ========== ВТОРОЙ ПРОХОД: С ЛЮФТОМ ==========
+        # Осуществляем поиск по комбинациям без ДЛИТЕЛЬНОСТИ, при этом добавляем люфт в ДЛИТЕЛЬНОСТЬ.
+        if not found and np.isclose(share_mean, 0.0):
 
+            duration_backlash_mask = (palomars_last_n_weeks['dur_min'] >= dur_min_lower) & \
+                                     (palomars_last_n_weeks['dur_min'] <= dur_min_upper)
+            
+            for fields in combinations_list_no_duration:
+                # Создаем маску для комбинации полей
+                condition = pd.Series(True, index = palomars_last_n_weeks.index)
+                for field in fields:
+                    if field in palomars_last_n_weeks.columns:
+                        condition &= (palomars_last_n_weeks[field] == search_values.get(field))
+                
+                if not condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям: {fields}")
+                    continue
+
+                # Комбинируем условия
+                final_condition = condition & duration_backlash_mask
+
+                if not final_condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
+                    continue
+
+                filtered_data = palomars_last_n_weeks[final_condition]
+
+                # ========== Обработка в зависимости от размера выборки ==========
+                # Случай 2: Маленькая выборка (≤ SMALL_SAMPLE_SIZE)
+                if len(filtered_data) > 1:
+                    if len(filtered_data) >= self.EXACT_MATCH_SIZE:
+                        # Ровно 3 записи - используем точное среднее
+                        share_mean, used_mask = self.calculate_share(
+                            filtered_data, final_condition, parent_df = palomars_last_n_weeks
+                        )
+                        found = True
+                        if debug:
+                            print(f"  📊 Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
+                            print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                    else:
+                        # Меньше 3 записей - тоже используем среднее, но без маски
+                        share_mean = PrimitiveModel.get_clean_mean(filtered_data['Share'])
+                        used_mask = final_condition
+                        found = True
+                        if debug:
+                            print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
+                            print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                break
+        
+        # Если ничего не нашли
+        if not found and np.isclose(share_mean, 0.0):
             if debug:
                 print("Пробую поиск по длительности")
+            share_mean, used_mask = self.find_by_duration(palomars_last_n_weeks, dur_min, use_tolerance = False)
             
-            share_mean, used_mask = self.find_by_duration(
-            palomars_last_n_weeks, dur_min, use_tolerance = False
-        )
-            
-            if np.isclose(share_mean, 0.0):
-
-                share_mean, used_mask = self.find_by_duration(
-                palomars_last_n_weeks, dur_min, use_tolerance = True,
-            )
-                if debug:
-                    print(f"  🔄 Ищу с люфтом ±30%")
-                    print(f"  📈 Рассчитано среднее: {share_mean:.4f}")
+        if np.isclose(share_mean, 0.0):
+            share_mean, used_mask = self.find_by_duration(palomars_last_n_weeks, dur_min, use_tolerance = True)
+            if debug:
+                print(f"  🔄 Ищу с люфтом ±30%")
+                print(f"  📈 Рассчитано среднее: {share_mean:.4f}")
         
 
         # Если ничего не нашли
@@ -1556,7 +1456,7 @@ class PrimitiveModel:
                     elif volume_flag == 'new':
                         share_forecast, mask = self.forecast_new(
                             date, program_name, search_values,
-                            last_n_weeks, palomars_last_n_weeks,
+                            palomars_last_n_weeks,
                             debug = debug)
 
                     date_masks[date.strftime('%Y-%m-%d')] = mask

@@ -1,11 +1,9 @@
 import numpy as np
 import pandas as pd
-from typing import Tuple, Optional, List, Dict, Callable
-from datetime import timedelta, datetime, time
-from dateutil.relativedelta import relativedelta
-from difflib import SequenceMatcher
-from OMA_tools.federal.channel_forecast.core.simple_models import *
+
+from datetime import timedelta, datetime
 from OMA_tools.io_data.colors import *
+
 import traceback
 traceback.print_exc()
 
@@ -919,12 +917,31 @@ class MonthlyShareAnalyzer:
         TVR_summ (выходные) = Средняя доля выходные * TTV (выходные) * Кол-во выходные дней в месяце
         TVR_summ (за месяц) = TTV (за месяц) * Кол-во дней в месяце
     """
-    def __init__(self, year: int, month: str, bca: str, forecast_df: pd.DataFrame, holidays_file: str):
+    def __init__(self, year: int, month: str, bca: str, forecast_df: pd.DataFrame):
         self.year = year
         self.month = month
         self.bca = bca
         self.forecast_df = forecast_df
-        self.holidays_file = holidays_file
+    
+
+    @staticmethod
+    def get_day_type(date, holidays: list, working_saturdays: list):
+        date_str = datetime.strftime(date, '%Y-%m-%d')
+        
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+        weekday = date_obj.weekday()
+        
+        if date_str in working_saturdays:
+            return 'будний'
+            
+        elif date_str in holidays:
+            return 'выходной'
+            
+        elif weekday < 5:
+            return 'будний'
+            
+        else:
+            return 'выходной'
 
 
     def calculate_ttv(
@@ -979,19 +996,16 @@ class MonthlyShareAnalyzer:
         return result
     
 
-    def calculate_monthly_share(self, ttv_dict: dict):
+    def calculate_monthly_share(self, ttv_dict: dict, work_saturdays, all_holidays):
         """
             Метод для расчета месячной доли 
         """
-        # 1. Считаем праздники России
-        work_saturdays, all_holidays = PrimitiveModel.build_russian_holidays(self.holidays_file)
-
         # 2. Определение типа дня
-        self.df['Тип дня'] = self.df['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
+        self.df['Тип дня'] = self.df['Дата'].apply(lambda x: MonthlyShareAnalyzer.get_day_type(x, all_holidays, work_saturdays))
 
         # 3. Отбор будних и выходных дней
-        weekdays = self.df[self.df['Тип дня'] == 'Будни'].reset_index(drop = True)
-        weekends = self.df[self.df['Тип дня'] == 'Выходной'].reset_index(drop = True)
+        weekdays = self.df[self.df['Тип дня'] == 'будний'].reset_index(drop = True)
+        weekends = self.df[self.df['Тип дня'] == 'выходной'].reset_index(drop = True)
 
         # 4. Подсчет средней доли будних и выходных дней
         mean_share_weekdays = np.mean(list(weekdays['Share']))
@@ -1000,8 +1014,8 @@ class MonthlyShareAnalyzer:
         print(f'Средняя доля будних: {np.round(mean_share_weekdays, 3)}, Средняя доля выходных: {np.round(mean_share_weekend, 3)}')
 
         # 5. Подсчет количества будних, выходных и количества дней в месяце
-        count_weekends = (self.df['Тип дня'] == 'Выходной').sum()
-        count_weekdays = (self.df['Тип дня'] == 'Будни').sum()
+        count_weekends = (self.df['Тип дня'] == 'выходной').sum()
+        count_weekdays = (self.df['Тип дня'] == 'будний').sum()
         n_days = count_weekends + count_weekdays
 
         print(f'Кол-во будних: {count_weekdays}, Кол-во выходных: {count_weekends}')
@@ -1018,7 +1032,14 @@ class MonthlyShareAnalyzer:
         return share_per_month
     
 
-    def fit_calculate(self, ttv_filepath: str, target_column: str, need_columns: list):
+    def fit_calculate(
+            self, 
+            ttv_filepath: str, 
+            target_column: str, 
+            need_columns: list, 
+            work_saturdays, 
+            all_holidays
+        ):
         """
             Пайплайн для расчета
         """
@@ -1040,6 +1061,6 @@ class MonthlyShareAnalyzer:
         self.df = self.df.sort_values('Дата').reset_index(drop = True)
 
         ttv = self.calculate_ttv(ttv_filepath, need_columns)
-        share_per_month = self.calculate_monthly_share(ttv)
+        share_per_month = self.calculate_monthly_share(ttv, work_saturdays, all_holidays)
         return share_per_month
 
