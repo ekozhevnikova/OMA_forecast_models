@@ -1966,7 +1966,7 @@ class ProgramMatcher(BaseParser):
             # ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
             # Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
             if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
-                print(Color.BOLD + Color.VIOLET + f'Делаю предобработку "серии мультфильмов" для канала {self.channel}' + Color.END)
+                print(Color.VIOLET + f'Делаю предобработку "серии мультфильмов" для канала {self.channel}' + Color.END)
 
                 pr = TVScheduleProcessor(self.channel, VIMB_init, Pal_init)
                 # Схлопываем программы VIMB, чтобы более наглядно увидеть, где именно была "серия мультфильмов"
@@ -2030,8 +2030,6 @@ class ProgramMatcher(BaseParser):
                             end_time_pr_check = end_time_pr
                         
                         # Проверяем условие
-                        #condition = (start_time <= start_time_pr <= end_time) and (start_time <= end_time_pr_check <= end_time)
-                        #condition = (start_time_pr <= end_time) and (end_time_pr_check >= start_time)
                         condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
                         
                         if condition:
@@ -2076,13 +2074,13 @@ class ProgramMatcher(BaseParser):
                 lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
             )
     
-            result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).adjust_end_time(result_df)
+            #result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).adjust_end_time(result_df)
 
             result_df = result_df[
                 [
                     'Дата', 'Название программы', 'Время выхода', 'Время окончания',
                     'Продолжительность', 'Share', 'Название программы init', 
-                    'Время выхода init', 'Время окончания init', 'Жанр'
+                    'Жанр'
                     ]
             ]
             result_webs[target_date] = result_df
@@ -2207,8 +2205,6 @@ class ProgramMatcher(BaseParser):
             {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
             {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
             {'header': 'Название программы init', 'width': 72.0, 'format': 'general'},
-            {'header': 'Время выхода init', 'width': 14.0, 'format': 'general'},
-            {'header': 'Время окончания init', 'width': 14.2, 'format': 'general'},
             {'header': 'Жанр', 'width': 40.0, 'format': 'general'}
         ]
         

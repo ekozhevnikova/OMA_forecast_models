@@ -772,6 +772,24 @@ class TVScheduleProcessor:
 
         plmrs_joined = self.convert_data_column(plmrs_joined)
 
+
+        # НОВЫЙ КУСОК
+        plmrs_joined.rename(columns = {
+            #'Название программы palomars': 'Название программы init',
+            'Время выхода оригинальное palomars': 'Время выхода init',
+            'Время окончания оригинальное palomars': 'Время окончания init'
+            },
+            inplace = True)
+
+        plmrs_joined = self.fix_invalid_times(plmrs_joined)
+
+        plmrs_joined.rename(columns = {
+            'Время выхода init': 'Время выхода оригинальное palomars',
+            'Время окончания init': 'Время окончания оригинальное palomars'
+            },
+            inplace = True)
+        # КОНЕЦ НОВОГО КУСКА
+
         plmrs_joined.rename(columns = 
                             {
                                 'Время выхода': 'Время выхода _plmrs', 
@@ -795,21 +813,12 @@ class TVScheduleProcessor:
         # Создаем финальные столбцы
         merged['Время выхода'] = merged['Время выхода _vimb'].combine_first(merged['Время выхода _plmrs'])
         merged['Время окончания'] = merged['Время окончания _vimb'].combine_first(merged['Время окончания _plmrs'])
- 
-        # Определяем строки, где vimb-данные отсутствуют
-        vimb_missing = merged['Время выхода _vimb'].isna()
- 
-        # Для каждой строки с отсутствующими vimb-данными, корректируем время окончания предыдущей строки
-        for idx in merged[vimb_missing].index:
-            if idx > 0:  # Если это не первая строка
-                # Берем время выхода текущей строки (из plmrs)
-                current_start = merged.loc[idx, 'Время выхода _plmrs']
-                # Корректируем время окончания предыдущей строки
-                merged.loc[idx - 1, 'Время окончания'] = current_start
+
  
         # Удаляем ненужные столбцы
         result = merged.drop(columns = ['Время выхода _plmrs', 'Время окончания _plmrs', 
                             'Время выхода _vimb', 'Время окончания _vimb'])
+        
  
         result = result[
             [
@@ -829,25 +838,31 @@ class TVScheduleProcessor:
             inplace = True)
         
         # Первая коррекция времен
-        result = self.fix_invalid_times(result)
+        #result = self.fix_invalid_times(result)
         
         # Заменяем значения начиная со второго
         for i in range(1, len(result)):
-            # Устанавливаем новое время выхода из предыдущего окончания
-            #result_df.loc[i, 'Время выхода_новое'] = result_df.loc[i - 1, 'Время окончания']
             
             # Корректируем время окончания предыдущей программы
             if result.loc[i - 1, 'Время окончания'] != result.loc[i, 'Время выхода']:
-                result.loc[i - 1, 'Время окончания'] = result.loc[i, 'Время выхода']
+                #result.loc[i - 1, 'Время окончания'] = result.loc[i, 'Время выхода']
+                result.loc[i, 'Время выхода'] = result.loc[i - 1, 'Время окончания']
  
         result = result[
             [
                 'Дата', 'Название программы', 
-                'Время выхода', 'Время окончания',
+                'Время выхода init', 'Время окончания init',
                 'Share', 'Название программы init',
-                'Время выхода init', 'Время окончания init', 'Жанр'
+                'Жанр'
             ]
         ]
+        result.rename(
+            columns = {
+                'Время выхода init': 'Время выхода',
+                'Время окончания init': 'Время окончания',
+            },
+            inplace = True
+            )
 
         # Вспомогательная функция для проверки соответствия времени
         def check_time_intervals(df):
@@ -876,27 +891,33 @@ class TVScheduleProcessor:
             return issues
         
         # Финальная проверка, что "Время окончания" предыдущей программы равно "Время начала" следующей программы.
-        issues = check_time_intervals(result)
+        #issues = check_time_intervals(result)
 
-        if issues:
-            print("\n" + "=" * 80)
-            print("❗ ВНИМАНИЕ: Обнаружены некорректные интервалы между программами!")
-            print("="*80)
+        #if issues:
+        #    print("\n" + "=" * 80)
+        #    print("❗ ВНИМАНИЕ: Обнаружены некорректные интервалы между программами!")
+        #    print("="*80)
             
-            for issue in issues:
-                print(f"\n📅 Дата: {issue['дата']}")
-                print(f"   Индекс: {issue['индекс']}")
-                print(f"   Программа: {issue['программа']}")
-                print(f"   Время окончания: {issue['время_окончания']}")
-                print(f"   Следующая программа: {issue['следующая_программа']}")
-                print(f"   Время начала следующей: {issue['время_начала']}")
-                print(f"   ⚠️  {issue['проблема']}")
-            
-            print(f"\n📊 Всего найдено некорректных интервалов: {len(issues)}")
+        #    for issue in issues:
+        #        print(f"\n📅 Дата: {issue['дата']}")
+        #        print(f"   Индекс: {issue['индекс']}")
+        #        print(f"   Программа: {issue['программа']}")
+        #        print(f"   Время окончания: {issue['время_окончания']}")
+        #        print(f"   Следующая программа: {issue['следующая_программа']}")
+        #        print(f"   Время начала следующей: {issue['время_начала']}")
+        #        print(f"   ⚠️  {issue['проблема']}")
+        #    
+        #    print(f"\n📊 Всего найдено некорректных интервалов: {len(issues)}")
 
-        
         result = self.adjust_end_time(result)
-        
+
+        duplicated_values = result[result['Время выхода'].duplicated(keep = False)]
+        if len(duplicated_values):
+            print(
+                Color.BOLD + Color.MAROON + \
+                f'❗ ВНИМАНИЕ: Для канала {self.channel} и даты {date} не все значения в столбце "Время выхода" уникальные! Пожалуйста, сделайте проверку' + \
+                Color.END
+            )
         
         share_end = result['Share'].sum()
  

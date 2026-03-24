@@ -75,7 +75,7 @@ class DataPreparator:
         return result_dict
     
 
-    def aggregate_vimb_daily(self):
+    def aggregate_vimb_daily(self, cities_loaded):
         """
             Метод для схлопывания программ VIMB для каждого дня. 
             Один из методов подготовки таблицы для прогнозирования.
@@ -91,10 +91,23 @@ class DataPreparator:
         for date in dates_unique:
         
             table_vimb = vimb_init_copy[vimb_init_copy['Дата'] == date].reset_index(drop = True)
-            
+
+            vimb_prgms = []
+            VIMB = pd.DataFrame()
+
             #Программы в VIMB
-            vimb_prepr = GeneralTextCleaner(self.channel)
-            vimb_prgms, VIMB = vimb_prepr.clean_dataframe(table_vimb)
+            if self.channel == 'МатчТВ':
+                sport_cleaner = SportChannelCleaner(self.channel)
+                # 1. Программы в VIMB
+                vimb_prgms, VIMB = sport_cleaner.clean_dataframe(table_vimb, 'vimb', cities_loaded)
+
+            elif self.channel == 'МузТВ':
+                music_cleaner = MusicChannelCleaner(self.channel)
+                vimb_prgms, VIMB = music_cleaner.clean_dataframe(table_vimb)
+
+            else:
+                vimb_prepr = GeneralTextCleaner(self.channel)
+                vimb_prgms, VIMB = vimb_prepr.clean_dataframe(table_vimb)
             
             VIMB = VIMB[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
             
@@ -256,7 +269,7 @@ class DataPreparator:
         return small, big, new
     
 
-    def prepare(self, year: int, month_num: int):
+    def prepare(self, year: int, month_num: int, cities_loaded):
         """
             Пайплайн для подготовки данных.
 
@@ -279,7 +292,7 @@ class DataPreparator:
 
         """
         # Шаг 1. Схлопываем программы для каждого дня в таблице VIMB
-        self.vimb_analysis = self.aggregate_vimb_daily()
+        self.vimb_analysis = self.aggregate_vimb_daily(cities_loaded)
 
         # Шаг 2. Поиск схожих программ
         self.merged_dict, self.new_programs = self.find_and_categorize_programs(year, month_num)
@@ -1061,6 +1074,13 @@ class PrimitiveModel:
                 print('Перехожу к поиску в исторической сетке за последние N недель без упора на конкретную программу. Пожалуйста, подождите ...')
             
             share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
+        
+         # Шаг 3. Построение прогноза путем расчета среднего за последние N недель.
+        if np.isclose(share_mean, 0.0):
+            if debug:
+                print('🔍 В качестве прогноза беру медиану за последние N недель ...')
+        
+            share_mean = np.median(list(last_n_weeks['Share']))
         
         # Шаг 3. Если не нашлись данные, то выводи предупреждение
         if np.isclose(share_mean, 0.0):
