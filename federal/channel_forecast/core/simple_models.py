@@ -38,7 +38,6 @@ class DataPreparator:
         self.vocabulary = vocabulary
 
     
-
     def merge_programs_by_name(self, data_dict):
         """
             Объединяет датафреймы по названиям программ из всех дат
@@ -330,7 +329,7 @@ class DataPreparator:
 
 
 
-class PrimitiveModel:
+class RuleBasedForecaster:
     """
         Класс с реализацией простейшей модели для прогнозирования будущих программ.
     """
@@ -338,7 +337,7 @@ class PrimitiveModel:
                  channel: str,
                  current_year: int,
                  month_num: int,
-                 start_date_forecast: str, 
+                 start_date_forecast: str,
                  palomars_history: pd.DataFrame
                 ):
         self.channel = channel
@@ -351,7 +350,78 @@ class PrimitiveModel:
         self.SMALL_SAMPLE_SIZE = 5
         self.EXACT_MATCH_SIZE = 3
         self.DURATION_TOLERANCE = 0.7
+    
 
+    @staticmethod
+    def generate_forecast_period(
+            guide: dict, 
+            months: dict, 
+            month_num: int, 
+            channel: str, 
+            year: int, 
+            n_days_in_fact: int,
+            debug = False
+        ) -> dict:
+        """
+            Метод для генерации стартовой и конечной дат прогноза.
+            Параметры:
+            ----------
+                guide: dict
+                    Словарь с информацией о БЦА для каждого канала.
+                    Ключ: название канала, Значение: БЦА
+                months: dict
+                    Справочник по месяцам
+                month_num: pd.DataFrame
+                    Родительский DataFrame для создания маски
+            Returns:
+            ----------
+                share: float
+                    Прогнозная доля
+                source_mask:
+                    Маска, которая использовалась для прогнозирования
+        """
+        if debug:
+            print(f"Количество дней в факте {n_days_in_fact} дней.")
+
+        # Определяем прогнозируемый месяц
+        month = months[month_num]
+        # Определяем ЦА, исходя из словаря self.GUIDE с каналами
+        BCA = guide[channel]
+
+        # Получаем последний день месяца
+        last_day = calendar.monthrange(year, month_num)[1]
+
+        start_of_month = f'{year}-{month_num:02d}-01'
+        finish_of_month = f'{year}-{month_num:02d}-{last_day}'
+
+        start_date_forecast = None
+        last_fact_date = None
+        # Если есть дни в факте по прогнозируемому месяцу
+        if n_days_in_fact != 0:
+            print(f"Количество дней в факте:      {n_days_in_fact}")
+            last_fact_date = f'{year}-{month_num:02d}-{n_days_in_fact}'
+            start_date_forecast = f'{year}-{month_num:02d}-{n_days_in_fact + 1}'
+
+        # Если нет накопленного факта по прогнозируемому месяцу
+        else:
+            start_date_forecast = start_of_month
+
+        print(f"Начало месяца:                     {start_of_month}")
+        print(f"Дата начала построения прогноза:   {start_date_forecast}")
+        print(f"Последняя прогнозируемая дата:     {finish_of_month}")
+        print(f"Последняя фактическая дата:        {last_fact_date}")
+        
+        params = {
+            'BCA': BCA,
+            'month': month,
+            'start_month': start_of_month,
+            'start_date_forecast': start_date_forecast,
+            'stop_month': finish_of_month,
+            'last_fact_date': last_fact_date
+        }
+        return params
+
+    
     @staticmethod
     def add_duration(df):
         """
@@ -678,6 +748,10 @@ class PrimitiveModel:
 
         palomars_history = self.palomars_history.copy()
         palomars_history['Дата'] = pd.to_datetime(palomars_history['Дата'])
+
+         # Последняя фактическая дата из истории.
+        last_fact_date = palomars_history['Дата'].max()
+
         palomars_history['День недели'] = palomars_history['Дата'].dt.strftime('%A')
         if 'program_name' in palomars_history.columns:
             palomars_history.rename(columns = {'program_name': 'Название программы'}, inplace = True)
@@ -686,12 +760,12 @@ class PrimitiveModel:
         df_copy = df.copy()
 
         # Шаг 2. Добавление длительности программ.
-        data = PrimitiveModel.add_duration(df_copy)
-        palomars_history = PrimitiveModel.add_duration(palomars_history)
+        data = RuleBasedForecaster.add_duration(df_copy)
+        palomars_history = RuleBasedForecaster.add_duration(palomars_history)
 
         # Шаг 3. Определение типа дня: 0 - Будни, 1 - Выходные
-        data['Тип дня'] = data['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
-        palomars_history['Тип дня'] = palomars_history['Дата'].apply(lambda x: PrimitiveModel.get_day_type(x, all_holidays, work_saturdays))
+        data['Тип дня'] = data['Дата'].apply(lambda x: RuleBasedForecaster.get_day_type(x, all_holidays, work_saturdays))
+        palomars_history['Тип дня'] = palomars_history['Дата'].apply(lambda x: RuleBasedForecaster.get_day_type(x, all_holidays, work_saturdays))
 
         columns = ['Время выхода', 'Время окончания']
         for column in columns:
@@ -702,11 +776,11 @@ class PrimitiveModel:
             palomars_history['hour'] = pd.to_datetime(palomars_history[f'{column}_dt']).dt.hour
 
             if column == 'Время выхода':
-                data['dt_start'] = data['hour'].apply(PrimitiveModel.add_day_part)
-                palomars_history['dt_start'] = palomars_history['hour'].apply(PrimitiveModel.add_day_part)
+                data['dt_start'] = data['hour'].apply(RuleBasedForecaster.add_day_part)
+                palomars_history['dt_start'] = palomars_history['hour'].apply(RuleBasedForecaster.add_day_part)
             else:
-                data['dt_end'] = data['hour'].apply(PrimitiveModel.add_day_part)
-                palomars_history['dt_end'] = palomars_history['hour'].apply(PrimitiveModel.add_day_part)
+                data['dt_end'] = data['hour'].apply(RuleBasedForecaster.add_day_part)
+                palomars_history['dt_end'] = palomars_history['hour'].apply(RuleBasedForecaster.add_day_part)
 
             data = data.drop([f'{column}_dt', 'hour'], axis = 1)
             palomars_history = palomars_history.drop([f'{column}_dt', 'hour'], axis = 1)
@@ -753,15 +827,23 @@ class PrimitiveModel:
                                 (history['Дата'] < self.start_date_forecast)
             current_year = history[current_year_mask].reset_index(drop = True)
 
+            current_year_mask_palomars = (palomars_history['Дата'] >= f'{self.current_year - 1}-01-01') & \
+                                         (palomars_history['Дата'] < self.start_date_forecast)
+            palomars_history = palomars_history[current_year_mask_palomars].reset_index(drop = True)
+
         else:
             current_year_mask = (history['Дата'] >= f'{self.current_year}-01-01') & \
                                 (history['Дата'] < self.start_date_forecast)
             current_year = history[current_year_mask].reset_index(drop = True)
+            
+            current_year_mask_palomars = (palomars_history['Дата'] >= f'{self.current_year}-01-01') & \
+                                         (palomars_history['Дата'] < self.start_date_forecast)
+            palomars_history = palomars_history[current_year_mask_palomars].reset_index(drop = True)
         
         if len(current_year) != 0:
             
             # Шаг 7. Последняя фактическая дата из истории.
-            last_fact_date = history['Дата'].max()
+            #last_fact_date = history['Дата'].max()
             if debug:
                 print(f"Последняя фактическая дата: {last_fact_date.strftime('%Y-%m-%d')}.")
 
@@ -777,7 +859,7 @@ class PrimitiveModel:
             print('Программы ' + Color.BLUE + f"'{program_name}'" + Color.END + ' ещё не было в текущем году.')
 
             # Отбираем после N недель из истории Palomars
-            last_fact_date = palomars_history['Дата'].max()
+            #last_fact_date = palomars_history['Дата'].max()
             if debug:
                 print(f"Последняя фактическая дата в истории Palomars: {last_fact_date.strftime('%Y-%m-%d')}.")
             date_n_weeks_ago = last_fact_date - pd.Timedelta(weeks = n_weeks_ago)
@@ -841,7 +923,7 @@ class PrimitiveModel:
         dur_min_upper = dur_min * 1.3  # +30%
 
         # Список со всевозможными комбинациями c обязательным параметром "dur_min".
-        combinations_list_general = PrimitiveModel.generate_field_combinations(
+        combinations_list_general = RuleBasedForecaster.generate_field_combinations(
                                     ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                                     min_fields = 4,
                                     must_include = ['dur_min', 'dt_start', 'dt_end'],
@@ -850,7 +932,7 @@ class PrimitiveModel:
                         )
         
         # Генерируем комбинации БЕЗ параметра 'dur_min'
-        combinations_list_no_duration = PrimitiveModel.generate_field_combinations(
+        combinations_list_no_duration = RuleBasedForecaster.generate_field_combinations(
                             ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
                             min_fields = 3,
                             must_include = ['dt_start', 'dt_end'],
@@ -859,7 +941,7 @@ class PrimitiveModel:
                         )
         
         # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
-        combinations_list = PrimitiveModel.generate_field_combinations(
+        combinations_list = RuleBasedForecaster.generate_field_combinations(
                             ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'dur_min'],  # Без 'dur_min'
                             min_fields = 2,
                             must_include = ['dur_min'],
@@ -886,7 +968,14 @@ class PrimitiveModel:
         ]
         #######################################################################################################################################################
 
-        # ========== ПЕРВЫЙ ПРОХОД: БЕЗ ЛЮФТА ==========
+        # ======================================== БЕЗ ЛЮФТА ========================================
+        if debug:
+            print(Color.VIOLET + f'Попытка построить прогноз, опираясь на целевую длительность.' + Color.END)
+
+        # ========== ПЕРВЫЙ ПРОХОД: Осуществляем поиск по списку с обязательными параметрами 'dur_min', 'dt_start', 'dt_end' ==========
+            print(Color.ITALIC + f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
+                  f'Минимальное количество параметров в комбинации 4.' + Color.END)
+            
         for fields in combinations_list_general:
             if found:  # Если уже нашли результат, выходим
                 break
@@ -902,6 +991,7 @@ class PrimitiveModel:
 
             mask = condition
             filtered_data = data[mask]
+            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
 
             # Шаг 2. Попытка построить прогноз на основании найденной mask
             if len(filtered_data) > 1:
@@ -911,10 +1001,60 @@ class PrimitiveModel:
                     print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
                 break
 
-        # ========== ВТОРОЙ ПРОХОД: ДОБАВЛЕНИЕ ЛЮФТА К Длительности ±30% ==========
+            elif len(filtered_data) == 1:
+                share_mean = list(filtered_data['Share'])[0]
+                used_mask = condition
+                found = True
+                if debug:
+                    print(f'Количество записей в выборке 1. Данные были найдены по полям {", ".join(fields)}.')
+                break
+        
+
+        # ========== ВТОРОЙ ПРОХОД: ПОИСК ПО ДЛИТЕЛЬНОСТИ + РАЗЛИЧНЫЕ КОМБИНАЦИИ, КОТОРЫЕ РАННЕЕ НЕ ВСТРЕЧАЛИСЬ  ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
-                print('🔄 Не найдено точных совпадений. Пробую с люфтом ±30%...')
+                print('🔍 Осуществляем поиск по списку с обязательным параметром "dur_min"')
+            
+            for fields in filtered_combinations:
+                if found:  # Если уже нашли результат, выходим
+                    break
+                # Шаг 1. Создаем маску для текущей комбинации
+                condition = pd.Series(True, index = data.index)
+                for field in fields:
+                    condition &= (data[field] == search_values[field])
+                
+                if not condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям: {fields}")
+                    continue
+
+                mask = condition
+                filtered_data = data[mask]
+                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
+
+                # Шаг 2. Попытка построить прогноз на основании найденной mask
+                if len(filtered_data) > 1:
+                    share_mean, used_mask = self.calculate_share(filtered_data, condition)
+                    found = True
+                    if debug:
+                        print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
+                    break
+
+                elif len(filtered_data) == 1:
+                    share_mean = list(filtered_data['Share'])[0]
+                    used_mask = condition
+                    found = True
+                    if debug:
+                        print(f'Количество записей в выборке 1. Данные были найдены по полям {", ".join(fields)}.')
+                    break
+        
+        # ======================================== С ЛЮФТОМ ========================================
+        # ========== ТРЕТИЙ ПРОХОД: ДОБАВЛЕНИЕ ЛЮФТА К Длительности ±30% ==========
+        if not found and np.isclose(share_mean, 0.0):
+            if debug:
+                print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
+                print(Color.ITALIC + f'🔍 Осуществляем поиск по списку с обязательными параметрами "dt_start", "dt_end". ' + \
+                  f'Минимальное количество параметров в комбинации 3. В параметр "dur_min" добавляем люфт ±30%' + Color.END)
             
             for fields in combinations_list_no_duration:
                 if found:
@@ -942,6 +1082,7 @@ class PrimitiveModel:
                     continue
 
                 filtered_data = data[final_condition]
+                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
                 
                 # Шаг 2. Попытка построить прогноз на основании найденной mask
                 if len(filtered_data) > 1:
@@ -953,51 +1094,22 @@ class PrimitiveModel:
                         print(f'   Диапазон длительности: {dur_min_lower:.0f} - {dur_min_upper:.0f} мин.')
                     break
         
-        # ========== ТРЕТИЙ ПРОХОД: ПОИСК ПО ДЛИТЕЛЬНОСТИ С РАЗЛИЧНЫМИ ВАРИАЦИЯМИ, КОТОРЫЕ РАННЕЕ НЕ ВСТРЕЧАЛИСЬ  ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print('🔍 Пробую поиск по длительности с комбинациями, которые раннее не встречались ...')
-            
-            for fields in combinations_list:
-                if found:  # Если уже нашли результат, выходим
-                    break
-                # Шаг 1. Создаем маску для текущей комбинации
-                condition = pd.Series(True, index = data.index)
-                for field in fields:
-                    condition &= (data[field] == search_values[field])
-                
-                if not condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
-
-                mask = condition
-                filtered_data = data[mask]
-
-                # Шаг 2. Попытка построить прогноз на основании найденной mask
-                if len(filtered_data) > 1:
-                    share_mean, used_mask = self.calculate_share(filtered_data, condition)
-                    found = True
-                    if debug:
-                        print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
-                    break
-        
         
         # ========== ЧЕТВЕРТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ТИПУ ЧАСТИ ДНЯ и с вариациями ДЛИТЕЛЬНОСТИ  ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
-                print('🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности ...')
+                print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности ...' + Color.END)
             
             day_part_mask = (data['dt_start'] == day_part_start) & \
                             (data['dt_end'] == day_part_end)
             
-
             # -------- ДОБАВЛЯЕМ ДЛИТЕЛЬНОСТЬ СЮДА --------
             duration_mask = (data['dur_min'] == dur_min)
 
             # Комбинируем условия
             final_condition = day_part_mask & duration_mask
             filtered_data = data[final_condition]
+            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
 
             # Шаг 1. Попытка построить прогноз на основании найденной mask
             if len(filtered_data) > 1:
@@ -1016,6 +1128,7 @@ class PrimitiveModel:
                 # Комбинируем условия
                 final_condition = day_part_mask & duration_backlash_mask
                 filtered_data = data[final_condition]
+                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
 
                 # Шаг 1. Попытка построить прогноз на основании найденной mask
                 if len(filtered_data) > 1:
@@ -1033,6 +1146,7 @@ class PrimitiveModel:
                     # Комбинируем условия
                     final_condition = day_part_mask
                     filtered_data = data[final_condition].reset_index(drop = True)
+                    filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
 
                     # Шаг 1. Попытка построить прогноз на основании найденной mask
                     if len(filtered_data) > 1:
@@ -1046,8 +1160,6 @@ class PrimitiveModel:
                         
                         min_key = min(deltas, key = deltas.get)
 
-                        #if min_key == 1.2 * dur_min
-
                         filtered_data_ = filtered_data[filtered_data['dur_min'] == min_key].reset_index(drop = True)
 
                         if len(filtered_data_) > 1:
@@ -1055,17 +1167,17 @@ class PrimitiveModel:
                             share_mean = np.median(list(filtered_data_['Share']))
                             found = True
                             if debug:
-                                print(filtered_data)
                                 print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
                         
 
         # ========== ЧЕТВЕРТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
-                print('🔍 Пробую поиск ТОЛЬКО по длительности ...')
+                print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по длительности ...' + Color.END)
 
             duration_mask = (data['dur_min'] == dur_min)
             filtered_data = data[duration_mask].reset_index(drop = True)
+            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
 
             # Шаг 2. Попытка построить прогноз на основании найденной mask
             if len(filtered_data) > 1:      
@@ -1079,12 +1191,13 @@ class PrimitiveModel:
         # ========== ПЯТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ С ЛЮФТОМ ±30%==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
-                print('🔍 Пробую поиск ТОЛЬКО по длительности с люфтом ±30% ...')
+                print(Color.ITALIC  + '🔍 Пробую поиск ТОЛЬКО по длительности с люфтом ±30% ...' + Color.END)
             
             duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & \
                                      (data['dur_min'] <= dur_min_upper)
 
             filtered_data = data[duration_backlash_mask]
+            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
             # Шаг 2. Попытка построить прогноз на основании найденной mask
             if len(filtered_data) > 1:    
                 share_mean = np.median(list(filtered_data['Share']))
@@ -1105,8 +1218,8 @@ class PrimitiveModel:
 
     def forecast_big(
             self,
+            program_name,
             date,
-            program_name: str,
             search_values: dict,
             last_n_weeks: pd.DataFrame,
             palomars_last_n_weeks: pd.DataFrame,
@@ -1159,7 +1272,7 @@ class PrimitiveModel:
                 if debug:
                     print('\n')
                     print(
-                        Color.PURPLE + \
+                        Color.GREEN + \
                         'ПЕРЕХОЖУ К ПОИСКУ В ИСТОРИЧЕСКОЙ СЕТКЕ ЗА ПОСЛЕДНИЕ N НЕДЕЛЬ БЕЗ УПОРА НА КОНКРЕТНУЮ ПРОГРАММУ. ПОЖАЛУЙСТА, ПОДОЖДИТЕ ...' + \
                         Color.END
                         )
@@ -1173,8 +1286,8 @@ class PrimitiveModel:
                 print('\n')
                 print(
                     Color.NAVY + \
-                    'Нет истории за последние N недель для программы {program_name} в {date}. ' + \
-                    'При прогнозировании опираюсь на историческую сетку без упора на конкретную программу.' + \
+                    f'Нет истории за последние N недель для программы {program_name} в {date}. ' + \
+                    f'При прогнозировании опираюсь на историческую сетку без упора на конкретную программу.' + \
                     Color.END
                     )
             share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
@@ -1183,8 +1296,11 @@ class PrimitiveModel:
         if np.isclose(share_mean, 0.0):
             if debug:
                 print('🔍 В качестве прогноза беру медиану за последние N недель ...')
-        
-            share_mean = np.median(list(last_n_weeks['Share']))
+            
+            if len(last_n_weeks) == 0:
+                share_mean = np.median(list(palomars_last_n_weeks['Share']))
+            else:
+                share_mean = np.median(list(last_n_weeks['Share']))
         
         return share_mean, used_mask
             
@@ -1192,8 +1308,6 @@ class PrimitiveModel:
 
     def forecast_small(
             self,
-            date: str,
-            program_name: str,
             search_values: dict,
             last_n_weeks: pd.DataFrame,
             palomars_last_n_weeks: pd.DataFrame,
@@ -1224,6 +1338,7 @@ class PrimitiveModel:
         """
         share_mean = 0.0
         used_mask = None
+        dur_min = search_values['dur_min']
 
         # Рассматриваем случай, когда истории по текущему году нет
         if len(last_n_weeks) == 0:
@@ -1242,21 +1357,44 @@ class PrimitiveModel:
                 share_mean = np.median(list(palomars_last_n_weeks['Share']))
         
         else:
-            if len(last_n_weeks) >= 3:
-                table = last_n_weeks.tail(3)
-                share_mean = np.median(list(table['Share']))
+
+            share_mean, used_mask = self._search_by_combinations(last_n_weeks, search_values, debug = debug)
+
+            if np.isclose(share_mean, 0.0):
                 if debug:
-                    print('Нахожу медиану последних 3х значений истории')
-            
-            elif len(last_n_weeks) == 1:
-                share_mean = list(last_n_weeks['Share'])[0]
-                if debug:
-                    print('Всего 1 значение в истории. В качестве прогноза беру именно его.')
-            
-            elif len(last_n_weeks) == 2:
-                share_mean = np.mean(list(last_n_weeks['Share']))
-                if debug:
-                    print('Два значения в истории. В качестве прогноза беру Среднее между ними.')
+                    print(f'Попытка построить прогноз, основываясь на истории Palomars.')
+
+                share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
+
+                # Построение прогноза путем расчета среднего за последние N недель.
+                if np.isclose(share_mean, 0.0):
+                    # Построение прогноза путем расчета среднего за последние N недель.
+                    if debug:
+                        print('🔍 В качестве прогноза беру медиану за последние N недель ...')
+                
+                    share_mean = np.median(list(palomars_last_n_weeks['Share']))
+            ## Попытка найти данные по длительности
+            #used_mask = last_n_weeks['dur_min'] == dur_min
+            #filtered_data = last_n_weeks[used_mask].reset_index(drop = True)
+#
+            #if len(filtered_data) != 0:
+            #    share_mean = np.median(list(filtered_data['Share']))
+#
+            #if len(last_n_weeks) >= 3:
+            #    table = last_n_weeks.tail(3)
+            #    share_mean = np.median(list(table['Share']))
+            #    if debug:
+            #        print('Нахожу медиану последних 3х значений истории')
+            #
+            #elif len(last_n_weeks) == 1:
+            #    share_mean = list(last_n_weeks['Share'])[0]
+            #    if debug:
+            #        print('Всего 1 значение в истории. В качестве прогноза беру именно его.')
+            #
+            #elif len(last_n_weeks) == 2:
+            #    share_mean = np.mean(list(last_n_weeks['Share']))
+            #    if debug:
+            #        print('Два значения в истории. В качестве прогноза беру Среднее между ними.')
             
         return share_mean, used_mask
     
@@ -1264,8 +1402,6 @@ class PrimitiveModel:
 
     def forecast_new(
             self,
-            date: str,
-            program_name: str,
             search_values: dict,
             palomars_last_n_weeks: pd.DataFrame,
             debug = False
@@ -1305,7 +1441,7 @@ class PrimitiveModel:
         used_mask = None
 
         # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
-        combinations_list_general = PrimitiveModel.generate_field_combinations(
+        combinations_list_general = RuleBasedForecaster.generate_field_combinations(
                             fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                             min_fields = 2,
                             must_include = 'dur_min',
@@ -1313,8 +1449,8 @@ class PrimitiveModel:
                             debug = debug
                         )
         
-        # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
-        combinations_list_no_duration = PrimitiveModel.generate_field_combinations(
+        # Генерируем всевозможные комбинации без обязательного параметра
+        combinations_list_no_duration = RuleBasedForecaster.generate_field_combinations(
                             fields = ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                             min_fields = 1,
                             must_include = None,
@@ -1324,6 +1460,9 @@ class PrimitiveModel:
         
         # ========== ПЕРВЫЙ ПРОХОД: БЕЗ ЛЮФТА ==========
         for fields in combinations_list_general:
+            if debug:
+                print(Color.VIOLET + 'Строю прогноз, опираясь на список комбинаций с обязательным параметром "dur_min". ' + \
+                      'Минимальное количество параметров в комбинации 2.' + Color.END)
             # Создаем маску для комбинации полей
             condition = pd.Series(True, index = palomars_last_n_weeks.index)
             for field in fields:
@@ -1345,16 +1484,16 @@ class PrimitiveModel:
                     share_mean, used_mask = self.calculate_share(filtered_data, condition, parent_df = palomars_last_n_weeks)
                     found = True
                     if debug:
-                        print(f"  📊 Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
-                        print(f"  ✅ Нашёл совпалдения по полям: {fields}")
+                        print(f"  📊 Выборка малеькая. Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
+                        print(f"  ✅ Нашёл совпадения по полям: {fields}")
                 else:
                     # Меньше 3 записей - тоже используем среднее, но без маски
-                    share_mean = PrimitiveModel.get_clean_mean(filtered_data['Share'])
+                    share_mean = RuleBasedForecaster.get_clean_mean(filtered_data['Share'])
                     used_mask = condition
                     found = True
                     if debug:
                         print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
-                        print(f"  ✅ Нашёл совпалдения по полям: {fields}")
+                        print(f"  ✅ Нашёл совпадения по полям: {fields}")
             
             # Случай 3: Большая выборка (> SMALL_SAMPLE_SIZE)
             else:
@@ -1363,7 +1502,7 @@ class PrimitiveModel:
                 duration_filtered = filtered_data[duration_mask].reset_index(drop = True)
                 
                 if debug:
-                    print(f"  📊 Фильтрация по длительности ≥ {dur_min}мин: найдено {len(duration_filtered)} записей")
+                    print(f"  📊 Выборка большая. Фильтрация по длительности ≥ {dur_min} мин: найдено {len(duration_filtered)} записей")
                 
                 if len(duration_filtered) > 0:
                     # Комбинируем маски
@@ -1422,7 +1561,7 @@ class PrimitiveModel:
                             print(f"  ✅ Нашёл совпадения по полям: {fields}")
                     else:
                         # Меньше 3 записей - тоже используем среднее, но без маски
-                        share_mean = PrimitiveModel.get_clean_mean(filtered_data['Share'])
+                        share_mean = RuleBasedForecaster.get_clean_mean(filtered_data['Share'])
                         used_mask = final_condition
                         found = True
                         if debug:
@@ -1442,20 +1581,17 @@ class PrimitiveModel:
                 print(f"  🔄 Ищу с люфтом ±30%")
                 print(f"  📈 Рассчитано среднее: {share_mean:.4f}")
         
-
         # Если ничего не нашли
         if np.isclose(share_mean, 0.0):
-
             if debug:
                 print('🔍 В качестве прогноза беру медиану за последние N недель ...')
-        
             share_mean = np.median(list(palomars_last_n_weeks['Share']))
         
         return share_mean, used_mask
     
     
 
-    def build_forecast(
+    def build_forecast_per_group(
             self,
             programs_dict: dict,
             all_holidays,
@@ -1465,7 +1601,7 @@ class PrimitiveModel:
             debug = False
         ):
         """
-            Метод для построения прогноза.
+            Метод для построения прогноза .
             Параметры:
             ----------
                 programs_dict: dict 
@@ -1479,6 +1615,8 @@ class PrimitiveModel:
                     Список из всевозможных комбинаций
                 volume_flag: str
                     Флаг, который будет указывать, какой метод для прогнозирования необходимо применять.
+                n_weeks_ago: int
+                    Количество последних недель, которое берётся для анализа
         """
         if volume_flag not in ['small', 'big', 'new']:
             raise ValueError(f"Флаг '{volume_flag}' не существует. Выберите из списка: {['small', 'big', 'new']}")
@@ -1562,7 +1700,7 @@ class PrimitiveModel:
                     # Построение прогноза для крупной программы
                     if volume_flag == 'big':
                         share_forecast, mask = self.forecast_big(
-                            date, program_name, search_values, 
+                            program_name, date, search_values, 
                             last_n_weeks, palomars_last_n_weeks,
                             debug = debug
                         )
@@ -1570,16 +1708,14 @@ class PrimitiveModel:
                     # Построение прогноза для мелкой программы
                     elif volume_flag == 'small':
                         share_forecast, mask = self.forecast_small(
-                            date, program_name, search_values,
-                            last_n_weeks, palomars_last_n_weeks,
+                            search_values, last_n_weeks, palomars_last_n_weeks,
                             debug = debug
                         )
                     
                     # Построение прогноза для НОВОЙ программы
                     elif volume_flag == 'new':
                         share_forecast, mask = self.forecast_new(
-                            date, program_name, search_values,
-                            palomars_last_n_weeks,
+                            search_values, palomars_last_n_weeks,
                             debug = debug)
 
                     date_masks[date.strftime('%Y-%m-%d')] = mask
@@ -1597,3 +1733,79 @@ class PrimitiveModel:
                 
             results_per_program[program_name] = pd.concat(forecast_results).reset_index(drop = True)
         return results_per_program
+    
+
+    def pipeline_forecaster(
+            self, 
+            all_programs_to_forecast: dict, 
+            all_holidays, 
+            work_saturdays,
+            fact_part_of_month: pd.DataFrame,
+            n_weeks_ago: int,
+            debug = False
+        ):
+        """
+            Пайплайн для построения прогноза совокупно для всех трёх групп: "big", "small", "new".
+            Параметры:
+            ----------
+                all_programs_to_forecast: dict of dicts
+                    Словарь словарей с разбивкой по группам программ: "big", "small", "new".
+                    Ключ - один из трёх групп: "big", "small", "new"
+                    Значение: словарь из программ с историей. Ключ - название программы, Значение - таблица с историей
+                fact_part_of_month: pd.DataFrame
+                    Таблица с фактической частью месяца
+                n_weeks_ago: int
+                    Количество последних недель, которое берётся для анализа
+        """
+        if debug:
+            if len(fact_part_of_month) != 0:
+                print('Есть накопленный факт. Учитываю это при прогнозировании.')
+            else:
+                print('Накопленного факта нет. Прогнозирую весь месяц целиком.')
+
+        # Словарь с результатми прогнозов
+        forecast_results = {}
+        for key, programs_dict in all_programs_to_forecast.items():
+            forecast_results[key] = self.build_forecast_per_group(
+                                                        programs_dict, all_holidays, 
+                                                        work_saturdays, key, n_weeks_ago
+                                                    )
+
+        results = []
+        for key, result_dict in forecast_results.items():
+            for program, forecast in result_dict.items():
+                results.append(forecast)
+
+        # Итоговая таблица с прогнозом
+        data_full = pd.concat(results).reset_index(drop = True)
+
+        columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']
+        data_full = data_full[columns]
+
+        forecast_df = pd.DataFrame()
+
+        # Если есть накопленный факт, то мы соединяем между собой две таблицы
+        if len(fact_part_of_month) != 0:
+            fact_part_of_month = fact_part_of_month[columns]
+            forecast_df = pd.concat([fact_part_of_month, data_full]).reset_index(drop = True)
+        else:
+            forecast_df = data_full
+
+        forecast_df['Дата'] = pd.to_datetime(forecast_df['Дата'])
+        sorted_webs = forecast_df.sort_values('Дата').reset_index(drop = True)
+
+        dates_unique = sorted_webs['Дата'].unique()
+        res = []
+        for date in dates_unique:
+            date_dt = pd.to_datetime(date)
+            t = sorted_webs[sorted_webs['Дата'] == date_dt]
+            t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
+            final = t.sort_values('sort_key').reset_index(drop = True)
+            final = final.drop('sort_key', axis = 1)
+            res.append(final)
+
+        general_result = pd.concat(res).reset_index(drop = True)
+        general_result['Дата'] = general_result['Дата'].dt.strftime('%Y-%m-%d')
+        # Расставляем колонки в нужном порядке
+        general_result = general_result[columns]
+        return general_result
