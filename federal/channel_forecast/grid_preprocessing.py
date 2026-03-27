@@ -599,12 +599,6 @@ class MediascopeParser(BaseParser):
                     'researchWeekDay': 'День недели'}, inplace = True)
                 
 
-                # Удаляем 'Сезон N/A / ' из столбца "Описание программы"
-                #df['Описание программы'] = (df['Описание программы']
-                #                            .str.replace('Сезон N/A / ', '', regex = False)
-                #                            .str.replace('Серия N/A', '', regex = False)
-                #                            .str.replace('Сезон N/A', '', regex = False))
-
                 # Удаляем 'Документальное кино Леонида Млечина' из столбца "Название программы"
                 # До 2025.12.31 в районе 02:10 вместо документого фильма стояла программа 'Документальное кино Леонида Млечина'.
                 # Если появится какая-то другая программа, то надо будет настроить удаление аналогичным образом
@@ -672,6 +666,12 @@ class MediascopeParser(BaseParser):
                                         .str.replace('Сезон N/A / ', '', regex = False)
                                         .str.replace('Серия N/A', '', regex = False)
                                         .str.replace('Сезон N/A', '', regex = False))
+            
+            if self.channel == 'СУББОТА':
+                df = df[~df['Название программы'].str.contains('малышарики. умные песенки', case = False, na = False)]
+            
+            elif self.channel == 'Ю':
+                df = df[~df['Название программы'].str.contains('про семью', case = False, na = False)]
                  
             time_slots_columns = ['Время выхода', 'Время окончания']
             for i in range(len(time_slots_columns)):
@@ -1850,6 +1850,33 @@ class ProgramMatcher(BaseParser):
                     mapping[long_name] = short_name
         
         return mapping
+    
+
+    @staticmethod
+    def check_cartoons(
+            df: pd.DataFrame, 
+            target_name_cartoons: list, 
+            full_list:list, 
+            replacement_name: str,
+            debug = False
+        ):
+        """
+            Если в столбце "Название программы" встречается название "маша и медведь", а также любое из списка other_list,
+            то производится замена названий на "мультфильм о маше".
+            В противном случае, если присутствует только "маша и медведь", то замена не производится.
+        """
+        unique_values = set(df['Название программы'].unique())
+        
+        has_cartoon = any(cartoon in unique_values for cartoon in target_name_cartoons)
+        
+        if has_cartoon:
+            if debug:
+                print(Color.BROWN + 'Встретились мультфильмы о Маше или Коте Леопольде. Делаю замену на ' + \
+                Color.BOLD + f'"{replacement_name}".' + Color.END)
+            # Заменяем всё, включая "маша и медведь"
+            mask = df['Название программы'].str.lower().isin(full_list)
+            df.loc[mask, 'Название программы'] = replacement_name
+        return df
 
 
     def match_vimb_with_palomars_grids(self, cities_path: str, minutes: int = 10):
@@ -1939,7 +1966,7 @@ class ProgramMatcher(BaseParser):
             # Находим базовые названия программ. Производим замену
             base_names = ProgramMatcher.find_common_base_names(palomars_df['program_name'].tolist())
 
-            palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)
+            palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)    
             
             # Оставляем только нужные столбцы для анализа
             Pal = palomars_df[['Дата', 'Название программы', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted', 'Жанр']]
@@ -1952,14 +1979,28 @@ class ProgramMatcher(BaseParser):
                     }, 
                     inplace = True)
             Pal['Название программы'] = Pal['Название программы'].str.lower()
-
             
             VIMB = vimb_df[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
             VIMB.rename(columns = {
                 'Название программы': 'Название программы vimb',
                 'program_name': 'Название программы'
                 }, inplace = True)
-
+            
+            # =============== Замена названий мультфильмов, связанных с Машей и котом Леопольдом ===============
+            dataframes = [VIMB, Pal]
+            for df in dataframes:
+                df = ProgramMatcher.check_cartoons(
+                                        df = df,
+                                        target_name_cartoons = ['маша и медведь'],
+                                        full_list = ['машины сказки', 'машины песенки', 'машины страшилки', 'маша и медведь', 'машкины страшилки'],
+                                        replacement_name = 'мультфильм о маше'
+                                        )
+                df['Название программы'] = np.where(
+                        df['Название программы'].str.contains('леопольд', case = False, na = False), 
+                        'мультфильм о коте леопольде', df['Название программы']
+                    )
+                
+            # =========================================================================================================================
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
 
@@ -2074,8 +2115,6 @@ class ProgramMatcher(BaseParser):
                 lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
             )
     
-            #result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).adjust_end_time(result_df)
-
             result_df = result_df[
                 [
                     'Дата', 'Название программы', 'Время выхода', 'Время окончания',

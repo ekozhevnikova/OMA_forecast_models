@@ -968,7 +968,8 @@ class MonthlyShareAnalyzer:
     def calculate_ttv(
         self,
         ttv_filepath: str, 
-        need_columns: list
+        need_columns: list,
+        debug = False
         ):
         """
             Метод для чтения файла с TTV.
@@ -1011,13 +1012,12 @@ class MonthlyShareAnalyzer:
             'будни': weekday_ttv[self.bca],
             'выходные': weekend_ttv[self.bca]
         }
-        print('TTV')
-        print(result)
-        print('\n')
+        if debug:
+            print(result)
         return result
     
 
-    def calculate_monthly_share(self, ttv_dict: dict, work_saturdays, all_holidays):
+    def calculate_monthly_share(self, ttv_dict: dict, work_saturdays, all_holidays, debug = False):
         """
             Метод для расчета месячной доли 
         """
@@ -1032,14 +1032,16 @@ class MonthlyShareAnalyzer:
         mean_share_weekdays = np.mean(list(weekdays['Share']))
         mean_share_weekend = np.mean(list(weekends['Share']))
 
-        print(f'Средняя доля будних: {np.round(mean_share_weekdays, 3)}, Средняя доля выходных: {np.round(mean_share_weekend, 3)}')
+        if debug:
+            print(f'Средняя доля будних: {np.round(mean_share_weekdays, 3)}, Средняя доля выходных: {np.round(mean_share_weekend, 3)}')
 
         # 5. Подсчет количества будних, выходных и количества дней в месяце
         count_weekends = (self.df['Тип дня'] == 'выходной').sum()
         count_weekdays = (self.df['Тип дня'] == 'будний').sum()
         n_days = count_weekends + count_weekdays
-
-        print(f'Кол-во будних: {count_weekdays}, Кол-во выходных: {count_weekends}')
+        
+        if debug:
+            print(f'Кол-во будних: {count_weekdays}, Кол-во выходных: {count_weekends}')
 
         TVR_summ = {
             'итого': ttv_dict['итого'] * n_days,
@@ -1047,7 +1049,8 @@ class MonthlyShareAnalyzer:
             'выходные': mean_share_weekend * ttv_dict['выходные'] * count_weekends
             }
         
-        print(TVR_summ)
+        if debug:
+            print(TVR_summ)
 
         share_per_month = (TVR_summ['будни'] + TVR_summ['выходные']) / TVR_summ['итого']
         return share_per_month
@@ -1059,7 +1062,8 @@ class MonthlyShareAnalyzer:
             target_column: str, 
             need_columns: list, 
             work_saturdays, 
-            all_holidays
+            all_holidays,
+            debug = False
         ):
         """
             Пайплайн для расчета
@@ -1081,7 +1085,7 @@ class MonthlyShareAnalyzer:
         # Сортировка по дате (если нужно)
         self.df = self.df.sort_values('Дата').reset_index(drop = True)
 
-        ttv = self.calculate_ttv(ttv_filepath, need_columns)
-        share_per_month = self.calculate_monthly_share(ttv, work_saturdays, all_holidays)
+        ttv = self.calculate_ttv(ttv_filepath, need_columns, debug = debug)
+        share_per_month = self.calculate_monthly_share(ttv, work_saturdays, all_holidays, debug = debug)
         return share_per_month
 
