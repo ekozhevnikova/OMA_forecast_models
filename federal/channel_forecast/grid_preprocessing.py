@@ -1433,9 +1433,16 @@ class VIMBGridProcessor(BaseParser):
         # Убедимся, что дата в строковом формате
         general_result['Дата'] = general_result['Дата'].astype(str)
 
-
-        #general_result['Прод-ть'] = general_result['Прод-ть'].dt.strftime('%H:%M:%S')
         general_result = general_result[general_result['Прод-ть'] != '00:00:01'].reset_index(drop = True)
+
+        # Проверяем разрывы
+        warnings = self.check_program_gaps(general_result)
+        # Выводим результаты
+        if warnings:
+            print(Color.RED + f'Найдены разрывы более 30 мин для канала {self.channel_name}' + Color.END)
+            for i, warning in enumerate(warnings, 1):
+                print(f"\n{i}. Для {warning['дата']} предупреждение: {warning['предупреждение']}")
+                print("-" * 80)
 
         return general_result
     
@@ -1476,6 +1483,66 @@ class VIMBGridProcessor(BaseParser):
         
         return f"{duration_h:02d}:{duration_m:02d}:{duration_s:02d}"
     
+
+    def check_program_gaps(self, df: pd.DataFrame):
+        """
+            Проверяет разрывы между программами в сетке телепрограмм.
+            
+            Параметры:
+            ----------
+                df: pd.DataFrame
+            
+            Returns:
+            -------
+                warnings: list
+                Список предупреждений о разрывах более 30 минут
+        """
+        warnings = []
+
+        df_copy = df.copy()
+        df_copy['Время выхода'] = pd.to_datetime(df_copy['Время выхода'], format='%H:%M:%S')
+        df_copy['Время окончания'] = pd.to_datetime(df_copy['Время окончания'], format='%H:%M:%S')
+        
+        # Группируем по датам
+        grouped = df_copy.groupby('Дата')
+        
+        for date_key, group in grouped:
+            # Сортируем по времени выхода
+            group_sorted = group.sort_values('Время выхода').reset_index(drop=True)
+            
+            for i in range(len(group_sorted) - 1):
+                current_end = group_sorted.loc[i, 'Время окончания']
+                next_start = group_sorted.loc[i + 1, 'Время выхода']
+                current_program = group_sorted.loc[i, 'Название программы']
+                next_program = group_sorted.loc[i + 1, 'Название программы']
+                
+                # Вычисляем разрыв
+                gap = next_start - current_end
+                
+                # Если разрыв больше 30 минут
+                if gap > timedelta(minutes=30):
+                    # Если date_key - это уже datetime объект
+                    if hasattr(date_key, 'strftime'):
+                        date_str = date_key.strftime('%d.%m.%Y')
+                    else:
+                        # Если date_key - строка или другой тип, преобразуем
+                        date_str = pd.to_datetime(date_key).strftime('%d.%m.%Y')
+                    
+                    warnings.append({
+                        'дата': date_key,
+                        'предыдущая_программа': current_program,
+                        'следующая_программа': next_program,
+                        'время_окончания': current_end,
+                        'время_начала': next_start,
+                        'разрыв_минут': gap.total_seconds() / 60,
+                        'предупреждение': f"{date_str} наблюдается разрыв между программами '{current_program}' "
+                                        f"(окончание в {current_end.strftime('%H:%M')}) и '{next_program}' (начало в {next_start.strftime('%H:%M')}) "
+                                        f"продолжительностью {int(gap.total_seconds() / 60)} минут"
+                    })
+        
+        return warnings
+
+
 
     def adjust_end_time(
                     self, 
@@ -1689,7 +1756,6 @@ class VIMBGridProcessor(BaseParser):
 
         return df
 
-    
     
 
     def update_vimb_file(self, web_new):

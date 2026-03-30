@@ -508,6 +508,20 @@ class RuleBasedForecaster:
             
         else:
             return 'выходной'
+    
+
+    @staticmethod
+    def get_holidays(date, holidays: list):
+        """
+            Помечает меткой 1, если день праздничный. Генерируется, исходя из производственного календаря
+        """
+        date_str = datetime.strftime(date, '%Y-%m-%d')
+        
+        if date_str in holidays:
+            return 1
+        
+        else:
+            return 0
         
 
     @staticmethod
@@ -767,6 +781,11 @@ class RuleBasedForecaster:
         data['Тип дня'] = data['Дата'].apply(lambda x: RuleBasedForecaster.get_day_type(x, all_holidays, work_saturdays))
         palomars_history['Тип дня'] = palomars_history['Дата'].apply(lambda x: RuleBasedForecaster.get_day_type(x, all_holidays, work_saturdays))
 
+        # Шаг 4. Определение праздник/не праздник
+        data['is_weekend'] = data['Дата'].apply(lambda x: RuleBasedForecaster.get_holidays(x, all_holidays))
+        palomars_history['is_weekend'] = palomars_history['Дата'].apply(lambda x: RuleBasedForecaster.get_holidays(x, all_holidays))
+
+
         columns = ['Время выхода', 'Время окончания']
         for column in columns:
             data[f'{column}_dt'] = pd.to_datetime(data[column], format = '%H:%M:%S')
@@ -793,7 +812,7 @@ class RuleBasedForecaster:
         columns_order = [
             'Дата', 'Название программы', 'Время выхода', 
             'Время окончания', 'Продолжительность',
-            'dur_min', 'День недели', 'Тип дня',
+            'dur_min', 'День недели', 'Тип дня', 'is_weekend',
             'dt_start', 'dt_end', 'Share'
                     ]
 
@@ -809,13 +828,13 @@ class RuleBasedForecaster:
             print(f'Всего требуется спрогнозировать: {len(dates_per_forecast)} уникальных дат.')
 
         
-        # Шаг 5. Отбираем ТОЛЬКО исторические значения из исходного датафрейма
+        # Шаг 5. Отбираем ТОЛЬКО исторические значения из исходного датафрейма для конкретной программы
         history = data[data['Share'] != ''].reset_index(drop = True)
         history = history[columns_order]
         palomars_history = palomars_history[[
                     'Дата', 'Название программы', 'Время выхода', 
                     'Время окончания', 'Продолжительность', 'Жанр',
-                    'dur_min', 'День недели', 'Тип дня',
+                    'dur_min', 'День недели', 'Тип дня', 'is_weekend',
                     'dt_start', 'dt_end', 'Share'
                         ]]
         
@@ -823,10 +842,12 @@ class RuleBasedForecaster:
         # Шаг 6. Отбор ТОЛЬКО текущего года
         # Если прогнозируемый месяц январь, то отбираем все данные, начиная с прошлого года.
         if self.month_num == 1:
+            # Отбираем данные для конкретной программы
             current_year_mask = (history['Дата'] >= f'{self.current_year - 1}-01-01') & \
                                 (history['Дата'] < self.start_date_forecast)
             current_year = history[current_year_mask].reset_index(drop = True)
 
+            # Отбираем все исторические данные
             current_year_mask_palomars = (palomars_history['Дата'] >= f'{self.current_year - 1}-01-01') & \
                                          (palomars_history['Дата'] < self.start_date_forecast)
             palomars_history = palomars_history[current_year_mask_palomars].reset_index(drop = True)
@@ -843,7 +864,6 @@ class RuleBasedForecaster:
         if len(current_year) != 0:
             
             # Шаг 7. Последняя фактическая дата из истории.
-            #last_fact_date = history['Дата'].max()
             if debug:
                 print(f"Последняя фактическая дата: {last_fact_date.strftime('%Y-%m-%d')}.")
 
@@ -854,12 +874,11 @@ class RuleBasedForecaster:
             last_n_weeks = history[history['Дата'] > date_n_weeks_ago].reset_index(drop = True).copy()
 
             palomars_last_n_weeks =  palomars_history[palomars_history['Дата'] > date_n_weeks_ago].reset_index(drop = True).copy()
-        
+
         else:
             print('Программы ' + Color.BLUE + f"'{program_name}'" + Color.END + ' ещё не было в текущем году.')
 
             # Отбираем после N недель из истории Palomars
-            #last_fact_date = palomars_history['Дата'].max()
             if debug:
                 print(f"Последняя фактическая дата в истории Palomars: {last_fact_date.strftime('%Y-%m-%d')}.")
             date_n_weeks_ago = last_fact_date - pd.Timedelta(weeks = n_weeks_ago)
@@ -874,7 +893,9 @@ class RuleBasedForecaster:
             'target_dates': dates_per_forecast,         # даты, на которые нужен прогноз
             'target_data': per_forecast,                # данные для прогнозирования
             'history_last_n_weeks': last_n_weeks,       # история программы за N недель
-            'palomars_history': palomars_last_n_weeks   # история Palomars за N недель
+            'palomars_history': palomars_last_n_weeks,  # история Palomars за N недель
+            'full_history': history,                    # история программы за N недель
+            'full_palomars_history': palomars_history,  # история Palomars за N недель
         }
 
         return program_forecast_package
@@ -930,15 +951,11 @@ class RuleBasedForecaster:
                                     exclude = None,
                                     debug = False
                         )
-        
-        # Генерируем комбинации БЕЗ параметра 'dur_min'
-        combinations_list_no_duration = RuleBasedForecaster.generate_field_combinations(
-                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
-                            min_fields = 3,
-                            must_include = ['dt_start', 'dt_end'],
-                            exclude = None,
-                            debug = False
-                        )
+        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+        combinations_list_general_without_dur_min = [
+            [field for field in combination if field != 'dur_min'] 
+            for combination in combinations_list_general
+        ]
         
         # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
         combinations_list = RuleBasedForecaster.generate_field_combinations(
@@ -949,32 +966,30 @@ class RuleBasedForecaster:
                             debug = False
                         )
         
-        ################## Ищем такие комбинации в combinations_list, которые еще не встречались в combinations_list_general и combinations_list_no_duration
-        # Преобразуем списки в множества frozenset для игнорирования порядка
-        existing_sets = set()
-
-        # Добавляем комбинации из combinations_list_general
-        for combo in combinations_list_general:
-            existing_sets.add(frozenset(combo))
-
-        # Добавляем комбинации из combinations_list_no_duration
-        for combo in combinations_list_no_duration:
-            existing_sets.add(frozenset(combo))
-
-        # Фильтруем combinations_list
-        filtered_combinations = [
-            combo for combo in combinations_list 
-            if frozenset(combo) not in existing_sets
+        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+        combinations_list_without_dur_min = [
+            [field for field in combination if field != 'dur_min'] 
+            for combination in combinations_list_general
         ]
-        #######################################################################################################################################################
+        
+        # Генерируем комбинации БЕЗ параметра 'dur_min', но с обязательными параметрами 'dt_start', 'dt_end'.
+        combinations_list_no_duration = RuleBasedForecaster.generate_field_combinations(
+                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
+                            min_fields = 3,
+                            must_include = ['dt_start', 'dt_end'],
+                            exclude = None,
+                            debug = False
+                        )
+        
+        ########################################################################################################################################################
 
-        # ======================================== БЕЗ ЛЮФТА ========================================
+        # ======================================== БЕЗ ЛЮФТА С ПАРАМЕТРОМ "dur_min"========================================
         if debug:
             print(Color.VIOLET + f'Попытка построить прогноз, опираясь на целевую длительность.' + Color.END)
 
         # ========== ПЕРВЫЙ ПРОХОД: Осуществляем поиск по списку с обязательными параметрами 'dur_min', 'dt_start', 'dt_end' ==========
-            print(Color.ITALIC + f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
-                  f'Минимальное количество параметров в комбинации 4.' + Color.END)
+            print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
+                  f'Минимальное количество параметров в комбинации 4.')
             
         for fields in combinations_list_general:
             if found:  # Если уже нашли результат, выходим
@@ -1013,9 +1028,10 @@ class RuleBasedForecaster:
         # ========== ВТОРОЙ ПРОХОД: ПОИСК ПО ДЛИТЕЛЬНОСТИ + РАЗЛИЧНЫЕ КОМБИНАЦИИ, КОТОРЫЕ РАННЕЕ НЕ ВСТРЕЧАЛИСЬ  ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
-                print('🔍 Осуществляем поиск по списку с обязательным параметром "dur_min"')
+                print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min".  ' + \
+                  f'Минимальное количество параметров в комбинации 2.')
             
-            for fields in filtered_combinations:
+            for fields in combinations_list:
                 if found:  # Если уже нашли результат, выходим
                     break
                 # Шаг 1. Создаем маску для текущей комбинации
@@ -1050,6 +1066,97 @@ class RuleBasedForecaster:
         
         # ======================================== С ЛЮФТОМ ========================================
         # ========== ТРЕТИЙ ПРОХОД: ДОБАВЛЕНИЕ ЛЮФТА К Длительности ±30% ==========
+        if not found and np.isclose(share_mean, 0.0):
+            if debug:
+                print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
+                print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
+                      f'Минимальное количество параметров в комбинации 4.')
+            
+            for fields in combinations_list_general_without_dur_min:
+                if found:
+                    break
+                # Шаг 1. Создаем маску для текущей комбинации
+                condition = pd.Series(True, index = data.index)
+                for field in fields:
+                    condition &= (data[field] == search_values[field])
+                
+                if not condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям: {fields}")
+                    continue
+
+                # Добавляем условие по длительности с люфтом
+                duration_condition = (data['dur_min'] >= dur_min_lower) & \
+                                     (data['dur_min'] <= dur_min_upper)
+                
+                # Комбинируем условия
+                final_condition = condition & duration_condition
+                
+                if not final_condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
+                    continue
+
+                filtered_data = data[final_condition]
+                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
+                
+                # Шаг 2. Попытка построить прогноз на основании найденной mask
+                if len(filtered_data) > 1:
+                    share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
+                    found = True
+                    if debug:
+                        fields_str = ", ".join(fields) if fields else "без дополнительных полей"
+                        print(f'✅ Найдено {len(filtered_data)} записей с люфтом по полям: {fields_str}.')
+                        print(f'   Диапазон длительности: {dur_min_lower:.0f} - {dur_min_upper:.0f} мин.')
+                    break
+        
+
+        # ========== ЧЕТВЕРТЫЙ ПРОХОД:  ==========
+        if not found and np.isclose(share_mean, 0.0):
+            if debug:
+                print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min" с люфтом ' + \
+                      f'Минимальное количество параметров в комбинации 2.')
+            
+            for fields in combinations_list_without_dur_min:
+                if found:
+                    break
+                # Шаг 1. Создаем маску для текущей комбинации
+                condition = pd.Series(True, index = data.index)
+                for field in fields:
+                    condition &= (data[field] == search_values[field])
+                
+                if not condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям: {fields}")
+                    continue
+
+                # Добавляем условие по длительности с люфтом
+                duration_condition = (data['dur_min'] >= dur_min_lower) & \
+                                     (data['dur_min'] <= dur_min_upper)
+                
+                # Комбинируем условия
+                final_condition = condition & duration_condition
+                
+                if not final_condition.any():
+                    if debug:
+                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
+                    continue
+
+                filtered_data = data[final_condition]
+                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
+                
+                # Шаг 2. Попытка построить прогноз на основании найденной mask
+                if len(filtered_data) > 1:
+                    share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
+                    found = True
+                    if debug:
+                        fields_str = ", ".join(fields) if fields else "без дополнительных полей"
+                        print(f'✅ Найдено {len(filtered_data)} записей с люфтом по полям: {fields_str}.')
+                        print(f'   Диапазон длительности: {dur_min_lower:.0f} - {dur_min_upper:.0f} мин.')
+                    break
+        
+        
+        # ========== ПЯТЫЙ ПРОХОД:  ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
                 print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
@@ -1095,7 +1202,7 @@ class RuleBasedForecaster:
                     break
         
         
-        # ========== ЧЕТВЕРТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ТИПУ ЧАСТИ ДНЯ и с вариациями ДЛИТЕЛЬНОСТИ  ==========
+        # ========== ШЕСТОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ТИПУ ЧАСТИ ДНЯ и с вариациями ДЛИТЕЛЬНОСТИ  ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
                 print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности ...' + Color.END)
@@ -1170,7 +1277,7 @@ class RuleBasedForecaster:
                                 print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
                         
 
-        # ========== ЧЕТВЕРТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ ==========
+        # ========== СЕДЬМОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ ==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
                 print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по длительности ...' + Color.END)
@@ -1188,7 +1295,7 @@ class RuleBasedForecaster:
                     print(f'✅ Найдено {len(filtered_data)} записей только по длительности.')
 
                 
-        # ========== ПЯТЫЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ С ЛЮФТОМ ±30%==========
+        # ========== ВОСЬМОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ С ЛЮФТОМ ±30%==========
         if not found and np.isclose(share_mean, 0.0):
             if debug:
                 print(Color.ITALIC  + '🔍 Пробую поиск ТОЛЬКО по длительности с люфтом ±30% ...' + Color.END)
