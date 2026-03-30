@@ -326,7 +326,7 @@ class DataPreparator:
             'new': not_found
         }
         return result
-
+    
 
 
 class RuleBasedForecaster:
