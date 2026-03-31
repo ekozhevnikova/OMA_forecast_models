@@ -128,7 +128,7 @@ class BaseDataService:
                                 daytype_filter = safe_params['daytype_filter'], 
                                 company_filter = safe_params['company_filter'], 
                                 time_filter = safe_params['time_filter'], 
-                                basedemo_filter = safe_params['basedemo_filter'], 
+                                basedemo_filter = basedemo_filter, 
                                 targetdemo_filter = safe_params['targetdemo_filter'],
                                 location_filter = safe_params['location_filter'],
                                 slices = safe_params['slices'], 
