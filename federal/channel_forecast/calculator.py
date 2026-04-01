@@ -889,25 +889,6 @@ class TVScheduleProcessor:
                     issues.append(issue)
             
             return issues
-        
-        # Финальная проверка, что "Время окончания" предыдущей программы равно "Время начала" следующей программы.
-        #issues = check_time_intervals(result)
-
-        #if issues:
-        #    print("\n" + "=" * 80)
-        #    print("❗ ВНИМАНИЕ: Обнаружены некорректные интервалы между программами!")
-        #    print("="*80)
-            
-        #    for issue in issues:
-        #        print(f"\n📅 Дата: {issue['дата']}")
-        #        print(f"   Индекс: {issue['индекс']}")
-        #        print(f"   Программа: {issue['программа']}")
-        #        print(f"   Время окончания: {issue['время_окончания']}")
-        #        print(f"   Следующая программа: {issue['следующая_программа']}")
-        #        print(f"   Время начала следующей: {issue['время_начала']}")
-        #        print(f"   ⚠️  {issue['проблема']}")
-        #    
-        #    print(f"\n📊 Всего найдено некорректных интервалов: {len(issues)}")
 
         result = self.adjust_end_time(result)
 
