@@ -141,12 +141,24 @@ class DataPreparator:
                     VIMB['Название программы'].str.contains('леопольд', case = False, na = False), 
                     'мультфильм о коте леопольде', VIMB['Название программы']
                 )
+            VIMB['Название программы'] = np.where(
+                        VIMB['Название программы'].str.contains('смешарики', case = False, na = False), 
+                        'мультфильм о смешариках', VIMB['Название программы']
+                    )
+            VIMB['Название программы'] = np.where(
+                        VIMB['Название программы'].str.contains('фиксики', case = False, na = False), 
+                        'мультфильм о фиксиках', VIMB['Название программы']
+                    )
+            VIMB['Название программы'] = np.where(
+                        VIMB['Название программы'].str.contains('простоквашино', case = False, na = False), 
+                        'мультфильм о простоквашино', VIMB['Название программы']
+                    )
             # =========================================================================================================================
             
             # Схлопывание программ по дню
             tv_processor = TVScheduleProcessor(self.channel, VIMB, self.palomars_df)
             vimb_joined = tv_processor.join_broadcasts(VIMB, 'vimb', include_share = False)
-        
+    
             new_vimb.append(vimb_joined)
         
         # Соединяем все в единый датафрейм
@@ -218,7 +230,6 @@ class DataPreparator:
             similar = CosineSimilarity(palomars_prgms, vimb_prgms, grid_hist, vimb)
             # Составление таблицей со схожестью (similarity)
             result, not_found, comparison = similar.comparison(self.vocabulary, min_similarity = 0.5, use_vocabulary = True)
-
             results[date] = result
 
             df = result[result['similarity'].round(5) != 0.00000]
@@ -1267,14 +1278,17 @@ class RuleBasedForecaster:
                         
                         min_key = min(deltas, key = deltas.get)
 
-                        filtered_data_ = filtered_data[filtered_data['dur_min'] == min_key].reset_index(drop = True)
+                        # Проверяем, что min_key находится в диапазоне [0.5*dur_min, 1.5*dur_min]
+                        if (min_key >= 0.5 * dur_min) and (min_key <= 1.5 * dur_min):
 
-                        if len(filtered_data_) > 1:
-                            used_mask = final_condition & (filtered_data['dur_min'] == min_key)
-                            share_mean = np.median(list(filtered_data_['Share']))
-                            found = True
-                            if debug:
-                                print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
+                            filtered_data_ = filtered_data[filtered_data['dur_min'] == min_key].reset_index(drop = True)
+
+                            if len(filtered_data_) > 1:
+                                used_mask = final_condition & (filtered_data['dur_min'] == min_key)
+                                share_mean = np.median(list(filtered_data_['Share']))
+                                found = True
+                                if debug:
+                                    print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
                         
 
         # ========== СЕДЬМОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ ==========

@@ -891,6 +891,7 @@ class TVScheduleProcessor:
             return issues
 
         result = self.adjust_end_time(result)
+        result.drop_duplicates(keep = 'first', inplace = True)
 
         duplicated_values = result[result['Время выхода'].duplicated(keep = False)]
         if len(duplicated_values):

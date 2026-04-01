@@ -2105,6 +2105,21 @@ class ProgramMatcher(BaseParser):
                         'мультфильм о коте леопольде', df['Название программы']
                     )
                 
+                df['Название программы'] = np.where(
+                        df['Название программы'].str.contains('смешарики', case = False, na = False), 
+                        'мультфильм о смешариках', df['Название программы']
+                    )
+                
+                df['Название программы'] = np.where(
+                        df['Название программы'].str.contains('фиксики', case = False, na = False), 
+                        'мультфильм о фиксиках', df['Название программы']
+                    )
+
+                df['Название программы'] = np.where(
+                        df['Название программы'].str.contains('простоквашино', case = False, na = False), 
+                        'мультфильм о простоквашино', df['Название программы']
+                    )
+                
             # =========================================================================================================================
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
@@ -2237,13 +2252,9 @@ class ProgramMatcher(BaseParser):
         res = []
         for date in dates_unique:
             date_dt = pd.to_datetime(date)
-            
             t = sorted_webs[sorted_webs['Дата'] == date_dt]
-
             t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
-
             final = t.sort_values('sort_key').reset_index(drop = True)
-
             final = final.drop('sort_key', axis = 1)
             res.append(final)
         
@@ -2252,6 +2263,7 @@ class ProgramMatcher(BaseParser):
         general_result.rename(columns = {'Share': 'Share_weighted'}, inplace = True)
 
         general_result['Share_weighted'] = general_result['Share_weighted'].round(6)
+        general_result.drop_duplicates(keep = 'first', inplace = True)
         
         return general_result, not_matched_programs
     
