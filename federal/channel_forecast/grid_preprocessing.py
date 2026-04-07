@@ -672,6 +672,9 @@ class MediascopeParser(BaseParser):
             
             elif self.channel == 'Ю':
                 df = df[~df['Название программы'].str.contains('про семью', case = False, na = False)]
+            
+            elif self.channel == 'СТСЛав':
+                df = df[~df['Название программы'].str.contains('дочки знают', case = False, na = False)]
                  
             time_slots_columns = ['Время выхода', 'Время окончания']
             for i in range(len(time_slots_columns)):

@@ -361,6 +361,45 @@ class RuleBasedForecaster:
         self.SMALL_SAMPLE_SIZE = 5
         self.EXACT_MATCH_SIZE = 3
         self.DURATION_TOLERANCE = 0.7
+
+        # КОМБИНАЦИИ ДЛЯ ПРОГНОЗИРОВАНИЯ КРУПНЫХ И МЕЛКИХ ПРОГРАММ
+        # Список со всевозможными комбинациями c обязательным параметром "dur_min".
+        self.combinations_list_general = self.generate_field_combinations(
+                                    ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
+                                    min_fields = 4,
+                                    must_include = ['dur_min', 'dt_start', 'dt_end'],
+                                    exclude = None,
+                                    debug = False
+                        )
+        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+        self.combinations_list_general_without_dur_min = [
+            [field for field in combination if field != 'dur_min'] 
+            for combination in self.combinations_list_general
+        ]
+        
+        # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
+        self.combinations_list = self.generate_field_combinations(
+                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'dur_min'],  # Без 'dur_min'
+                            min_fields = 2,
+                            must_include = ['dur_min'],
+                            exclude = None,
+                            debug = False
+                        )
+        
+        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+        self.combinations_list_without_dur_min = [
+            [field for field in combination if field != 'dur_min'] 
+            for combination in self.combinations_list_general
+        ]
+        
+        # Генерируем комбинации БЕЗ параметра 'dur_min', но с обязательными параметрами 'dt_start', 'dt_end'.
+        self.combinations_list_no_duration = self.generate_field_combinations(
+                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
+                            min_fields = 3,
+                            must_include = ['dt_start', 'dt_end'],
+                            exclude = None,
+                            debug = False
+                        )
     
 
     @staticmethod
@@ -655,8 +694,9 @@ class RuleBasedForecaster:
         return share, combined_mask if combined_mask.any() else None
 
 
-    @staticmethod
+    #@staticmethod
     def generate_field_combinations(
+                                self,
                                 fields, 
                                 min_fields = 2, 
                                 must_include = None, 
@@ -887,7 +927,7 @@ class RuleBasedForecaster:
             palomars_last_n_weeks =  palomars_history[palomars_history['Дата'] > date_n_weeks_ago].reset_index(drop = True).copy()
 
         else:
-            print('Программы ' + Color.BLUE + f"'{program_name}'" + Color.END + ' ещё не было в текущем году.')
+            #print('Программы ' + Color.BLUE + f"'{program_name}'" + Color.END + ' ещё не было в текущем году.')
 
             # Отбираем после N недель из истории Palomars
             if debug:
@@ -910,6 +950,34 @@ class RuleBasedForecaster:
         }
 
         return program_forecast_package
+
+
+    def _try_find(self, data, condition, fields, dur_gap = False, debug = False):
+        """
+            Проверяет условие и возвращает результат, если есть данные
+            
+            Returns:
+                tuple: (share_mean, used_mask, found)
+        """
+        data_copy = data.copy()
+        filtered_data = data_copy[condition].reset_index(drop = True)
+
+        if len(filtered_data) > 1:
+            share_mean, used_mask = self.calculate_share(filtered_data, condition)
+            if debug:
+                    print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
+            return share_mean, used_mask, True
+        
+        elif len(filtered_data) == 1:
+            if dur_gap == False:
+                if debug:
+                    print(f'Количество записей в выборке 1. Данные были найдены по полям {", ".join(fields)}.')
+                return filtered_data['Share'].iloc[0], condition, True
+            else:
+                return 0.0, None, False
+            
+        else:
+            return 0.0, None, False
     
 
     def _search_by_combinations(
@@ -954,379 +1022,193 @@ class RuleBasedForecaster:
         dur_min_lower = dur_min * 0.7  # -30%
         dur_min_upper = dur_min * 1.3  # +30%
 
-        # Список со всевозможными комбинациями c обязательным параметром "dur_min".
-        combinations_list_general = RuleBasedForecaster.generate_field_combinations(
-                                    ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
-                                    min_fields = 4,
-                                    must_include = ['dur_min', 'dt_start', 'dt_end'],
-                                    exclude = None,
-                                    debug = False
-                        )
-        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
-        combinations_list_general_without_dur_min = [
-            [field for field in combination if field != 'dur_min'] 
-            for combination in combinations_list_general
+        # Отфильтровываем ненулевые значения долей (чтобы случайно нули не попали в усреднение и тем самым занизили прогноз)
+        data = data[data['Share'] != 0].reset_index(drop = True)
+
+        # Все стратегии поиска: (комбинации, использовать_люфт, обязательна_длительность, комментарий, особенный ключ)
+        strategies = [
+            # 1ый проход: обязательные параметры "dur_min", "dt_start", "dt_end". Мин. кол-во элементов в комбинации: 4.
+            (self.combinations_list_general, False, True, 
+             f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
+             f'Минимальное количество параметров в комбинации 4.',
+             None
+            ),
+            # 2ой проход: обязательный параметр "dur_min". Мин. кол-во элементов в комбинации: 2.
+            (self.combinations_list, False, True,
+             f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min".  ' + \
+             f'Минимальное количество параметров в комбинации 2.', 
+             None
+            ),
+            # 3ий проход: Аналогичен пункту 1, но в длительность добавляется люфт ±30%
+            (self.combinations_list_general_without_dur_min, True, True,
+             f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
+             f'Минимальное количество параметров в комбинации 4.',
+             None
+             ),
+            # 4ый проход: Аналогичен пункту 2, но в длительность добавляется люфт ±30%
+            (self.combinations_list_without_dur_min, True, True,
+             f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min" с люфтом ' + \
+             f'Минимальное количество параметров в комбинации 2.', 
+             None
+             ),
+            # 5ый проход: обязательные параметры "dt_start", "dt_end". Добавляется люфт ±30% в параметр "dur_min". Мин. кол-во элементов в комбинации: 3.
+            (self.combinations_list_no_duration, True, True,
+             f'🔍 Осуществляем поиск по списку с обязательными параметрами "dt_start", "dt_end". ' + \
+             f'Минимальное количество параметров в комбинации 3. В параметр "dur_min" добавляем люфт ±30%', 
+             None
+             ),
+            # 6ой проход: поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности
+            (None, False, False, 'Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности', 'special_day_part'),
+            # 7ой проход: поиск ТОЛЬКО по длительности
+            (None, False, False, 'Пробую поиск ТОЛЬКО по длительности', 'special_duration'),
+            # 8ой проход: поиск ТОЛЬКО по длительности c люфтом ±30%
+            (None, False, False, 'Пробую поиск ТОЛЬКО по длительности с люфтом ±30%', 'special_duration_with_gap'),
         ]
-        
-        # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
-        combinations_list = RuleBasedForecaster.generate_field_combinations(
-                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'dur_min'],  # Без 'dur_min'
-                            min_fields = 2,
-                            must_include = ['dur_min'],
-                            exclude = None,
-                            debug = False
-                        )
-        
-        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
-        combinations_list_without_dur_min = [
-            [field for field in combination if field != 'dur_min'] 
-            for combination in combinations_list_general
-        ]
-        
-        # Генерируем комбинации БЕЗ параметра 'dur_min', но с обязательными параметрами 'dt_start', 'dt_end'.
-        combinations_list_no_duration = RuleBasedForecaster.generate_field_combinations(
-                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
-                            min_fields = 3,
-                            must_include = ['dt_start', 'dt_end'],
-                            exclude = None,
-                            debug = False
-                        )
-        
-        ########################################################################################################################################################
 
-        # ======================================== БЕЗ ЛЮФТА С ПАРАМЕТРОМ "dur_min"========================================
-        if debug:
-            print(Color.VIOLET + f'Попытка построить прогноз, опираясь на целевую длительность.' + Color.END)
-
-        # ========== ПЕРВЫЙ ПРОХОД: Осуществляем поиск по списку с обязательными параметрами 'dur_min', 'dt_start', 'dt_end' ==========
-            print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
-                  f'Минимальное количество параметров в комбинации 4.')
-            
-        for fields in combinations_list_general:
-            if found:  # Если уже нашли результат, выходим
-                break
-            # Шаг 1. Создаем маску для текущей комбинации
-            condition = pd.Series(True, index = data.index)
-            for field in fields:
-                condition &= (data[field] == search_values[field])
-            
-            if not condition.any():
-                if debug:
-                    print(f"  ❌ Нет совпадений по полям: {fields}")
-                continue
-
-            mask = condition
-            filtered_data = data[mask]
-            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-
-            # Шаг 2. Попытка построить прогноз на основании найденной mask
-            if len(filtered_data) > 1:
-                share_mean, used_mask = self.calculate_share(filtered_data, condition)
-                found = True
-                if debug:
-                    print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
+        # Перебираем по всем различным комбинациям, составленным выше
+        for idx, (combo_list, use_gap, require_dur, comment, special_key) in enumerate(strategies):
+            if found:
                 break
 
-            elif len(filtered_data) == 1:
-                share_mean = list(filtered_data['Share'])[0]
-                used_mask = condition
-                found = True
+            if debug:
+                # Печатаем заголовок при итерации по первому элементу массива
+                if idx == 0:
+                    print(Color.VIOLET + f'Попытка построить прогноз, опираясь на целевую длительность.' + Color.END)
+
+                # Печатаем заголовок при итерации по третьему элементу массива
+                elif idx == 2: 
+                    print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
+
+                print(comment)
+            
+            # Если специальный ключ не указан
+            if special_key == None:
+                for fields in combo_list:
+                    condition = pd.Series(True, index = data.index)
+                    for field in fields:
+                        condition &= (data[field] == search_values[field])
+                    
+                    if not condition.any():
+                        if debug:
+                            print(f"  ❌ Нет совпадений по полям: {fields}")
+                        continue
+
+                    dur_gap = False
+                    
+                    if use_gap:
+                        condition &= (data['dur_min'] >= dur_min_lower) & (data['dur_min'] <= dur_min_upper)
+                        dur_gap = True
+                    
+                    share_mean, used_mask, found = self._try_find(data, condition, fields, dur_gap = dur_gap, debug = debug)
+                    if found:
+                        break
+            
+            # ШЕСТОЙ ПРОХОД
+            elif special_key == 'special_day_part':
                 if debug:
-                    print(f'Количество записей в выборке 1. Данные были найдены по полям {", ".join(fields)}.')
-                break
-        
-
-        # ========== ВТОРОЙ ПРОХОД: ПОИСК ПО ДЛИТЕЛЬНОСТИ + РАЗЛИЧНЫЕ КОМБИНАЦИИ, КОТОРЫЕ РАННЕЕ НЕ ВСТРЕЧАЛИСЬ  ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min".  ' + \
-                  f'Минимальное количество параметров в комбинации 2.')
-            
-            for fields in combinations_list:
-                if found:  # Если уже нашли результат, выходим
-                    break
-                # Шаг 1. Создаем маску для текущей комбинации
-                condition = pd.Series(True, index = data.index)
-                for field in fields:
-                    condition &= (data[field] == search_values[field])
-                
-                if not condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
-
-                mask = condition
-                filtered_data = data[mask]
-                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-
-                # Шаг 2. Попытка построить прогноз на основании найденной mask
-                if len(filtered_data) > 1:
-                    share_mean, used_mask = self.calculate_share(filtered_data, condition)
-                    found = True
-                    if debug:
-                        print(f'Количество записей в выборке {len(filtered_data)}. Данные были найдены по полям {", ".join(fields)}.')
-                    break
-
-                elif len(filtered_data) == 1:
-                    share_mean = list(filtered_data['Share'])[0]
-                    used_mask = condition
-                    found = True
-                    if debug:
-                        print(f'Количество записей в выборке 1. Данные были найдены по полям {", ".join(fields)}.')
-                    break
-        
-        # ======================================== С ЛЮФТОМ ========================================
-        # ========== ТРЕТИЙ ПРОХОД: ДОБАВЛЕНИЕ ЛЮФТА К Длительности ±30% ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
-                print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min", "dt_start", "dt_end". ' + \
-                      f'Минимальное количество параметров в комбинации 4.')
-            
-            for fields in combinations_list_general_without_dur_min:
-                if found:
-                    break
-                # Шаг 1. Создаем маску для текущей комбинации
-                condition = pd.Series(True, index = data.index)
-                for field in fields:
-                    condition &= (data[field] == search_values[field])
-                
-                if not condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
-
-                # Добавляем условие по длительности с люфтом
-                duration_condition = (data['dur_min'] >= dur_min_lower) & \
-                                     (data['dur_min'] <= dur_min_upper)
-                
-                # Комбинируем условия
-                final_condition = condition & duration_condition
-                
-                if not final_condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
-                    continue
-
-                filtered_data = data[final_condition]
-                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-                
-                # Шаг 2. Попытка построить прогноз на основании найденной mask
-                if len(filtered_data) > 1:
-                    share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
-                    found = True
-                    if debug:
-                        fields_str = ", ".join(fields) if fields else "без дополнительных полей"
-                        print(f'✅ Найдено {len(filtered_data)} записей с люфтом по полям: {fields_str}.')
-                        print(f'   Диапазон длительности: {dur_min_lower:.0f} - {dur_min_upper:.0f} мин.')
-                    break
-        
-
-        # ========== ЧЕТВЕРТЫЙ ПРОХОД:  ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(f'🔍 Осуществляем поиск по списку с обязательными параметрами "dur_min" с люфтом ' + \
-                      f'Минимальное количество параметров в комбинации 2.')
-            
-            for fields in combinations_list_without_dur_min:
-                if found:
-                    break
-                # Шаг 1. Создаем маску для текущей комбинации
-                condition = pd.Series(True, index = data.index)
-                for field in fields:
-                    condition &= (data[field] == search_values[field])
-                
-                if not condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
-
-                # Добавляем условие по длительности с люфтом
-                duration_condition = (data['dur_min'] >= dur_min_lower) & \
-                                     (data['dur_min'] <= dur_min_upper)
-                
-                # Комбинируем условия
-                final_condition = condition & duration_condition
-                
-                if not final_condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
-                    continue
-
-                filtered_data = data[final_condition]
-                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-                
-                # Шаг 2. Попытка построить прогноз на основании найденной mask
-                if len(filtered_data) > 1:
-                    share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
-                    found = True
-                    if debug:
-                        fields_str = ", ".join(fields) if fields else "без дополнительных полей"
-                        print(f'✅ Найдено {len(filtered_data)} записей с люфтом по полям: {fields_str}.')
-                        print(f'   Диапазон длительности: {dur_min_lower:.0f} - {dur_min_upper:.0f} мин.')
-                    break
-        
-        
-        # ========== ПЯТЫЙ ПРОХОД:  ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
-                print(Color.ITALIC + f'🔍 Осуществляем поиск по списку с обязательными параметрами "dt_start", "dt_end". ' + \
-                  f'Минимальное количество параметров в комбинации 3. В параметр "dur_min" добавляем люфт ±30%' + Color.END)
-            
-            for fields in combinations_list_no_duration:
-                if found:
-                    break
-                # Шаг 1. Создаем маску для текущей комбинации
-                condition = pd.Series(True, index = data.index)
-                for field in fields:
-                    condition &= (data[field] == search_values[field])
-                
-                if not condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
-
-                # Добавляем условие по длительности с люфтом
-                duration_condition = (data['dur_min'] >= dur_min_lower) & \
-                                    (data['dur_min'] <= dur_min_upper)
-                
-                # Комбинируем условия
-                final_condition = condition & duration_condition
-                
-                if not final_condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
-                    continue
-
-                filtered_data = data[final_condition]
-                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-                
-                # Шаг 2. Попытка построить прогноз на основании найденной mask
-                if len(filtered_data) > 1:
-                    share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
-                    found = True
-                    if debug:
-                        fields_str = ", ".join(fields) if fields else "без дополнительных полей"
-                        print(f'✅ Найдено {len(filtered_data)} записей с люфтом по полям: {fields_str}.')
-                        print(f'   Диапазон длительности: {dur_min_lower:.0f} - {dur_min_upper:.0f} мин.')
-                    break
-        
-        
-        # ========== ШЕСТОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ТИПУ ЧАСТИ ДНЯ и с вариациями ДЛИТЕЛЬНОСТИ  ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности ...' + Color.END)
-            
-            day_part_mask = (data['dt_start'] == day_part_start) & \
+                    print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности ...' + Color.END)
+                day_part_mask = (data['dt_start'] == day_part_start) & \
                             (data['dt_end'] == day_part_end)
             
-            # -------- ДОБАВЛЯЕМ ДЛИТЕЛЬНОСТЬ СЮДА --------
-            duration_mask = (data['dur_min'] == dur_min)
+                # -------- ДОБАВЛЯЕМ ДЛИТЕЛЬНОСТЬ СЮДА --------
+                duration_mask = (data['dur_min'] == dur_min)
 
-            # Комбинируем условия
-            final_condition = day_part_mask & duration_mask
-            filtered_data = data[final_condition]
-            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-
-            # Шаг 1. Попытка построить прогноз на основании найденной mask
-            if len(filtered_data) > 1:
-                share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
-                found = True
-                if debug:
-                    print(f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы, а также по длительности.')
-            
-            # Добавляем люфт в длительность
-            else:
-                if debug:
-                    print('🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности с люфтом ...')
-                duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & \
-                                         (data['dur_min'] <= dur_min_upper)
-                
                 # Комбинируем условия
-                final_condition = day_part_mask & duration_backlash_mask
-                filtered_data = data[final_condition]
-                filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
+                final_condition = day_part_mask & duration_mask
+                filtered_data = data[final_condition].reset_index(drop = True)
 
                 # Шаг 1. Попытка построить прогноз на основании найденной mask
                 if len(filtered_data) > 1:
                     share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
                     found = True
                     if debug:
-                        print(
-                            f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы, а также по длительности с люфтом ±30%.'
-                        )
-            
+                        print(f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы, а также по длительности.')
+                
+                # Добавляем люфт в длительность
                 else:
                     if debug:
-                        print('🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы ...')
-
+                        print('🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности с люфтом ...')
+                    duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & \
+                                            (data['dur_min'] <= dur_min_upper)
+                    
                     # Комбинируем условия
-                    final_condition = day_part_mask
+                    final_condition = day_part_mask & duration_backlash_mask
                     filtered_data = data[final_condition].reset_index(drop = True)
-                    filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
 
                     # Шаг 1. Попытка построить прогноз на основании найденной mask
                     if len(filtered_data) > 1:
-                        target_dur = dur_min
-
-                        unique_durations = filtered_data['dur_min'].unique()
-                        deltas = {}
-                        for duration in unique_durations:
-                            delta = np.abs(duration - target_dur)
-                            deltas[duration] = delta
-                        
-                        min_key = min(deltas, key = deltas.get)
-
-                        # Проверяем, что min_key находится в диапазоне [0.5*dur_min, 1.5*dur_min]
-                        if (min_key >= 0.5 * dur_min) and (min_key <= 1.5 * dur_min):
-
-                            filtered_data_ = filtered_data[filtered_data['dur_min'] == min_key].reset_index(drop = True)
-
-                            if len(filtered_data_) > 1:
-                                used_mask = final_condition & (filtered_data['dur_min'] == min_key)
-                                share_mean = np.median(list(filtered_data_['Share']))
-                                found = True
-                                if debug:
-                                    print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
-                        
-
-        # ========== СЕДЬМОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ ==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по длительности ...' + Color.END)
-
-            duration_mask = (data['dur_min'] == dur_min)
-            filtered_data = data[duration_mask].reset_index(drop = True)
-            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-
-            # Шаг 2. Попытка построить прогноз на основании найденной mask
-            if len(filtered_data) > 1:      
-                share_mean = np.median(list(filtered_data['Share']))
-                used_mask = duration_mask
-                found = True
-                if debug:
-                    print(f'✅ Найдено {len(filtered_data)} записей только по длительности.')
-
+                        share_mean, used_mask = self.calculate_share(filtered_data, final_condition)
+                        found = True
+                        if debug:
+                            print(
+                                f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы, а также по длительности с люфтом ±30%.'
+                            )
                 
-        # ========== ВОСЬМОЙ ПРОХОД: ПОИСК ИСКЛЮЧИТЕЛЬНО ПО ДЛИТЕЛЬНОСТИ ПРОГРАММЫ С ЛЮФТОМ ±30%==========
-        if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(Color.ITALIC  + '🔍 Пробую поиск ТОЛЬКО по длительности с люфтом ±30% ...' + Color.END)
-            
-            duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & \
-                                     (data['dur_min'] <= dur_min_upper)
+                    else:
+                        if debug:
+                            print('🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы ...')
 
-            filtered_data = data[duration_backlash_mask]
-            filtered_data = filtered_data[filtered_data['Share'] != 0.0].reset_index(drop = True)
-            # Шаг 2. Попытка построить прогноз на основании найденной mask
-            if len(filtered_data) > 1:    
-                share_mean = np.median(list(filtered_data['Share']))
-                used_mask = duration_backlash_mask
-                found = True
+                        # Комбинируем условия
+                        final_condition = day_part_mask
+                        filtered_data = data[final_condition].reset_index(drop = True)
+
+                        # Шаг 1. Попытка построить прогноз на основании найденной mask
+                        if len(filtered_data) > 1:
+                            target_dur = dur_min
+
+                            unique_durations = filtered_data['dur_min'].unique()
+                            deltas = {}
+                            for duration in unique_durations:
+                                delta = np.abs(duration - target_dur)
+                                deltas[duration] = delta
+                            
+                            min_key = min(deltas, key = deltas.get)
+
+                            # Проверяем, что min_key находится в диапазоне [0.5*dur_min, 1.5*dur_min]
+                            if (min_key >= 0.5 * dur_min) and (min_key <= 1.5 * dur_min):
+
+                                filtered_data_ = filtered_data[filtered_data['dur_min'] == min_key].reset_index(drop = True)
+
+                                if len(filtered_data_) > 1:
+                                    used_mask = final_condition & (filtered_data['dur_min'] == min_key)
+                                    share_mean = np.median(list(filtered_data_['Share']))
+                                    found = True
+                                    if debug:
+                                        print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
+
+            # СЕДЬМОЙ ПРОХОД
+            elif special_key == 'special_duration':
                 if debug:
-                    print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с люфтом ±30%.')
+                    print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по длительности ...' + Color.END)
+
+                duration_mask = (data['dur_min'] == dur_min)
+                filtered_data = data[duration_mask].reset_index(drop = True)
+
+                # Шаг 2. Попытка построить прогноз на основании найденной mask
+                if len(filtered_data) > 1:      
+                    share_mean = np.median(list(filtered_data['Share']))
+                    used_mask = duration_mask
+                    found = True
+                    if debug:
+                        print(f'✅ Найдено {len(filtered_data)} записей только по длительности.')
+
+            # ВОСЬМОЙ ПРОХОД
+            elif special_key == 'special_duration_with_gap':
+                if debug:
+                    print(Color.ITALIC  + '🔍 Пробую поиск ТОЛЬКО по длительности с люфтом ±30% ...' + Color.END)
                 
+                duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & \
+                                        (data['dur_min'] <= dur_min_upper)
+
+                filtered_data = data[duration_backlash_mask].reset_index(drop = True)
+                # Шаг 2. Попытка построить прогноз на основании найденной mask
+                if len(filtered_data) > 1:    
+                    share_mean = np.median(list(filtered_data['Share']))
+                    used_mask = duration_backlash_mask
+                    found = True
+                    if debug:
+                        print(f'✅ Найдено {len(filtered_data)} записей только по длительности с люфтом ±30%.')
+        
         # Если ничего не нашли, возвращаем нулевые значения
         if not found:
             if debug:
@@ -1334,8 +1216,8 @@ class RuleBasedForecaster:
             return 0.0, None
 
         return share_mean, used_mask
-        
 
+        
 
     def forecast_big(
             self,
@@ -1562,7 +1444,7 @@ class RuleBasedForecaster:
         used_mask = None
 
         # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
-        combinations_list_general = RuleBasedForecaster.generate_field_combinations(
+        combinations_list_general = self.generate_field_combinations(
                             fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                             min_fields = 2,
                             must_include = 'dur_min',
@@ -1571,7 +1453,7 @@ class RuleBasedForecaster:
                         )
         
         # Генерируем всевозможные комбинации без обязательного параметра
-        combinations_list_no_duration = RuleBasedForecaster.generate_field_combinations(
+        combinations_list_no_duration = self.generate_field_combinations(
                             fields = ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                             min_fields = 1,
                             must_include = None,
