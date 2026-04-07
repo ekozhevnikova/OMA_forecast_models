@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
-
-from datetime import timedelta, datetime
-from OMA_tools.io_data.colors import *
-
+from typing import Tuple, Optional, List, Dict, Callable
+from datetime import timedelta, datetime, time
+from dateutil.relativedelta import relativedelta
+from difflib import SequenceMatcher
+from federal.channel_forecast.core.simple_models import *
 import traceback
 traceback.print_exc()
 
@@ -498,8 +499,8 @@ class TVScheduleProcessor:
 
             Args:
                 data: pd.DataFrame: датафрейм, для которого будем проводить схлопывание программ.
-                type: str: тип таблицы: либо VIMB, либо PALOMARS. Нужно для того, чтобы было легче ориентироваться в столбцах с оригинальными 
-                "Время начала" и "Время окончания" программ. 
+                type: str: тип таблицы: либо VIMB, либо PALOMARS. Нужно для того, чтобы было легче ориентироваться в столбцах с оригинальными
+                "Время начала" и "Время окончания" программ.
                     - Если type == vimb, то делается пометка "Время начала оригинальное vimb". Аналогично с "Время окончания".
                     - Если type == palomars, то делается пометка "Время начала оригинальное palomars". Аналогично с "Время окончания".
         """
@@ -945,56 +946,100 @@ class MonthlyShareAnalyzer:
         else:
             return 'выходной'
 
+    def calculate_ttv(self, ttv_filepath: str, debug=False):
+        """
+        Чтение TTV из файла Excel с автоматическим определением года.
 
-    def calculate_ttv(
-        self,
-        ttv_filepath: str, 
-        need_columns: list,
-        debug = False
-        ):
+        Параметры:
+            ttv_filepath (str): путь к файлу Excel
+            debug (bool): печатать отладочную информацию
         """
-            Метод для чтения файла с TTV.
-        """
-        # 1. Чтение файла
+
         try:
-            ttv = pd.read_excel(
-                    ttv_filepath, 
-                    sheet_name = 'Для шаблонов',
-                    skiprows = 3,
-                    nrows = 39
-                )
-            
+            df_raw = pd.read_excel(
+                ttv_filepath,
+                sheet_name='Для шаблонов',
+                skiprows=3,  # пропускаем служебные строки с формулами
+                header=None,  # заголовки будут в первой прочитанной строке
+                nrows=39
+            )
         except FileNotFoundError:
             raise FileNotFoundError(f'Файл не найден: {ttv_filepath}')
 
-        # 2. Отбор нужных колонок
-        df_ttv = ttv[[self.year] + need_columns].copy()
-        
-        df_ttv.rename(columns = {'Unnamed: 2': 'Месяц'}, inplace = True)
-        
-        # 3. Отбор анализируемого месяца
-        month_clean = str(self.month).strip()
-        month_mask = df_ttv['Месяц'].str.lower() == month_clean.lower()
-        
-        ttv_filtered = df_ttv[month_mask].reset_index(drop = True)
+        # Строка заголовков (исходная строка 4)
+        header_row = df_raw.iloc[0]
 
-        # 4. Поиск TTV за весь месяц, за будние дни, за выходные дни
-        try:
-            full_ttv = ttv_filtered.iloc[0]      # за весь месяц
-            weekday_ttv = ttv_filtered.iloc[1]   # за будние дни
-            weekend_ttv = ttv_filtered.iloc[2]   # за выходные дни
-        except IndexError as e:
-            raise ValueError(f"Недостаточно строк данных для месяца '{self.month}': {str(e)}")
+        # Поиск колонки с нужным годом
+        year_col = None
+        for idx, val in enumerate(header_row):
+            if pd.notna(val) and str(val).strip() == str(self.year):
+                year_col = idx
+                break
+        if year_col is None:
+            raise ValueError(f'Год {self.year} не найден в строке заголовков')
+
+        # Определение диапазона колонок для данных этого года
+        start_col = None
+        for idx in range(year_col + 1, len(header_row)):
+            if pd.notna(header_row[idx]) and str(header_row[idx]).strip() != '':
+                start_col = idx
+                break
+        if start_col is None:
+            raise ValueError(f'Не найдены колонки с данными для года {self.year}')
+
+        # Ищем следующий год
+        end_col = len(header_row)
+        for idx in range(start_col + 1, len(header_row)):
+            val = header_row[idx]
+            if pd.notna(val):
+                val_str = str(val).strip()
+                if val_str.isdigit() and len(val_str) == 4 and val_str != str(self.year):
+                    end_col = idx
+                    break
+
+        data_cols = list(range(start_col, end_col))
+        metric_names = [
+            str(header_row[col]).strip().lower() if pd.notna(header_row[col]) else f'col_{col}'
+            for col in data_cols
+        ]
+        df_data = df_raw.iloc[:, data_cols].copy()
+        df_data.columns = metric_names
 
 
-        # 5. Запись в словарь интересующих данных
+        df_data['Месяц'] = df_raw.iloc[:, 2].values
+        df_data['Тип'] = ''
+        # Индексы строк (0 – заголовок, 1–12 – ВСЕГО, 14–25 – Будни, 27–38 – Выходные)
+        df_data.loc[1:12, 'Тип'] = 'ВСЕГО'
+        df_data.loc[14:25, 'Тип'] = 'Будни'
+        df_data.loc[27:38, 'Тип'] = 'Выходные'
+
+        month_clean = self.month.strip().lower()
+        mask_month = df_data['Месяц'].astype(str).str.lower() == month_clean
+        month_rows = df_data[mask_month]
+
+        if month_rows.empty:
+            raise ValueError(f'Месяц "{self.month}" не найден в данных')
+
+        target = self.bca.strip().lower()
+        if target not in df_data.columns:
+            raise ValueError(f'Метрика "{self.bca}" не найдена в заголовках')
+
+        full_row = month_rows[month_rows['Тип'] == 'ВСЕГО']
+        weekday_row = month_rows[month_rows['Тип'] == 'Будни']
+        weekend_row = month_rows[month_rows['Тип'] == 'Выходные']
+
+        if full_row.empty or weekday_row.empty or weekend_row.empty:
+            raise ValueError(f'Не хватает данных для месяца {self.month} (возможно, отсутствует тип ВСЕГО/Будни/Выходные)')
+
         result = {
-            'итого': full_ttv[self.bca],
-            'будни': weekday_ttv[self.bca],
-            'выходные': weekend_ttv[self.bca]
+            'итого': full_row.iloc[0][target],
+            'будни': weekday_row.iloc[0][target],
+            'выходные': weekend_row.iloc[0][target]
         }
+
         if debug:
-            print(result)
+            print(f'Данные для {self.month} {self.year} ({self.bca}): {result}')
+
         return result
     
 
@@ -1066,7 +1111,7 @@ class MonthlyShareAnalyzer:
         # Сортировка по дате (если нужно)
         self.df = self.df.sort_values('Дата').reset_index(drop = True)
 
-        ttv = self.calculate_ttv(ttv_filepath, need_columns, debug = debug)
+        ttv = self.calculate_ttv(ttv_filepath, debug = debug)
         share_per_month = self.calculate_monthly_share(ttv, work_saturdays, all_holidays, debug = debug)
         return share_per_month
 
