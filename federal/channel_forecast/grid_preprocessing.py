@@ -37,6 +37,7 @@ ADD_CITY_TO_TARGETDEMO_FROM_REGION = False  # работаем в Федерал
 BREAK_FILTER = None
 AD_FILTER = None
 PROGRAM_FILTER = 'programDuration >= 100'
+MIN_GAP = pd.Timedelta(minutes=1)
 #############################################################################################
 
 class BaseParser:
@@ -1196,7 +1197,7 @@ class VIMBGridProcessor(BaseParser):
         if self.channel_name in ['2X2', 'ТНТ4', 'МатчТВ', 'СТСЛав', 'СУББОТА', 'ЧЕ', 'ЗВЕЗДА', 'ТВЦ']:
             time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
             VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
-        
+
         VIMB['День недели'] = VIMB['Дата'].dt.strftime('%A').str.capitalize()
 
         # Если нужно вернуть в строковый формат
@@ -1226,14 +1227,14 @@ class VIMBGridProcessor(BaseParser):
         
         elif self.channel_name == 'ТВЦ':
             VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
-        
+
         # НОВЫЙ КУСОК - С ГРУППИРОВКОЙ ПО ДАТЕ
         # Требуем, чтобы "Время выхода" следующей программы равнялось "Время окончания" предыдущей программы.
         # Группируем по дате, чтобы не смешивать дни
         for date in VIMB['Дата'].unique():
             date_mask = VIMB['Дата'] == date
             date_indices = VIMB[date_mask].index.tolist()
-            
+
             # Для каждой даты корректируем время окончания
             for i in range(len(date_indices) - 1):  # для всех, кроме последней в этот день
                 current_idx = date_indices[i]
@@ -1354,7 +1355,7 @@ class VIMBGridProcessor(BaseParser):
         df = df[
             [
                 'Дата', 'Время выхода', 'Время окончания', 
-                #'Прод-ть', 
+                #'Прод-ть',
                 'Название программы', 'День недели', 'original_index'
              ]
         ]
@@ -1536,7 +1537,7 @@ class VIMBGridProcessor(BaseParser):
         warnings = []
 
         df_copy = df.copy()
-        
+
         # Объединяем дату и время для корректной обработки
         df_copy['Время выхода'] = pd.to_datetime(
             df_copy['Дата'].astype(str) + ' ' + df_copy['Время выхода'].astype(str)
@@ -1544,12 +1545,12 @@ class VIMBGridProcessor(BaseParser):
         df_copy['Время окончания'] = pd.to_datetime(
             df_copy['Дата'].astype(str) + ' ' + df_copy['Время окончания'].astype(str)
         )
-        
+
         # Обрабатываем случаи, когда программа заканчивается на следующий день
         mask = df_copy['Время окончания'] < df_copy['Время выхода']
         if mask.any():
             df_copy.loc[mask, 'Время окончания'] += timedelta(days=1)
-        
+
         # Группируем по датам и проверяем внутри каждой группы
         grouped = df_copy.groupby('Дата')
         

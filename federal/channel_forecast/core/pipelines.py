@@ -6,8 +6,8 @@ from typing import Optional
 import warnings
 warnings.filterwarnings('ignore')
 
-from OMA_tools.io_data.colors import *
-from OMA_tools.federal.channel_forecast.grid_preprocessing import *
+from io_data.colors import *
+from federal.channel_forecast.grid_preprocessing import *
 
 
 class ChannelAnalysisMaster:
@@ -19,14 +19,17 @@ class ChannelAnalysisMaster:
         Класс работает только для конкретного канала!
     """
     def __init__(
-        self, channel: str, date_filter: list,
-        company_filter: str, basedemo_filter: str,
-        auedience_file: Optional[str] = None,           # опциональный параметр
-        web_file: Optional[str] = None,                 # опциональный параметр
-        weighted_share_file: Optional[str] = None,      # опциональный параметр
-        new_vimb_grids: Optional[str] = None,           # опциональный параметр
-        hist_vimb_file: Optional[str] = None            # опциональный параметр
-        ):
+            self,
+            channel: str,
+            date_filter: list,
+            company_filter: str,
+            basedemo_filter: str,
+            auedience_file: Optional[str] = None,           # опциональный параметр
+            web_file: Optional[str] = None,                 # опциональный параметр
+            weighted_share_file: Optional[str] = None,      # опциональный параметр
+            new_vimb_grids: Optional[str] = None,           # опциональный параметр
+            hist_vimb_file: Optional[str] = None            # опциональный параметр
+    ):
 
         """
             Атрибуты класса (Можно передавать только нужные параметры)
@@ -83,7 +86,7 @@ class ChannelAnalysisMaster:
 
     def mediascope_web_pipeline(self):
         """
-            Пайплайн для выгрузки и записи Auedience в файл для какого-то конкретного Федерального канала и конкретной БЦА.
+            Пайплайн для выгрузки и записи исторической сетки Mediascope в файл для какого-то конкретного Федерального канала и конкретной БЦА.
         """
         # Если файл не передан, то выгрузка сетки Palomers не произойдет.
         if not self.web_file:
