@@ -128,7 +128,7 @@ class GeneralTextCleaner:
         self.STOP_WORDS = {
             'KIDS_CHANNELS': [
                 'большая анимация', 'анимационный', 'мультфильм', 'мультсериал',
-                'р б', 'т с',
+                #'р б', #'т с',
             ],
     
             'ENTERTAINMENT_CHANNELS': [

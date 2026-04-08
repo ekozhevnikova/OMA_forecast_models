@@ -14,7 +14,7 @@ import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
-#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.federal.channel_forecast.core.content_matching import *
 
@@ -1985,6 +1985,140 @@ class ProgramMatcher(BaseParser):
             mask = df['Название программы'].str.lower().isin(full_list)
             df.loc[mask, 'Название программы'] = replacement_name
         return df
+    
+
+    def find_nameless_vimb_programs(self, names_to_replace: list, VIMB: pd.DataFrame, Pal: pd.DataFrame):
+        """
+            Осуществляет поиск безымянных программ/серий мультфильмов в Palomars, которые фигурируют в ВИМБе как 'русские мультфильмы',
+            череда мультфильмов через запятую, записанных в одну строку.
+            Будем производить принудительную замену на "серия мультфильмов" в Palomars, используя информацию из VIMB
+
+            Параметры:
+            ----------
+            names_to_replace: list
+                Список из названий программ, которые хотим принудительно заменить
+            VIMB: pd.DataFrame
+                Таблица с сеткой Вимба
+            Pal: pd.DataFrame
+                Таблица с сеткой Паломарса
+
+            Returns:
+            ----------
+            VIMB_init: pd.DataFrame
+            Pal_init: pd.DataFrame
+                Преобразованные таблицы
+        """
+        VIMB_init = VIMB.copy()
+        Pal_init = Pal.copy()
+
+        # Задаем те названия, для которых будем делать данную предобработку
+        #self.cartoon_keywords = names_to_replace
+
+        existing_keywords = [kw for kw in names_to_replace if kw in VIMB_init['Название программы'].unique()]
+
+        # ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
+        # Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
+        if existing_keywords:
+        #if any(keyword in VIMB_init['Название программы'].unique() for keyword in self.cartoon_keywords):
+        #if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
+            print("Делаю предобработку " + Color.VIOLET + f"{', '.join(list(set(existing_keywords)))}" + Color.END + " для канала " + \
+                 Color.BOLD + Color.BLUE + f"{self.channel}" + Color.END)
+
+            pr = TVScheduleProcessor(self.channel, VIMB_init, Pal_init)
+            # Схлопываем программы VIMB, чтобы более наглядно увидеть, где именно была "серия мультфильмов"
+            vimb_joined = pr.join_broadcasts(VIMB_init, 'vimb', include_share = False)
+
+            # Отбираем только те слоты, в которых фигурирует название 'серия мультфильмов'
+            #cartoons_series = vimb_joined[vimb_joined['Название программы'] == 'серия мультфильмов'].reset_index(drop = True)
+            cartoons_series = vimb_joined[vimb_joined['Название программы'].isin(existing_keywords)].reset_index(drop = True)
+
+            # Если нет серий мультфильмов для обработки, выходим
+            if len(cartoons_series) == 0:
+                return VIMB_init, Pal_init
+
+            # Переводим время в Palomars в datetime для удобной фильтрации
+            Pal_init['time_start_dt'] = pd.to_datetime(Pal_init['Время выхода'], format = '%H:%M:%S')
+            Pal_init['time_end_dt'] = pd.to_datetime(Pal_init['Время окончания'], format = '%H:%M:%S')
+
+            # Коррекция перехода через полночь
+            mask_night = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
+            Pal_init.loc[mask_night, 'time_end_dt'] = Pal_init.loc[mask_night, 'time_end_dt'] + timedelta(days = 1)
+
+            # Создаем временные столбцы ОДИН РАЗ перед циклом
+            Pal_init['time_start_temp'] = Pal_init['time_start_dt']
+            Pal_init['time_end_temp'] = Pal_init['time_end_dt']
+
+            # Создаем столбец с флагом. Если во встретившемся слоте Palomars в таблице VIMB в это время была "серия мультфильмов", то
+            # мы в новый столбец записываем "серия мультфильмов"
+            Pal_init['cartoon_series_flag'] = ''
+
+            for i in range(len(cartoons_series)):
+                # Берем конкретную строку
+                row = cartoons_series.iloc[i]
+            
+                # Получаем конкретное название программы из VIMB
+                vimb_program_name = row['Название программы']
+                
+                # Преобразуем время
+                start_time = pd.to_datetime(row['Время выхода'], format='%H:%M:%S')
+                end_time = pd.to_datetime(row['Время окончания'], format='%H:%M:%S')
+                
+                # Обработка перехода через полночь для целевого интервала
+                if end_time < start_time:
+                    end_time = end_time + timedelta(days = 1)
+                
+                # Интервал с запасом.
+                # Не всегда "Время начала" в Palomars совпадает с "Время начала" в VIMB. Даём небольшой люфт.
+                start_threshold = start_time - timedelta(minutes = 5)
+                end_threshold = end_time + timedelta(minutes = 5)
+                
+                # Корректируем время окончания для программ, идущих через полночь
+                night_mask = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
+                Pal_init.loc[night_mask, 'time_end_temp'] = Pal_init.loc[night_mask, 'time_end_dt'] + timedelta(days = 1)
+
+                ################################################################################
+                # Отбираем строки в интервале
+                mask = (Pal_init['time_start_temp'] >= start_threshold) & \
+                    (Pal_init['time_end_temp'] <= end_threshold)
+                result_indices = Pal_init[mask].index
+                
+                for idx in result_indices:
+                    pr_name = Pal_init.loc[idx, 'Название программы']
+                    start_time_pr = Pal_init.loc[idx, 'time_start_dt']
+                    end_time_pr = Pal_init.loc[idx, 'time_end_dt']
+                    
+                    # Корректировка для проверяемой программы
+                    if end_time_pr < start_time_pr:
+                        end_time_pr_check = end_time_pr + timedelta(days = 1)
+                    else:
+                        end_time_pr_check = end_time_pr
+                    
+                    # Проверяем условие
+                    condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
+                    
+                    if condition:
+                        #Pal_init.loc[idx, 'cartoon_series_flag'] = 'серия мультфильмов'
+                        Pal_init.loc[idx, 'cartoon_series_flag'] = vimb_program_name
+                
+            # Удаляем временные столбцы
+            Pal_init = Pal_init.drop(['time_start_temp', 'time_end_temp'], axis = 1)
+
+            # Производим замену названий. Если в столбце "cartoon_series_flag" фигурирует название "серия мультфильмов", то в столбце
+            # "Название программы" заменяем значение на "серия мультфильмов".
+            Pal_init.loc[Pal_init['cartoon_series_flag'].notna() & \
+                        (Pal_init['cartoon_series_flag'] != ''), 'Название программы'] = Pal_init['cartoon_series_flag']
+
+            columns_to_remain = [
+                'Дата', 'Название программы palomars', 'Название программы', 
+                'Время выхода', 'Время окончания', 'Share', 'Жанр'
+            ]
+
+            # Оставляем только нужные столбцы для дальнейшего анализа
+            Pal_init = Pal_init[columns_to_remain]
+
+        return VIMB_init, Pal_init
+
+
 
 
     def match_vimb_with_palomars_grids(self, cities_path: str, minutes: int = 10):
@@ -2127,93 +2261,104 @@ class ProgramMatcher(BaseParser):
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
 
-            # ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
-            # Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
-            if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
-                print(Color.VIOLET + f'Делаю предобработку "серии мультфильмов" для канала {self.channel}' + Color.END)
+            # Принудительная замена специфических названий VIMB
+            program_names = [
+                'серия мультфильмов', 'русские мультфильмы', 'мультфильм',
+                'художественный фильм', 'документальный фильм', 'документальный сериал', 'серия мультфильмов',
+                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'мультфильм', 
+                'мультфильмы', 'юмористический концерт', 'короткометражные х фильмы', 'мультсериал', 
+                'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
+                'сериал фильм', 'сериал х ф', 'х фильмы'
+                        ]
+            VIMB_init, Pal_init = self.find_nameless_vimb_programs(program_names, VIMB_init, Pal_init)
 
-                pr = TVScheduleProcessor(self.channel, VIMB_init, Pal_init)
-                # Схлопываем программы VIMB, чтобы более наглядно увидеть, где именно была "серия мультфильмов"
-                vimb_joined = pr.join_broadcasts(VIMB_init, 'vimb', include_share = False)
-
-                # Отбираем только те слоты, в которых фигурирует название 'серия мультфильмов'
-                cartoons_series = vimb_joined[vimb_joined['Название программы'] == 'серия мультфильмов'].reset_index(drop = True)
-
-                # Переводим время в Palomars в datetime для удобной фильтрации
-                Pal_init['time_start_dt'] = pd.to_datetime(Pal_init['Время выхода'], format = '%H:%M:%S')
-                Pal_init['time_end_dt'] = pd.to_datetime(Pal_init['Время окончания'], format = '%H:%M:%S')
-
-                # Коррекция перехода через полночь
-                mask_night = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
-                Pal_init.loc[mask_night, 'time_end_dt'] = Pal_init.loc[mask_night, 'time_end_dt'] + timedelta(days = 1)
-
-                # Создаем столбец с флагом. Если во встретившемся слоте Palomars в таблице VIMB в это время была "серия мультфильмов", то
-                # мы в новый столбец записываем "серия мультфильмов"
-                Pal_init['cartoon_series_flag'] = ''
-
-                for i in range(len(cartoons_series)):
-                    # Берем конкретную строку
-                    row = cartoons_series.iloc[i]
-                    
-                    # Преобразуем время
-                    start_time = pd.to_datetime(row['Время выхода'], format='%H:%M:%S')
-                    end_time = pd.to_datetime(row['Время окончания'], format='%H:%M:%S')
-                    
-                    # Обработка перехода через полночь для целевого интервала
-                    if end_time < start_time:
-                        end_time = end_time + timedelta(days = 1)
-                    
-                    # Интервал с запасом.
-                    # Не всегда "Время начала" в Palomars совпадает с "Время начала" в VIMB. Даём небольшой люфт.
-                    start_threshold = start_time - timedelta(minutes = 5)
-                    end_threshold = end_time + timedelta(minutes = 5)
-
-                    # Создаем копии для корректировки перехода через полночь в Pal_init
-                    Pal_init['time_start_temp'] = Pal_init['time_start_dt']
-                    Pal_init['time_end_temp'] = Pal_init['time_end_dt']
-                    
-                    # Корректируем время окончания для программ, идущих через полночь
-                    night_mask = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
-                    Pal_init.loc[night_mask, 'time_end_temp'] = Pal_init.loc[night_mask, 'time_end_dt'] + timedelta(days = 1)
-
-                    ################################################################################
-                    # Отбираем строки в интервале
-                    mask = (Pal_init['time_start_temp'] >= start_threshold) & \
-                        (Pal_init['time_end_temp'] <= end_threshold)
-                    result_indices = Pal_init[mask].index
-                    
-                    for idx in result_indices:
-                        pr_name = Pal_init.loc[idx, 'Название программы']
-                        start_time_pr = Pal_init.loc[idx, 'time_start_dt']
-                        end_time_pr = Pal_init.loc[idx, 'time_end_dt']
-                        
-                        # Корректировка для проверяемой программы
-                        if end_time_pr < start_time_pr:
-                            end_time_pr_check = end_time_pr + timedelta(days=1)
-                        else:
-                            end_time_pr_check = end_time_pr
-                        
-                        # Проверяем условие
-                        condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
-                        
-                        if condition:
-                            Pal_init.loc[idx, 'cartoon_series_flag'] = 'серия мультфильмов'
-                    
-                # Удаляем временные столбцы
-                Pal_init = Pal_init.drop(['time_start_temp', 'time_end_temp'], axis = 1)
-
-                # Производим замену названий. Если в столбце "cartoon_series_flag" фигурирует название "серия мультфильмов", то в столбце
-                # "Название программы" заменяем значение на "серия мультфильмов".
-                Pal_init.loc[Pal_init['cartoon_series_flag'].notna() & \
-                            (Pal_init['cartoon_series_flag'] != ''), 'Название программы'] = 'серия мультфильмов'
-
-                columns_to_remain = [
-                    'Дата', 'Название программы palomars', 'Название программы', 
-                    'Время выхода', 'Время окончания', 'Share', 'Жанр'
-                ]
-
-                # Оставляем только нужные столбцы для дальнейшего анализа
-                Pal_init = Pal_init[columns_to_remain]
+            ## ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
+            ## Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
+            #if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
+            #    print(Color.VIOLET + f'Делаю предобработку "серии мультфильмов" для канала {self.channel}' + Color.END)
+#
+            #    pr = TVScheduleProcessor(self.channel, VIMB_init, Pal_init)
+            #    # Схлопываем программы VIMB, чтобы более наглядно увидеть, где именно была "серия мультфильмов"
+            #    vimb_joined = pr.join_broadcasts(VIMB_init, 'vimb', include_share = False)
+#
+            #    # Отбираем только те слоты, в которых фигурирует название 'серия мультфильмов'
+            #    cartoons_series = vimb_joined[vimb_joined['Название программы'] == 'серия мультфильмов'].reset_index(drop = True)
+#
+            #    # Переводим время в Palomars в datetime для удобной фильтрации
+            #    Pal_init['time_start_dt'] = pd.to_datetime(Pal_init['Время выхода'], format = '%H:%M:%S')
+            #    Pal_init['time_end_dt'] = pd.to_datetime(Pal_init['Время окончания'], format = '%H:%M:%S')
+#
+            #    # Коррекция перехода через полночь
+            #    mask_night = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
+            #    Pal_init.loc[mask_night, 'time_end_dt'] = Pal_init.loc[mask_night, 'time_end_dt'] + timedelta(days = 1)
+#
+            #    # Создаем столбец с флагом. Если во встретившемся слоте Palomars в таблице VIMB в это время была "серия мультфильмов", то
+            #    # мы в новый столбец записываем "серия мультфильмов"
+            #    Pal_init['cartoon_series_flag'] = ''
+#
+            #    for i in range(len(cartoons_series)):
+            #        # Берем конкретную строку
+            #        row = cartoons_series.iloc[i]
+            #        
+            #        # Преобразуем время
+            #        start_time = pd.to_datetime(row['Время выхода'], format='%H:%M:%S')
+            #        end_time = pd.to_datetime(row['Время окончания'], format='%H:%M:%S')
+            #        
+            #        # Обработка перехода через полночь для целевого интервала
+            #        if end_time < start_time:
+            #            end_time = end_time + timedelta(days = 1)
+            #        
+            #        # Интервал с запасом.
+            #        # Не всегда "Время начала" в Palomars совпадает с "Время начала" в VIMB. Даём небольшой люфт.
+            #        start_threshold = start_time - timedelta(minutes = 5)
+            #        end_threshold = end_time + timedelta(minutes = 5)
+#
+            #        # Создаем копии для корректировки перехода через полночь в Pal_init
+            #        Pal_init['time_start_temp'] = Pal_init['time_start_dt']
+            #        Pal_init['time_end_temp'] = Pal_init['time_end_dt']
+            #        
+            #        # Корректируем время окончания для программ, идущих через полночь
+            #        night_mask = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
+            #        Pal_init.loc[night_mask, 'time_end_temp'] = Pal_init.loc[night_mask, 'time_end_dt'] + timedelta(days = 1)
+#
+            #        ################################################################################
+            #        # Отбираем строки в интервале
+            #        mask = (Pal_init['time_start_temp'] >= start_threshold) & \
+            #            (Pal_init['time_end_temp'] <= end_threshold)
+            #        result_indices = Pal_init[mask].index
+            #        
+            #        for idx in result_indices:
+            #            pr_name = Pal_init.loc[idx, 'Название программы']
+            #            start_time_pr = Pal_init.loc[idx, 'time_start_dt']
+            #            end_time_pr = Pal_init.loc[idx, 'time_end_dt']
+            #            
+            #            # Корректировка для проверяемой программы
+            #            if end_time_pr < start_time_pr:
+            #                end_time_pr_check = end_time_pr + timedelta(days=1)
+            #            else:
+            #                end_time_pr_check = end_time_pr
+            #            
+            #            # Проверяем условие
+            #            condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
+            #            
+            #            if condition:
+            #                Pal_init.loc[idx, 'cartoon_series_flag'] = 'серия мультфильмов'
+            #        
+            #    # Удаляем временные столбцы
+            #    Pal_init = Pal_init.drop(['time_start_temp', 'time_end_temp'], axis = 1)
+#
+            #    # Производим замену названий. Если в столбце "cartoon_series_flag" фигурирует название "серия мультфильмов", то в столбце
+            #    # "Название программы" заменяем значение на "серия мультфильмов".
+            #    Pal_init.loc[Pal_init['cartoon_series_flag'].notna() & \
+            #                (Pal_init['cartoon_series_flag'] != ''), 'Название программы'] = 'серия мультфильмов'
+#
+            #    columns_to_remain = [
+            #        'Дата', 'Название программы palomars', 'Название программы', 
+            #        'Время выхода', 'Время окончания', 'Share', 'Жанр'
+            #    ]
+#
+            #    # Оставляем только нужные столбцы для дальнейшего анализа
+            #    Pal_init = Pal_init[columns_to_remain]
             # ========================================== КОНЕЦ НОВОГО КУСКА ==========================================
 
             result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)

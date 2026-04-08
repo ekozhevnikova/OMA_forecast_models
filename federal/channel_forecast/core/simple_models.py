@@ -694,7 +694,6 @@ class RuleBasedForecaster:
         return share, combined_mask if combined_mask.any() else None
 
 
-    #@staticmethod
     def generate_field_combinations(
                                 self,
                                 fields, 
@@ -1022,8 +1021,10 @@ class RuleBasedForecaster:
         dur_min_lower = dur_min * 0.7  # -30%
         dur_min_upper = dur_min * 1.3  # +30%
 
-        # Отфильтровываем ненулевые значения долей (чтобы случайно нули не попали в усреднение и тем самым занизили прогноз)
-        data = data[data['Share'] != 0].reset_index(drop = True)
+        # Для канала '2X2' оставляем возможность присутствия нуль
+        if self.channel != '2X2':
+            # Отфильтровываем ненулевые значения долей (чтобы случайно нули не попали в усреднение и тем самым занизили прогноз)
+            data = data[data['Share'] != 0].reset_index(drop = True)
 
         # Все стратегии поиска: (комбинации, использовать_люфт, обязательна_длительность, комментарий, особенный ключ)
         strategies = [

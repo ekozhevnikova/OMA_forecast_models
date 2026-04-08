@@ -166,21 +166,21 @@ class ChannelAnalysisMaster:
         Args:
             run_all: Если True, запускает все доступные пайплайны
             **kwargs: Можно передать какие пайплайны запускать:
-                      run_audience=True/False, run_web=True/False и т.д.
+                      run_auedience=True/False, run_web=True/False и т.д.
         """
         results = {}
         
         # Определяем, какие пайплайны запускать
-        run_audience = kwargs.get('run_audience', run_all or self.auedience_file)
+        run_auedience = kwargs.get('run_auedience', run_all or self.auedience_file)
         run_web = kwargs.get('run_web', run_all or self.web_file)
         run_plmrs = kwargs.get('run_plmrs', run_all or self.weighted_share_file)
         run_vimb = kwargs.get('run_vimb', run_all or (self.new_vimb_grids and self.hist_vimb_file))
         
         print(Color.BOLD + f'🚀 Начинаю расчет для канала {self.channel}' + Color.END)
         # 1. Audience пайплайн
-        if run_audience and self.auedience_file:
+        if run_auedience and self.auedience_file:
             print(Color.BOLD + Color.VIOLET + '=== 🎬 Запуск выгрузки Total Channels Auedience пайплайна ===' + Color.END)
-            results['audience'] = self.auedience_pipeline()
+            results['auedience'] = self.auedience_pipeline()
         
         # 2. Web пайплайн
         if run_web and self.web_file:
@@ -189,8 +189,8 @@ class ChannelAnalysisMaster:
         
         # 3. PLMRS пайплайн (требует audience и web)
         if run_plmrs and self.weighted_share_file:
-            if 'web' in results and results['web']:
-                if 'audience' in results and results['audience']:
+            if 'web' in results and results['web'] is not None:
+                if 'auedience' in results and results['auedience'] is not None:
                     print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
                     web_new, _ = results['web']
                     results['plmrs'] = self.plmrs_web_pipeline(web_new)
