@@ -6,8 +6,8 @@ from typing import Optional
 import warnings
 warnings.filterwarnings('ignore')
 
-from io_data.colors import *
-from federal.channel_forecast.grid_preprocessing import *
+from OMA_tools.io_data.colors import *
+from OMA_tools.federal.channel_forecast.grid_preprocessing import *
 
 
 class ChannelAnalysisMaster:

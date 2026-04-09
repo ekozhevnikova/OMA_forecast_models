@@ -4,7 +4,7 @@ from typing import Tuple, Optional, List, Dict, Callable
 from datetime import timedelta, datetime, time
 from dateutil.relativedelta import relativedelta
 from difflib import SequenceMatcher
-from federal.channel_forecast.core.simple_models import *
+from OMA_tools.federal.channel_forecast.core.simple_models import *
 import traceback
 traceback.print_exc()
 

@@ -14,7 +14,7 @@ import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
-from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.federal.channel_forecast.core.content_matching import *
 
@@ -1932,6 +1932,35 @@ class ProgramMatcher(BaseParser):
         self.vimb_grid = vimb_grid
 
 
+        self.SPORT_TYPES = [
+            'автоспорт', 'аквабайк', 'акробатический рок-н-ролл', 'американский футбол', 
+            'айкидо', 'альпинизм', 'армрестлинг', 'бадминтон', 'баскетбол', 'биатлон', 
+            'бильярд', 'бобслей', 'бокс', 'борьба', 'боулинг', 'бейсбол', 'брейкинг', 
+            'бодибилдинг', 'банджо', 'балет', 'бег', 'велоспорт', 'водное поло', 'волейбол', 
+            'вейкбординг', 'виндсерфинг', 'вольная борьба', 'верховая езда', 'гандбол', 'гольф', 
+            'гребля', 'греко-римская борьба', 'гимнастика', 'гиревой спорт', 'горные лыжи', 
+            'дартс', 'дзюдо', 'дайвинг', 'дельтапланеризм', 'джиу-джитсу', 'драгрейсинг', 
+            'единоборства', 'карате', 'каратэ', 'керлинг', 'конный', 'кикбоксинг', 'капоэйра', 'кудо',
+            'киберспорт', 'конькобежный спорт', 'легкая атлетика',
+            'лыжные гонки', 'лыжный спорт', 'лыжное двоеборье', 'лыжи', 'лапта', 'марафон', 
+            'маунтинбайк', 'муайтай', 'мотоспорт', 'мотокросс', 'метание диска', 'настольный теннис', 
+            'настольный футбол', 'ориентирование', 'олимпийские игры', 'падел', 'плавание', 
+            'прыжки в воду', 'прыжки на лыжах', 'прыжки с трамплина на лыжах', 'пауэрлифтинг', 
+            'прыжки на батуте и акробатической дорожке', 'панкратион',
+            'парашютный спорт', 'паркур', 'пейнтбол', 'пятиборье', 'регби', 'рукопашный бой', 'роллер спорт', 
+            'рафтинг', 'реслинг', 'самбо', 'санный спорт', 'скелетон', 'скоростной спуск на коньках', 
+            'смешанные единоборства', 'спортивная гимнастика', 'стрельба из лука', 'стрельба', 'серфинг', 
+            'спортивные танцы', 'сноуборд', 'скалолазание', 'сквош', 'софтбол', 'спортивная аэробика', 
+            'теннис', 'триатлон',  'тяжелая атлетика', 'тхэквондо', 'тайский бокс', 'танцевальный спорт', 
+            'толкание ядра', 'ушу', 'универсальный бой', 'уличные игры', 'фехтование', 'фигурное катание', 
+            'фестиваль экстремальных видов спорта',
+            'формула 1', 'фрирайд', 'футбол', 'футзал', 'флорбол', 'фристайл', 'хоккей на траве', 
+            'хоккей', 'художественная гимнастика', 'хайдайвинг', 'чемпионат по робототехнике',
+            'шахматы', 'шашки', 'шорт-трек', 'экстремальный спорт', 'экстремальные игры', 'эль-класико',
+            'яхтинг', 'яхтенный спорт', 'karate combat', 'pride'
+        ]
+
+
     @staticmethod
     def find_common_base_names(names: List[str])  -> Dict[str, str]:
         """
@@ -2120,6 +2149,89 @@ class ProgramMatcher(BaseParser):
         return VIMB_init, Pal_init
 
 
+    def _find_sport(self, name, row = None):
+        """
+            Метод для заполнения нового столбца "Вид спорта". Столбец заполняется только в том случае, если
+            значение в столбце "Жанр" - это "Трансляция спортивного мероприятия".
+            !!!ВАЖНО!!! Это метод для МатчТВ
+        """
+        # Если передан row, проверяем жанр
+        if row is not None and row.get('Жанр') != 'Трансляция спортивного мероприятия':
+            return ''
+        
+        if not isinstance(name, str):
+            return None
+        
+        name_lower = name.lower()
+
+        # ДИАГНОСТИКА
+        #print(f"Ищу в названии: '{name_lower}'")
+
+        # Словари уточнений: ключ - базовый спорт, значение - список (ключевое слово, уточненное название)
+        refinements = {
+            'футбол': [
+                ('рпл', 'футбол рпл'),
+                ('кубок россии', 'футбол кубок россии'),
+                ('чемпионат россии', 'футбол чемпионат россии'),
+                ('чемпионат германии', 'футбол чемпионат германии'),
+                ('чемпионат испании', 'футбол чемпионат испании'),
+                ('чемпионат италии', 'футбол чемпионат италии'),
+                ('пляжный футбол', 'пляжный футбол'),
+            ],
+            'хоккей': [
+                ('кхл', 'хоккей кхл'),
+                ('мхл', 'хоккей мхл'),
+                ('нхл', 'хоккей нхл'),
+                ('кубок будущего', 'хоккей кубок будущего'),
+                ('чемпионат россии', 'хоккей чемпионат россии'),
+                ('чемпионат мира', 'хоккей чемпионат мира'),
+            ]
+        }
+
+        for sport in self.SPORT_TYPES:
+            if sport in name_lower:
+                #print(f"Найден базовый спорт: '{sport}'")
+                # Проверяем уточнения для найденного спорта
+                if sport in refinements:
+                    for keyword, refined_sport in refinements[sport]:
+                        if keyword in name_lower:
+                            #print(f"Уточнение до: '{refined_sport}'")
+                            return refined_sport
+                return sport
+        print(Color.BOLD + Color.RED + f'Спорт не найден "{name_lower}"' + Color.END)
+        return ''
+    
+
+    def _find_label(self, name):
+        """
+            Метод для поиска метки (обзор/повтор)
+            !!!ВАЖНО!!! Это метод для МатчТВ
+        """
+        if not isinstance(name, str):
+            return None
+        name_lower = name.lower()
+        if 'обзор' in name_lower:
+            return 'обзор'
+        elif 'повтор' in name_lower:
+            return 'повтор'
+        return None
+    
+
+    def _process_row(self, row):
+        """
+            Обработка строк только с нужным жанром
+            !!!ВАЖНО!!! Это метод для МатчТВ
+        """
+        name = row['Название программы init']
+
+        # Установка метки "обзор", "повтор"
+        label = self._find_label(name)
+
+        if row['Жанр'] != 'Трансляция спортивного мероприятия':
+            return pd.Series([None, label])
+        
+        sport = self._find_sport(name)  
+        return pd.Series([sport, label])
 
 
     def match_vimb_with_palomars_grids(self, cities_path: str, minutes: int = 10):
@@ -2273,96 +2385,14 @@ class ProgramMatcher(BaseParser):
                         ]
             VIMB_init, Pal_init = self.find_nameless_vimb_programs(program_names, VIMB_init, Pal_init)
 
-            ## ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
-            ## Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
-            #if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
-            #    print(Color.VIOLET + f'Делаю предобработку "серии мультфильмов" для канала {self.channel}' + Color.END)
-#
-            #    pr = TVScheduleProcessor(self.channel, VIMB_init, Pal_init)
-            #    # Схлопываем программы VIMB, чтобы более наглядно увидеть, где именно была "серия мультфильмов"
-            #    vimb_joined = pr.join_broadcasts(VIMB_init, 'vimb', include_share = False)
-#
-            #    # Отбираем только те слоты, в которых фигурирует название 'серия мультфильмов'
-            #    cartoons_series = vimb_joined[vimb_joined['Название программы'] == 'серия мультфильмов'].reset_index(drop = True)
-#
-            #    # Переводим время в Palomars в datetime для удобной фильтрации
-            #    Pal_init['time_start_dt'] = pd.to_datetime(Pal_init['Время выхода'], format = '%H:%M:%S')
-            #    Pal_init['time_end_dt'] = pd.to_datetime(Pal_init['Время окончания'], format = '%H:%M:%S')
-#
-            #    # Коррекция перехода через полночь
-            #    mask_night = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
-            #    Pal_init.loc[mask_night, 'time_end_dt'] = Pal_init.loc[mask_night, 'time_end_dt'] + timedelta(days = 1)
-#
-            #    # Создаем столбец с флагом. Если во встретившемся слоте Palomars в таблице VIMB в это время была "серия мультфильмов", то
-            #    # мы в новый столбец записываем "серия мультфильмов"
-            #    Pal_init['cartoon_series_flag'] = ''
-#
-            #    for i in range(len(cartoons_series)):
-            #        # Берем конкретную строку
-            #        row = cartoons_series.iloc[i]
-            #        
-            #        # Преобразуем время
-            #        start_time = pd.to_datetime(row['Время выхода'], format='%H:%M:%S')
-            #        end_time = pd.to_datetime(row['Время окончания'], format='%H:%M:%S')
-            #        
-            #        # Обработка перехода через полночь для целевого интервала
-            #        if end_time < start_time:
-            #            end_time = end_time + timedelta(days = 1)
-            #        
-            #        # Интервал с запасом.
-            #        # Не всегда "Время начала" в Palomars совпадает с "Время начала" в VIMB. Даём небольшой люфт.
-            #        start_threshold = start_time - timedelta(minutes = 5)
-            #        end_threshold = end_time + timedelta(minutes = 5)
-#
-            #        # Создаем копии для корректировки перехода через полночь в Pal_init
-            #        Pal_init['time_start_temp'] = Pal_init['time_start_dt']
-            #        Pal_init['time_end_temp'] = Pal_init['time_end_dt']
-            #        
-            #        # Корректируем время окончания для программ, идущих через полночь
-            #        night_mask = Pal_init['time_end_dt'] < Pal_init['time_start_dt']
-            #        Pal_init.loc[night_mask, 'time_end_temp'] = Pal_init.loc[night_mask, 'time_end_dt'] + timedelta(days = 1)
-#
-            #        ################################################################################
-            #        # Отбираем строки в интервале
-            #        mask = (Pal_init['time_start_temp'] >= start_threshold) & \
-            #            (Pal_init['time_end_temp'] <= end_threshold)
-            #        result_indices = Pal_init[mask].index
-            #        
-            #        for idx in result_indices:
-            #            pr_name = Pal_init.loc[idx, 'Название программы']
-            #            start_time_pr = Pal_init.loc[idx, 'time_start_dt']
-            #            end_time_pr = Pal_init.loc[idx, 'time_end_dt']
-            #            
-            #            # Корректировка для проверяемой программы
-            #            if end_time_pr < start_time_pr:
-            #                end_time_pr_check = end_time_pr + timedelta(days=1)
-            #            else:
-            #                end_time_pr_check = end_time_pr
-            #            
-            #            # Проверяем условие
-            #            condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
-            #            
-            #            if condition:
-            #                Pal_init.loc[idx, 'cartoon_series_flag'] = 'серия мультфильмов'
-            #        
-            #    # Удаляем временные столбцы
-            #    Pal_init = Pal_init.drop(['time_start_temp', 'time_end_temp'], axis = 1)
-#
-            #    # Производим замену названий. Если в столбце "cartoon_series_flag" фигурирует название "серия мультфильмов", то в столбце
-            #    # "Название программы" заменяем значение на "серия мультфильмов".
-            #    Pal_init.loc[Pal_init['cartoon_series_flag'].notna() & \
-            #                (Pal_init['cartoon_series_flag'] != ''), 'Название программы'] = 'серия мультфильмов'
-#
-            #    columns_to_remain = [
-            #        'Дата', 'Название программы palomars', 'Название программы', 
-            #        'Время выхода', 'Время окончания', 'Share', 'Жанр'
-            #    ]
-#
-            #    # Оставляем только нужные столбцы для дальнейшего анализа
-            #    Pal_init = Pal_init[columns_to_remain]
-            # ========================================== КОНЕЦ НОВОГО КУСКА ==========================================
+           
 
             result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
+
+            # НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
+            if self.channel == 'МатчТВ':
+                result_df[['Вид спорта', 'Метка']] = result_df.apply(self._process_row, axis=1)
+            # КОНЕЦ НОВОГО КУСКА ДЛЯ МАТЧ ТВ
             
             # Считаем длительности программ
             result_df['Время выхода_dt'] = pd.to_datetime(result_df['Время выхода'])
@@ -2384,13 +2414,26 @@ class ProgramMatcher(BaseParser):
                 lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
             )
     
-            result_df = result_df[
+
+            if self.channel == 'МатчТВ':
+                result_df = result_df[
+                    [
+                        'Дата', 'Название программы', 'Время выхода', 'Время окончания',
+                        'Продолжительность', 'Share', 'Название программы init', 
+                        'Жанр', 'Вид спорта', 'Метка'
+                        ]
+                ]
+
+            else:
+                result_df = result_df[
                 [
                     'Дата', 'Название программы', 'Время выхода', 'Время окончания',
                     'Продолжительность', 'Share', 'Название программы init', 
                     'Жанр'
                     ]
-            ]
+                ]
+
+                
             result_webs[target_date] = result_df
             
         webs_converted = pd.concat(result_webs.values(), ignore_index = True)
@@ -2502,16 +2545,32 @@ class ProgramMatcher(BaseParser):
         """
             Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
         """
-        column_configs = [
-            {'header': 'Дата', 'width': 14.0, 'format': 'date'},
-            {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
-            {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
-            {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
-            {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
-            {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
-            {'header': 'Название программы init', 'width': 72.0, 'format': 'general'},
-            {'header': 'Жанр', 'width': 40.0, 'format': 'general'}
-        ]
+        if self.channel == 'МатчТВ':
+            column_configs = [
+                {'header': 'Дата', 'width': 14.0, 'format': 'date'},
+                {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
+                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+                {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
+                {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
+                {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+                {'header': 'Название программы init', 'width': 72.0, 'format': 'general'},
+                {'header': 'Жанр', 'width': 40.0, 'format': 'general'},
+                {'header': 'Вид спорта', 'width': 25.0, 'format': 'general'},
+                {'header': 'Метка', 'width': 14.0, 'format': 'general'}
+            ]
+
+        else:
+            column_configs = [
+                {'header': 'Дата', 'width': 14.0, 'format': 'date'},
+                {'header': 'Название программы', 'width': 72.0, 'format': 'general'},
+                {'header': 'Время выхода', 'width': 14.0, 'format': 'general'},
+                {'header': 'Время окончания', 'width': 14.2, 'format': 'general'},
+                {'header': 'Продолжительность', 'width': 17.0, 'format': 'general'},
+                {'header': 'Share_weighted', 'width': 16.0, 'format': 'general'},
+                {'header': 'Название программы init', 'width': 72.0, 'format': 'general'},
+                {'header': 'Жанр', 'width': 40.0, 'format': 'general'}
+            ]
+
         
         self.make_style_of_table(
             df = df,
