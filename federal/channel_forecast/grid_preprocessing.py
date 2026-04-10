@@ -14,9 +14,11 @@ import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
-#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.federal.channel_forecast.core.content_matching import *
+from OMA_tools.federal.channel_forecast.support import Assistant
+from OMA_tools.io_data.colors import *
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -882,8 +884,11 @@ class TVPreprocessing(BaseParser):
     def convert_time(time_str: str):
         """
             Функция для конвертации времени из формата 25:00:00 в 01:00:00 или 5:00:00 в 05:00:00
-            Args:
-                time_str: время в формате строки
+
+            Параметры:
+            ----------
+            time_str: 
+                Время в формате строки
         """
         # Предполагаем стандартный формат HH:MM:SS или H:MM:SS
         if time_str[1] == ':':  # Формат H:MM:SS (одна цифра)
@@ -903,13 +908,18 @@ class TVPreprocessing(BaseParser):
     def parse_Palomars(self, start_time_col: str = 'Время выхода', end_time_col: str = 'Время окончания') -> pd.DataFrame:
         """
             Функция для парсинга файла с исторической сеткой Palomars.
-            Args:
-                filename: полный путь/название файла с исторической сеткой.
-                column_1: столбец 1 с названием "Время выхода".
-                column_2: столбец 2 с названием "Время окончания".
-                program_time_slots: список из названий колонок, где присутствуют времена выхода и окончания программы.
+
+            Параметры:
+            ----------
+            start_time_col: str
+                Столбец с названием "Время выхода".
+            end_time_col: str
+                Столбец с названием "Время окончания".
+
             Returns:
-                plmrs: причёсанный DataFrame с исторической сеткой.
+            ----------
+            plmrs: pd.DataFrame 
+                Причёсанный DataFrame с исторической сеткой.
         """
         #Чтение файла с данными
         df = self.plmrs.copy()
@@ -1003,15 +1013,23 @@ class TVPreprocessing(BaseParser):
         """
             Функция для расчета взвешенной доли. 
 
-            Args:
-                df: pd.DataFrame: Датафрейм, в котором есть столбцы Долей (Share), Время выхода, Время окончания, Название программы для какого одного дня.
-                weighted_auedience: pd.DataFrame: ДатаФрейм с весами слотов, посчитанными через TotalTVAuedience для конкретного дня.
-                start_time_col: название столбца с временем выхода программы. По умолчанию "Время выхода".
-                end_time_col: название столбца с временем окончания программы. По умолчанию "Время окончания".
-                date_col: название столбца с датой
+            Параметры:
+            ----------
+            df: pd.DataFrame: 
+                Датафрейм, в котором есть столбцы Долей (Share), Время выхода, Время окончания, Название программы для какого одного дня.
+            weighted_auedience: pd.DataFrame: 
+                ДатаФрейм с весами слотов, посчитанными через TotalTVAuedience для конкретного дня.
+            start_time_col: str
+                Название столбца с временем выхода программы. По умолчанию "Время выхода".
+            end_time_col: str
+                Название столбца с временем окончания программы. По умолчанию "Время окончания".
+            date_col: str
+                Название столбца с датой
 
             Returns:
-                data: pd.DataFrame: Датафрейм с новой рассчитанной долей
+            ----------
+            data: pd.DataFrame
+                Датафрейм с новой рассчитанной долей
         """
         df = self.parse_Palomars(start_time_col, end_time_col)
 
@@ -1125,8 +1143,10 @@ class VIMBGridProcessor(BaseParser):
         """
             Инициализация парсера VIMB.
             
-            Args:
-                folder_path: путь к файлам с новыми сетками ТВ-программ.
+            Параметры:
+            ----------
+            folder_path: str
+                Путь к файлам с новыми сетками ТВ-программ.
         """
         super().__init__(folder_path)
         self.folder_path = folder_path
@@ -1150,11 +1170,17 @@ class VIMBGridProcessor(BaseParser):
     def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows = 1):
         """
             Метод для парсинга файла с сеткой VIMB из отчета Размещение -> Сводная таблица
-            Args:
-                sheet_name: имя листа, который будем считывать из файла. По умолчанию ГРАФИК.
-                skiprows: количество строк, которые будем пропускать в файле. По умолчанию 1.
+
+            Параметры:
+            ----------
+                sheet_name: str
+                    Имя листа, который будем считывать из файла. По умолчанию ГРАФИК.
+                skiprows: int
+                    Количество строк, которые будем пропускать в файле. По умолчанию 1.
             Returns:
-                VIMB: причёсанный DataFrame с сеткой VIMB.
+            ----------
+                VIMB: pd.DataFrame
+                    Причёсанный DataFrame с сеткой VIMB.
         """
         # Чтение файла
         df = pd.read_excel(filepath, sheet_name = sheet_name, skiprows = skiprows)
@@ -1254,13 +1280,19 @@ class VIMBGridProcessor(BaseParser):
         """
             Метод для чтения новых сеток ТВ-программ из VIMB (Сводная таблица) для какого-то одного канала. (Применительно к историческим данным)
             
-            Args:
-                file_format: формат файлов с новыми сетками ТВ-программ. По умолчанию '*.xlsm'.
-                date_column: название колонки с датой. По умолчанию 'Дата'.
-                time_column: название колонки с временем выхода программы. По умолчанию 'Время выхода'.
+            Параметры:
+            ----------
+                file_format: : str 
+                    Формат файлов с новыми сетками ТВ-программ. По умолчанию '*.xlsm'.
+                date_column: str
+                    Название колонки с датой. По умолчанию 'Дата'.
+                time_column: str
+                    Название колонки с временем выхода программы. По умолчанию 'Время выхода'.
                 
             Returns:
-                combined: pd.DataFrame: фулл-таблица с новыми сетками с сортировкой по дате и слоту от 05:00-29:00.
+            ----------
+                combined: pd.DataFrame: 
+                    Фулл-таблица с новыми сетками с сортировкой по дате и слоту от 05:00-29:00.
         """
         # Проверяем, что путь действительно существует
         if not os.path.exists(self.folder_path):
@@ -1490,11 +1522,15 @@ class VIMBGridProcessor(BaseParser):
             Вычисляет продолжительность программы, учитывая переход через полночь.
             Учитывает часы, минуты и секунды.
             
-            Args:
-                start_time: время начала в формате 'HH:MM:SS'
-                end_time: время окончания в формате 'HH:MM:SS'
+            Параметры:
+            ----------
+            start_time: 
+                Время начала в формате 'HH:MM:SS'
+            end_time: 
+                Время окончания в формате 'HH:MM:SS'
             
             Returns:
+            ----------
                 Продолжительность в формате 'HH:MM:SS'
         """
         # Разбиваем время на часы, минуты и секунды
@@ -1532,7 +1568,7 @@ class VIMBGridProcessor(BaseParser):
             Returns:
             -------
                 warnings: list
-                Список предупреждений о разрывах более 30 минут
+                    Список предупреждений о разрывах более 30 минут
         """
         warnings = []
 
@@ -1596,12 +1632,17 @@ class VIMBGridProcessor(BaseParser):
             Корректировка времени окончания для обработки границ часов. Если время окончания, например, 05:00:00, то будет сделана замена на 04:59:59.
             Отдельно обрабатывается перескок через полночь.
 
-            Args:
-                df: датафрейм, в котором хотим произвести конвертацию времени.
-                time_col: str: название колонки, в которой хотим сделать конвертацию. По умолчанию 'Время окончания'.
+            Параметры:
+            ----------
+            df: pd.DataFrame
+                Датафрейм, в котором хотим произвести конвертацию времени.
+            time_col: str: 
+                Название колонки, в которой хотим сделать конвертацию. По умолчанию 'Время окончания'.
 
             Returns:
-                Датафрейм df с конвертированными слотами Времени окончания программ.
+            ----------
+            df: pd.DataFrame
+                Датафрейм с конвертированными слотами Времени окончания программ.
         """
 
         def adjust_time(time_str: str) -> str:
@@ -1626,10 +1667,17 @@ class VIMBGridProcessor(BaseParser):
         """
             Метод для проверки, что каждый день начинается и заканчивается в 05:00:00. Эфирные сутки 05:00:00-29:00:00 (05:00:00 следующего дня).
 
-            Args:
-                df: pd.DataFrame: датафрейм, который хотим проверить.
-                date_column: str: название столбца с датой. Даты в формате строки
+            Параметры:
+            ----------
+            df: pd.DataFrame: 
+                Датафрейм, который хотим проверить.
+            date_column: str: 
+                Название столбца с датой. Даты в формате строки
+
             Returns:
+            ----------
+            df: pd.DataFrame: 
+                Датафрейм, с верными эфирными сутками
         """
         need_start = '05:00:00'
         need_end = '04:59:59'
@@ -1917,11 +1965,16 @@ class ProgramMatcher(BaseParser):
         """
         Инициализация ProgramMatcher
         
-        Args:
-            channel_vocabulary: pd.DataFrame: датафрейм со справочником программ
-            folder_path: str: путь к файлу с данными.
-            palomars_grid:  str:историческая сетка Mediascope.
-            vimb_grid: str: историческая сетка VIMB.
+        Параметры:
+        ----------
+        channel_vocabulary: pd.DataFrame: 
+            Датафрейм со справочником программ
+        folder_path: str: 
+            Путь к файлу с данными.
+        palomars_grid:  str
+            Историческая сетка Mediascope.
+        vimb_grid: str: 
+            Историческая сетка VIMB.
         """
         super().__init__(folder_path)
 
@@ -1931,33 +1984,17 @@ class ProgramMatcher(BaseParser):
         self.palomars_grid = palomars_grid
         self.vimb_grid = vimb_grid
 
+        # Выходной порядок столбцов для канала "МатчТВ"
+        self.COLUMNS_ORDER_OUTPUT_SPORT_CHANNEL = [
+                'Дата', 'Название программы', 'Время выхода', 'Время окончания',
+                'Продолжительность', 'Share', 'Название программы init', 
+                'Жанр', 'Вид спорта', 'Метка'
+        ]
 
-        self.SPORT_TYPES = [
-            'автоспорт', 'аквабайк', 'акробатический рок-н-ролл', 'американский футбол', 
-            'айкидо', 'альпинизм', 'армрестлинг', 'бадминтон', 'баскетбол', 'биатлон', 
-            'бильярд', 'бобслей', 'бокс', 'борьба', 'боулинг', 'бейсбол', 'брейкинг', 
-            'бодибилдинг', 'банджо', 'балет', 'бег', 'велоспорт', 'водное поло', 'волейбол', 
-            'вейкбординг', 'виндсерфинг', 'вольная борьба', 'верховая езда', 'гандбол', 'гольф', 
-            'гребля', 'греко-римская борьба', 'гимнастика', 'гиревой спорт', 'горные лыжи', 
-            'дартс', 'дзюдо', 'дайвинг', 'дельтапланеризм', 'джиу-джитсу', 'драгрейсинг', 
-            'единоборства', 'карате', 'каратэ', 'керлинг', 'конный', 'кикбоксинг', 'капоэйра', 'кудо',
-            'киберспорт', 'конькобежный спорт', 'легкая атлетика',
-            'лыжные гонки', 'лыжный спорт', 'лыжное двоеборье', 'лыжи', 'лапта', 'марафон', 
-            'маунтинбайк', 'муайтай', 'мотоспорт', 'мотокросс', 'метание диска', 'настольный теннис', 
-            'настольный футбол', 'ориентирование', 'олимпийские игры', 'падел', 'плавание', 
-            'прыжки в воду', 'прыжки на лыжах', 'прыжки с трамплина на лыжах', 'пауэрлифтинг', 
-            'прыжки на батуте и акробатической дорожке', 'панкратион',
-            'парашютный спорт', 'паркур', 'пейнтбол', 'пятиборье', 'регби', 'рукопашный бой', 'роллер спорт', 
-            'рафтинг', 'реслинг', 'самбо', 'санный спорт', 'скелетон', 'скоростной спуск на коньках', 
-            'смешанные единоборства', 'спортивная гимнастика', 'стрельба из лука', 'стрельба', 'серфинг', 
-            'спортивные танцы', 'сноуборд', 'скалолазание', 'сквош', 'софтбол', 'спортивная аэробика', 
-            'теннис', 'триатлон',  'тяжелая атлетика', 'тхэквондо', 'тайский бокс', 'танцевальный спорт', 
-            'толкание ядра', 'ушу', 'универсальный бой', 'уличные игры', 'фехтование', 'фигурное катание', 
-            'фестиваль экстремальных видов спорта',
-            'формула 1', 'фрирайд', 'футбол', 'футзал', 'флорбол', 'фристайл', 'хоккей на траве', 
-            'хоккей', 'художественная гимнастика', 'хайдайвинг', 'чемпионат по робототехнике',
-            'шахматы', 'шашки', 'шорт-трек', 'экстремальный спорт', 'экстремальные игры', 'эль-класико',
-            'яхтинг', 'яхтенный спорт', 'karate combat', 'pride'
+        # Выходной порядок столбцов для каналов, КРОМЕ "МатчТВ"
+        self.COLUMNS_ORDER_OUTPUT = [
+            'Дата', 'Название программы', 'Время выхода', 'Время окончания',
+            'Продолжительность', 'Share', 'Название программы init', 'Жанр'
         ]
 
 
@@ -1966,11 +2003,14 @@ class ProgramMatcher(BaseParser):
         """
             Находит базовые названия программ, заменяя длинные варианты на короткие.
 
-            Args:
-                names: Список названий программ
+            Параметры:
+            ----------
+            names: list 
+                Список названий программ
                 
             Returns:
-                Словарь маппинга {длинное_название: базовое_название}
+            ----------
+            Словарь маппинга {длинное_название: базовое_название}
         """
         # Уникальные названия
         unique_names = sorted(set(names), key = len)
@@ -1988,33 +2028,6 @@ class ProgramMatcher(BaseParser):
                     mapping[long_name] = short_name
         
         return mapping
-    
-
-    @staticmethod
-    def check_cartoons(
-            df: pd.DataFrame, 
-            target_name_cartoons: list, 
-            full_list:list, 
-            replacement_name: str,
-            debug = False
-        ):
-        """
-            Если в столбце "Название программы" встречается название "маша и медведь", а также любое из списка other_list,
-            то производится замена названий на "мультфильм о маше".
-            В противном случае, если присутствует только "маша и медведь", то замена не производится.
-        """
-        unique_values = set(df['Название программы'].unique())
-        
-        has_cartoon = any(cartoon in unique_values for cartoon in target_name_cartoons)
-        
-        if has_cartoon:
-            if debug:
-                print(Color.BROWN + 'Встретились мультфильмы о Маше или Коте Леопольде. Делаю замену на ' + \
-                Color.BOLD + f'"{replacement_name}".' + Color.END)
-            # Заменяем всё, включая "маша и медведь"
-            mask = df['Название программы'].str.lower().isin(full_list)
-            df.loc[mask, 'Название программы'] = replacement_name
-        return df
     
 
     def find_nameless_vimb_programs(self, names_to_replace: list, VIMB: pd.DataFrame, Pal: pd.DataFrame):
@@ -2041,16 +2054,12 @@ class ProgramMatcher(BaseParser):
         VIMB_init = VIMB.copy()
         Pal_init = Pal.copy()
 
-        # Задаем те названия, для которых будем делать данную предобработку
-        #self.cartoon_keywords = names_to_replace
 
         existing_keywords = [kw for kw in names_to_replace if kw in VIMB_init['Название программы'].unique()]
 
         # ======== НОВЫЙ КУСОК. ПРИНУДИТЕЛЬНАЯ ЗАМЕНА НА "СЕРИЯ МУЛЬТФИЛЬМОВ" В PALOMARS, ИСПОЛЬЗУЯ ИНФОРМАЦИЮ ИЗ VIMB. ========
         # Будем делать манипуляции, описанные ниже только в том случае, если в столбце "Название программы" таблицы VIMB фигурирует "серия мультфильмов"
         if existing_keywords:
-        #if any(keyword in VIMB_init['Название программы'].unique() for keyword in self.cartoon_keywords):
-        #if 'серия мультфильмов' in VIMB_init['Название программы'].unique():
             print("Делаю предобработку " + Color.VIOLET + f"{', '.join(list(set(existing_keywords)))}" + Color.END + " для канала " + \
                  Color.BOLD + Color.BLUE + f"{self.channel}" + Color.END)
 
@@ -2059,7 +2068,6 @@ class ProgramMatcher(BaseParser):
             vimb_joined = pr.join_broadcasts(VIMB_init, 'vimb', include_share = False)
 
             # Отбираем только те слоты, в которых фигурирует название 'серия мультфильмов'
-            #cartoons_series = vimb_joined[vimb_joined['Название программы'] == 'серия мультфильмов'].reset_index(drop = True)
             cartoons_series = vimb_joined[vimb_joined['Название программы'].isin(existing_keywords)].reset_index(drop = True)
 
             # Если нет серий мультфильмов для обработки, выходим
@@ -2127,7 +2135,6 @@ class ProgramMatcher(BaseParser):
                     condition = (start_time_pr <= end_threshold) and (end_time_pr_check >= start_threshold)
                     
                     if condition:
-                        #Pal_init.loc[idx, 'cartoon_series_flag'] = 'серия мультфильмов'
                         Pal_init.loc[idx, 'cartoon_series_flag'] = vimb_program_name
                 
             # Удаляем временные столбцы
@@ -2149,98 +2156,22 @@ class ProgramMatcher(BaseParser):
         return VIMB_init, Pal_init
 
 
-    def _find_sport(self, name, row = None):
-        """
-            Метод для заполнения нового столбца "Вид спорта". Столбец заполняется только в том случае, если
-            значение в столбце "Жанр" - это "Трансляция спортивного мероприятия".
-            !!!ВАЖНО!!! Это метод для МатчТВ
-        """
-        # Если передан row, проверяем жанр
-        if row is not None and row.get('Жанр') != 'Трансляция спортивного мероприятия':
-            return ''
-        
-        if not isinstance(name, str):
-            return None
-        
-        name_lower = name.lower()
-
-        # ДИАГНОСТИКА
-        #print(f"Ищу в названии: '{name_lower}'")
-
-        # Словари уточнений: ключ - базовый спорт, значение - список (ключевое слово, уточненное название)
-        refinements = {
-            'футбол': [
-                ('рпл', 'футбол рпл'),
-                ('кубок россии', 'футбол кубок россии'),
-                ('чемпионат россии', 'футбол чемпионат россии'),
-                ('чемпионат германии', 'футбол чемпионат германии'),
-                ('чемпионат испании', 'футбол чемпионат испании'),
-                ('чемпионат италии', 'футбол чемпионат италии'),
-                ('пляжный футбол', 'пляжный футбол'),
-            ],
-            'хоккей': [
-                ('кхл', 'хоккей кхл'),
-                ('мхл', 'хоккей мхл'),
-                ('нхл', 'хоккей нхл'),
-                ('кубок будущего', 'хоккей кубок будущего'),
-                ('чемпионат россии', 'хоккей чемпионат россии'),
-                ('чемпионат мира', 'хоккей чемпионат мира'),
-            ]
-        }
-
-        for sport in self.SPORT_TYPES:
-            if sport in name_lower:
-                #print(f"Найден базовый спорт: '{sport}'")
-                # Проверяем уточнения для найденного спорта
-                if sport in refinements:
-                    for keyword, refined_sport in refinements[sport]:
-                        if keyword in name_lower:
-                            #print(f"Уточнение до: '{refined_sport}'")
-                            return refined_sport
-                return sport
-        print(Color.BOLD + Color.RED + f'Спорт не найден "{name_lower}"' + Color.END)
-        return ''
-    
-
-    def _find_label(self, name):
-        """
-            Метод для поиска метки (обзор/повтор)
-            !!!ВАЖНО!!! Это метод для МатчТВ
-        """
-        if not isinstance(name, str):
-            return None
-        name_lower = name.lower()
-        if 'обзор' in name_lower:
-            return 'обзор'
-        elif 'повтор' in name_lower:
-            return 'повтор'
-        return None
-    
-
-    def _process_row(self, row):
-        """
-            Обработка строк только с нужным жанром
-            !!!ВАЖНО!!! Это метод для МатчТВ
-        """
-        name = row['Название программы init']
-
-        # Установка метки "обзор", "повтор"
-        label = self._find_label(name)
-
-        if row['Жанр'] != 'Трансляция спортивного мероприятия':
-            return pd.Series([None, label])
-        
-        sport = self._find_sport(name)  
-        return pd.Series([sport, label])
-
 
     def match_vimb_with_palomars_grids(self, cities_path: str, minutes: int = 10):
         """
             Смэтчивает сетки VIMB и Palomars между собой.
-            Args:
-                cities_path: str: словарь из городов, где ключ - страна, значение - список городов, присущих этой стране.
-                minutes: int: количество минут, до которых округляем столбцы "Время начала", "Время окончания" программы. По дефолту равно 10.
+            Параметры:
+            ----------
+            cities_path: str: 
+                Словарь из городов, где ключ - страна, значение - список городов, присущих этой стране.
+            minutes: int: 
+                Количество минут, до которых округляем столбцы "Время начала", "Время окончания" программы. По дефолту равно 10.
             Returns:
+            ---------
+            general_result: pd.DataFrame
+                Смэтченная таблица
+            not_matched_programs: dict
+                Словарь из несмэтченых программ
         """
 
         vimb_full = self.vimb_grid.copy()
@@ -2250,7 +2181,7 @@ class ProgramMatcher(BaseParser):
         dates_unique = vimb_full['Дата'].unique()
 
         result_webs = {}
-        not_matched_programs = {}   # список программ, которые встретились в VIMB, но не встретились в Palomars
+        not_matched_programs = {}   # словарь программ, которые встретились в VIMB, но не встретились в Palomars
 
         for target_date in dates_unique:
 
@@ -2344,32 +2275,14 @@ class ProgramMatcher(BaseParser):
             # =============== Замена названий мультфильмов, связанных с Машей и котом Леопольдом ===============
             dataframes = [VIMB, Pal]
             for df in dataframes:
-                df = ProgramMatcher.check_cartoons(
+                assistant = Assistant()
+                df = assistant.check_cartoons_masha_and_bear(
                                         df = df,
                                         target_name_cartoons = ['маша и медведь'],
                                         full_list = ['машины сказки', 'машины песенки', 'машины страшилки', 'маша и медведь', 'машкины страшилки'],
                                         replacement_name = 'мультфильм о маше'
                                         )
-                df['Название программы'] = np.where(
-                        df['Название программы'].str.contains('леопольд', case = False, na = False), 
-                        'мультфильм о коте леопольде', df['Название программы']
-                    )
-                
-                df['Название программы'] = np.where(
-                        df['Название программы'].str.contains('смешарики', case = False, na = False), 
-                        'мультфильм о смешариках', df['Название программы']
-                    )
-                
-                df['Название программы'] = np.where(
-                        df['Название программы'].str.contains('фиксики', case = False, na = False), 
-                        'мультфильм о фиксиках', df['Название программы']
-                    )
-
-                df['Название программы'] = np.where(
-                        df['Название программы'].str.contains('простоквашино', case = False, na = False), 
-                        'мультфильм о простоквашино', df['Название программы']
-                    )
-                
+                df = assistant.replace_cartoons(df, 'Название программы')
             # =========================================================================================================================
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
@@ -2391,49 +2304,20 @@ class ProgramMatcher(BaseParser):
 
             # НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
             if self.channel == 'МатчТВ':
-                result_df[['Вид спорта', 'Метка']] = result_df.apply(self._process_row, axis=1)
+                result_df[['Вид спорта', 'Метка']] = result_df.apply(Assistant().process_row, axis = 1)
             # КОНЕЦ НОВОГО КУСКА ДЛЯ МАТЧ ТВ
             
             # Считаем длительности программ
-            result_df['Время выхода_dt'] = pd.to_datetime(result_df['Время выхода'])
-            result_df['Время окончания_dt'] = pd.to_datetime(result_df['Время окончания'])
-    
-            # Автоматически корректируем переход через полночь
-            result_df['Время окончания_dt'] = np.where(
-                result_df['Время окончания_dt'] < result_df['Время выхода_dt'],
-                result_df['Время окончания_dt'] + pd.Timedelta(days = 1),
-                result_df['Время окончания_dt']
-            )
-    
-            result_df['Продолжительность'] = (
-                pd.to_datetime(result_df['Время окончания_dt']) - pd.to_datetime(result_df['Время выхода_dt'])
-            ).dt.total_seconds()
-    
-            # Форматирование
-            result_df['Продолжительность'] = result_df['Продолжительность'].apply(
-                lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
-            )
-    
-
+            result_df = Assistant().calculate_program_duration(result_df)
+            
+            # Выстраиваем нужный порядок столбцов
             if self.channel == 'МатчТВ':
-                result_df = result_df[
-                    [
-                        'Дата', 'Название программы', 'Время выхода', 'Время окончания',
-                        'Продолжительность', 'Share', 'Название программы init', 
-                        'Жанр', 'Вид спорта', 'Метка'
-                        ]
-                ]
+                result_df = result_df[self.COLUMNS_ORDER_OUTPUT_SPORT_CHANNEL]
 
             else:
-                result_df = result_df[
-                [
-                    'Дата', 'Название программы', 'Время выхода', 'Время окончания',
-                    'Продолжительность', 'Share', 'Название программы init', 
-                    'Жанр'
-                    ]
-                ]
+                result_df = result_df[self.COLUMNS_ORDER_OUTPUT]
 
-                
+            # Добавляем результат в словарь
             result_webs[target_date] = result_df
             
         webs_converted = pd.concat(result_webs.values(), ignore_index = True)

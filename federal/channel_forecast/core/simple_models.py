@@ -9,7 +9,9 @@ from OMA_tools.federal.channel_forecast.core.pipelines import *
 from OMA_tools.federal.channel_forecast.core.content_matching import *
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.io_data.time_series import TimeSeriesTransformer
+from OMA_tools.federal.channel_forecast.support import Assistant
 from OMA_tools.io_data.colors import *
+
 
 import locale
 locale.setlocale(locale.LC_TIME, 'ru_RU.UTF-8')
@@ -130,28 +132,15 @@ class DataPreparator:
             }, inplace = True)
 
             # =============== Замена названий мультфильмов, связанных с Машей ===============
-            VIMB = ProgramMatcher.check_cartoons(
+            assistant = Assistant()
+            VIMB = assistant.check_cartoons_masha_and_bear(
                                         df = VIMB,
                                         target_name_cartoons = ['маша и медведь'],
                                         full_list = ['машины сказки', 'машины песенки', 'машины страшилки', 'маша и медведь', 'машкины страшилки'],
                                         replacement_name = 'мультфильм о маше'
                                         )
-            VIMB['Название программы'] = np.where(
-                    VIMB['Название программы'].str.contains('леопольд', case = False, na = False), 
-                    'мультфильм о коте леопольде', VIMB['Название программы']
-                )
-            VIMB['Название программы'] = np.where(
-                        VIMB['Название программы'].str.contains('смешарики', case = False, na = False), 
-                        'мультфильм о смешариках', VIMB['Название программы']
-                    )
-            VIMB['Название программы'] = np.where(
-                        VIMB['Название программы'].str.contains('фиксики', case = False, na = False), 
-                        'мультфильм о фиксиках', VIMB['Название программы']
-                    )
-            VIMB['Название программы'] = np.where(
-                        VIMB['Название программы'].str.contains('простоквашино', case = False, na = False), 
-                        'мультфильм о простоквашино', VIMB['Название программы']
-                    )
+            # Замена названий остальных мультфильмов
+            VIMB = assistant.replace_cartoons(df = VIMB, column = 'Название программы')
             # =========================================================================================================================
             
             # Схлопывание программ по дню
@@ -319,7 +308,6 @@ class DataPreparator:
                     Словарь из крупных программ
                 not_found: pd.DataFrame
                     Таблица с ненайденными программами
-
         """
         # Шаг 1. Схлопываем программы для каждого дня в таблице VIMB
         self.vimb_analysis = self.aggregate_vimb_daily(cities_loaded)
