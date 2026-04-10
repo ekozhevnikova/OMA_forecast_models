@@ -14,7 +14,7 @@ import locale
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
-from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+#from OMA_tools.regions.data_extraction.task_builder import BaseDataService
 from OMA_tools.federal.channel_forecast.calculator import *
 from OMA_tools.federal.channel_forecast.core.content_matching import *
 from OMA_tools.federal.channel_forecast.support import Assistant
@@ -2249,21 +2249,36 @@ class ProgramMatcher(BaseParser):
                 
             palomars_df['program_name'].replace(programs_replace, inplace = True)
             
-            # Находим базовые названия программ. Производим замену
-            base_names = ProgramMatcher.find_common_base_names(palomars_df['program_name'].tolist())
+            if self.channel != 'МатчТВ':
+                # Находим базовые названия программ. Производим замену
+                base_names = ProgramMatcher.find_common_base_names(palomars_df['program_name'].tolist())
 
-            palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)    
+                palomars_df['Базовое_название'] = palomars_df['program_name'].map(base_names)    
             
-            # Оставляем только нужные столбцы для анализа
-            Pal = palomars_df[['Дата', 'Название программы', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted', 'Жанр']]
+                # Оставляем только нужные столбцы для анализа
+                Pal = palomars_df[['Дата', 'Название программы', 'Базовое_название', 'Время выхода', 'Время окончания', 'Share_weighted', 'Жанр']]
             
-            Pal.rename(columns = 
-                    {
-                        'Название программы': 'Название программы palomars',
-                        'Базовое_название': 'Название программы', 
-                        'Share_weighted': 'Share'
-                    }, 
-                    inplace = True)
+                Pal.rename(columns = 
+                        {
+                            'Название программы': 'Название программы palomars',
+                            'Базовое_название': 'Название программы', 
+                            'Share_weighted': 'Share'
+                        }, 
+                        inplace = True)
+            else:
+                # Оставляем только нужные столбцы для анализа
+                Pal = palomars_df[[
+                    'Дата', 'Название программы', 'program_name', 'Время выхода', 
+                    'Время окончания', 'Share_weighted', 'Жанр']]
+            
+                Pal.rename(columns = 
+                        {
+                            'Название программы': 'Название программы palomars',
+                            'program_name': 'Название программы', 
+                            'Share_weighted': 'Share'
+                        }, 
+                        inplace = True)
+
             Pal['Название программы'] = Pal['Название программы'].str.lower()
             
             VIMB = vimb_df[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
