@@ -171,9 +171,10 @@ class DataPreparator:
         self.vimb_analysis = pd.concat(res).reset_index(drop = True)
         self.vimb_analysis['Дата'] = self.vimb_analysis['Дата'].dt.strftime('%Y-%m-%d')
         return self.vimb_analysis
+
     
 
-    def find_and_categorize_programs(self, year: int, month_num: int):
+    def find_and_categorize_programs(self, data_new: pd.DataFrame, data_hist: pd.DataFrame, year: int, month_num: int):
         """
             Поиск схожих программ в соответствии со схлопнутой исторической сеткой Mediascope, 
             а также составление больших, маленьких датафреймов. 
@@ -181,15 +182,19 @@ class DataPreparator:
 
             Параметры:
             ----------
+                data_new: pd.DataFrame
+                    Таблица, для которой будем искать схожие программы (Таблица VIMB)
+                data_hist: pd.DataFrame
+                    Таблица, с помощью которой будем искать схожие программы (Таблица Palomars)
                 year : int
                     Год, который будем отбирать. Отбирается весь текущий год, если прогнозируемый месяц не Январь. 
                     В противном случае весь прошлый год.
                 month_num: int
                     Номер месяца, на который будем строить прогноз.
         """
-        vimb_full = self.vimb_analysis.copy()
+        vimb_full = data_new.copy()
 
-        grid_hist = self.palomars_df.copy()
+        grid_hist = data_hist.copy()
 
         # Если прогнозируемый месяц январь, то отбираем весь прошлый год. В противном случае весь текущий
         if month_num == 1:
@@ -312,10 +317,44 @@ class DataPreparator:
         # Шаг 1. Схлопываем программы для каждого дня в таблице VIMB
         self.vimb_analysis = self.aggregate_vimb_daily(cities_loaded)
 
-        # Шаг 2. Поиск схожих программ
-        self.merged_dict, self.new_programs = self.find_and_categorize_programs(year, month_num)
+        if self.channel == 'МатчТВ':
+            print(f'Делаю особое разбиение программ на Спортивные и Неспортивные для канала {self.channel}.')
 
-        # Шаг 3. Разделение программ на большие, маленькие датафреймы, а также поиск новых программ
+            # Шаг 2. Добавление дополнительных столбцов для канала "МатчТВ"
+            self.vimb_analysis[['Вид спорта', 'Метка']] = self.vimb_analysis.apply(
+                lambda row: Assistant().process_row(row, column_with_initial_name = 'Название программы vimb'), 
+                axis = 1
+            )
+
+            # Отбор только спортивных трансляций
+            sport_df = self.vimb_analysis[self.vimb_analysis['Вид спорта'] != ''].reset_index(drop = True)
+            # Отбор спортивных трансляций в исторической сетке
+            sport_mask = self.palomars_df['Вид спорта'].notna() & (self.palomars_df['Вид спорта'] != '')
+            self.sport_palomars_df = self.palomars_df[sport_mask].reset_index(drop = True)
+
+            # Отбор неспортивных трансляций
+            not_sport = self.vimb_analysis[self.vimb_analysis['Вид спорта'] == ''].reset_index(drop = True)
+            # Отбор НЕспортивных трансляций в исторической сетке
+            self.not_sport_palomars_df = self.palomars_df[self.palomars_df['Вид спорта'].isna() | (self.palomars_df['Вид спорта'] == '')].reset_index(drop = True)
+
+            # Шаг 3. Поиск схожих программ
+            # ==== Поиск схожих программ для спортивных трансляций ====
+            self.sport_merged_dict, self.sport_new_programs  = self.find_and_categorize_programs(
+                                                            sport_df, self.sport_palomars_df, year, month_num
+                                                                    )
+
+            # ==== Поиск схожих программ для НЕспортивных трансляций ====
+            self.not_sport_merged_dict, self.not_sport_new_programs = self.find_and_categorize_programs(
+                                                            not_sport, self.not_sport_palomars_df, year, month_num
+                                                                )
+            self.merged_dict = self.sport_merged_dict | self.not_sport_merged_dict
+            self.new_programs = self.sport_new_programs | self.not_sport_new_programs
+        
+        else:
+            # Шаг 2. Поиск схожих программ
+            self.merged_dict, self.new_programs = self.find_and_categorize_programs(self.vimb_analysis, self.palomars_df, year, month_num)
+
+        # Разделение программ на большие, маленькие датафреймы, а также поиск новых программ
         small, big, not_found = self.separate_programs_by_volume()
 
         result = {
@@ -324,7 +363,6 @@ class DataPreparator:
             'new': not_found
         }
         return result
-    
 
 
 class RuleBasedForecaster:
