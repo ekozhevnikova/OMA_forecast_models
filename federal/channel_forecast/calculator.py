@@ -511,6 +511,13 @@ class TVScheduleProcessor:
             columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
             if include_share:
                 columns.append('Share')
+                #if self.channel != 'МатчТВ':
+                #    columns.append('Share')
+                #else:
+                #    columns.append('Share')
+                #    columns.append('Вид спорта')
+                #    columns.append('Метка')
+
             return pd.DataFrame(columns = columns)
         
         df = data.copy()
@@ -588,6 +595,10 @@ class TVScheduleProcessor:
             if include_share:
                 current_group['shares'] = [program_data.iloc[0]['Share']]
                 current_group['Жанр'] = program_data.iloc[0]['Жанр']
+                if self.channel == 'МатчТВ':
+                    current_group['Вид спорта'] = program_data.iloc[0]['Вид спорта']
+                    current_group['Метка'] = program_data.iloc[0]['Метка']
+
             
             # Обработка остальных записей программы
             for i in range(1, len(program_data)):
@@ -681,7 +692,10 @@ class TVScheduleProcessor:
                         result_entry['Share'] = sum(current_group['shares'])
                         result_entry['Количество_сегментов'] = len(current_group['shares'])
                         result_entry['Жанр'] = current_group['Жанр']
-                    
+                        if self.channel == 'МатчТВ':
+                            result_entry['Вид спорта'] = current_group['Вид спорта']
+                            result_entry['Метка'] = current_group['Метка']
+
                     results.append(result_entry)
                     
                     # Новая группа
@@ -702,7 +716,9 @@ class TVScheduleProcessor:
                     if include_share:
                         current_group['shares'] = [current_row['Share']]
                         current_group['Жанр'] = current_row['Жанр']
-
+                        if self.channel == 'МатчТВ':
+                            current_group['Вид спорта'] = current_row['Вид спорта']
+                            current_group['Метка'] = current_row['Метка']
                 # ------------------------------------- КОНЕЦ НОВОГО КУСКА ------------------------------------
 
             # -------------- НОВЫЙ КУСОК ДЛЯ ОРИГИНАЛЬНЫХ "ВРЕМЯ ВЫХОДА" И "ВРЕМЯ ОКОНЧАНИЯ" --------------
@@ -723,7 +739,10 @@ class TVScheduleProcessor:
                 result_entry['Share'] = sum(current_group['shares'])
                 result_entry['Количество_сегментов'] = len(current_group['shares'])
                 result_entry['Жанр'] = current_group['Жанр']
-            
+                if self.channel == 'МатчТВ':
+                    result_entry['Вид спорта'] = current_group['Вид спорта']
+                    result_entry['Метка'] = current_group['Метка']
+
             results.append(result_entry)
         
         # Формирование итогового DataFrame
@@ -734,6 +753,10 @@ class TVScheduleProcessor:
             if include_share:
                 columns.append('Share')
                 columns.append('Жанр')
+                if self.channel == 'МатчТВ':
+                    columns.append('Вид спорта')
+                    columns.append('Метка')
+
             return pd.DataFrame(columns = columns)
         
         result_df = pd.DataFrame(results)
@@ -751,6 +774,9 @@ class TVScheduleProcessor:
         if include_share:
             columns.append('Share')
             columns.append('Жанр')
+            if self.channel == 'МатчТВ':
+                columns.append('Вид спорта')
+                columns.append('Метка')
         
         return result_df[columns].reset_index(drop = True)
     
@@ -820,16 +846,28 @@ class TVScheduleProcessor:
         result = merged.drop(columns = ['Время выхода _plmrs', 'Время окончания _plmrs', 
                             'Время выхода _vimb', 'Время окончания _vimb'])
         
- 
-        result = result[
-            [
-                'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 
-                'Название программы vimb', 'Название программы palomars',
-                'Время выхода оригинальное vimb', 'Время окончания оригинальное vimb',
-                'Время выхода оригинальное palomars', 'Время окончания оригинальное palomars',
-                'Жанр'
-             ]
-            ].reset_index(drop = True)
+
+        if self.channel != 'МатчТВ':
+            result = result[
+                [
+                    'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 
+                    'Название программы vimb', 'Название программы palomars',
+                    'Время выхода оригинальное vimb', 'Время окончания оригинальное vimb',
+                    'Время выхода оригинальное palomars', 'Время окончания оригинальное palomars',
+                    'Жанр'
+                ]
+                ].reset_index(drop = True)
+        else:
+            result = result[
+                [
+                    'Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 
+                    'Название программы vimb', 'Название программы palomars',
+                    'Время выхода оригинальное vimb', 'Время окончания оригинальное vimb',
+                    'Время выхода оригинальное palomars', 'Время окончания оригинальное palomars',
+                    'Жанр', 'Вид спорта', 'Метка'
+                ]
+                ].reset_index(drop = True)
+
  
         result.rename(columns = {
             'Название программы palomars': 'Название программы init',
@@ -848,15 +886,26 @@ class TVScheduleProcessor:
             if result.loc[i - 1, 'Время окончания'] != result.loc[i, 'Время выхода']:
                 #result.loc[i - 1, 'Время окончания'] = result.loc[i, 'Время выхода']
                 result.loc[i, 'Время выхода'] = result.loc[i - 1, 'Время окончания']
- 
-        result = result[
-            [
-                'Дата', 'Название программы', 
-                'Время выхода init', 'Время окончания init',
-                'Share', 'Название программы init',
-                'Жанр'
+
+        if self.channel != 'МатчТВ':
+            result = result[
+                [
+                    'Дата', 'Название программы', 
+                    'Время выхода init', 'Время окончания init',
+                    'Share', 'Название программы init',
+                    'Жанр'
+                ]
             ]
-        ]
+        else:
+            result = result[
+                [
+                    'Дата', 'Название программы', 
+                    'Время выхода init', 'Время окончания init',
+                    'Share', 'Название программы init',
+                    'Жанр', 'Вид спорта', 'Метка'
+                ]
+            ]
+
         result.rename(
             columns = {
                 'Время выхода init': 'Время выхода',

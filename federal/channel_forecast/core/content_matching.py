@@ -1630,6 +1630,7 @@ class CosineSimilarity:
     """
     def __init__(
             self, 
+            channel: str,
             List: list, 
             small_list: list, 
             df_big: pd.DataFrame, 
@@ -1642,6 +1643,7 @@ class CosineSimilarity:
         #self.preprocessor = preprocessor or TextPreprocessor()
         self.vectorizer = TfidfVectorizer()
 
+        self.channel = channel
         self.List = List
         self.small_list = small_list
         self.df_big = df_big
@@ -1652,10 +1654,6 @@ class CosineSimilarity:
         """
             Сравнивает два списка текстов.
         """
-        #if preprocess:
-        #    processed_list1 = [self.preprocessor.preprocess_text(text) for text in self.List]
-        #    processed_list2 = [self.preprocessor.preprocess_text(text) for text in self.small_list]
-        #else:
         processed_list1 = self.List
         processed_list2 = self.small_list
         
@@ -1791,9 +1789,9 @@ class CosineSimilarity:
             for program in programs_not_found:
                 # Ищем лучшее совпадение с помощью fuzzy matching
                 best_match, score, index = self._fuzzy_search(
-                    query=program,
-                    choices=self.List,
-                    threshold=fuzzy_threshold
+                    query = program,
+                    choices = self.List,
+                    threshold = fuzzy_threshold
                 )
                 
                 if best_match:
@@ -1962,15 +1960,26 @@ class CosineSimilarity:
         plmrs_analysis = pd.DataFrame()
 
         #Отбираем колонки в исторической сетке Palomars
-        plmrs_analysis = self.df_big[['Дата', 'program_name', 
-                                    'Время выхода', 'Время окончания', 
-                                    'Share', 'Жанр']].copy()
+        if self.channel != 'МатчТВ': 
+            plmrs_analysis = self.df_big[['Дата', 'program_name', 
+                                        'Время выхода', 'Время окончания', 
+                                        'Share', 'Жанр']].copy()
+        else:
+            plmrs_analysis = self.df_big[['Дата', 'program_name', 
+                                        'Время выхода', 'Время окончания', 
+                                        'Share', 'Жанр', 'Вид спорта', 'Метка']].copy()
+
         plmrs_analysis = plmrs_analysis.rename(columns = {'program_name': 'Название программы'})
 
         #Отбираем колонки в новой сетке VIMB
-        vimb_analysis = self.small_df[['Дата', 'program_name', 
-                            'Время выхода', 'Время окончания'
-                            ]].copy()
+        if self.channel != 'МатчТВ': 
+            vimb_analysis = self.small_df[['Дата', 'program_name', 'Время выхода', 'Время окончания']].copy()
+        else:
+            vimb_analysis = self.small_df[[
+                'Дата', 'program_name', 'Время выхода', 
+                'Время окончания', 'Вид спорта', 'Метка'
+                                ]].copy()
+
         vimb_analysis['Share'] = ''
         vimb_analysis = vimb_analysis.rename(columns = {'program_name': 'Название программы'})
 

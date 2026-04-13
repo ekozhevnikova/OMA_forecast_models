@@ -2145,10 +2145,17 @@ class ProgramMatcher(BaseParser):
             Pal_init.loc[Pal_init['cartoon_series_flag'].notna() & \
                         (Pal_init['cartoon_series_flag'] != ''), 'Название программы'] = Pal_init['cartoon_series_flag']
 
-            columns_to_remain = [
-                'Дата', 'Название программы palomars', 'Название программы', 
-                'Время выхода', 'Время окончания', 'Share', 'Жанр'
-            ]
+            if self.channel != 'МатчТВ':
+                columns_to_remain = [
+                    'Дата', 'Название программы palomars', 'Название программы', 
+                    'Время выхода', 'Время окончания', 'Share', 'Жанр'
+                ]
+            else:
+                columns_to_remain = [
+                    'Дата', 'Название программы palomars', 'Название программы', 
+                    'Время выхода', 'Время окончания', 'Share', 'Жанр', 'Вид спорта', 'Метка'
+                ]
+
 
             # Оставляем только нужные столбцы для дальнейшего анализа
             Pal_init = Pal_init[columns_to_remain]
@@ -2176,6 +2183,19 @@ class ProgramMatcher(BaseParser):
 
         vimb_full = self.vimb_grid.copy()
         plmrs = self.palomars_grid.copy()
+
+        # НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
+        if self.channel == 'МатчТВ':
+            plmrs[['Вид спорта', 'Метка']] = plmrs.apply(
+                lambda row: Assistant().process_row(row, column_with_initial_name = 'Название программы'), 
+                axis = 1
+            )
+
+            vimb_full[['Вид спорта', 'Метка']] = vimb_full.apply(
+                lambda row: Assistant().process_row(row, column_with_initial_name = 'Название программы'), 
+                axis = 1
+            )
+        # КОНЕЦ НОВОГО КУСКА ДЛЯ МАТЧ ТВ
 
         # Отбираем уникальные даты в сетке VIMB
         dates_unique = vimb_full['Дата'].unique()
@@ -2233,7 +2253,7 @@ class ProgramMatcher(BaseParser):
             ######################## КОНЕЦ НОВОГО КУСКА ########################
             
             # Делаем поиск по схожим программам
-            similar = CosineSimilarity(palomars_prgms, vimb_prgms, palomars_df, vimb_df)
+            similar = CosineSimilarity(self.channel, palomars_prgms, vimb_prgms, palomars_df, vimb_df)
             result, not_matched, comparison = similar.comparison(self.channel_vocabulary, min_similarity = 0.5, use_vocabulary = True)
 
             # Добавляем ненайденные программы в список с ненайденными
@@ -2269,7 +2289,7 @@ class ProgramMatcher(BaseParser):
                 # Оставляем только нужные столбцы для анализа
                 Pal = palomars_df[[
                     'Дата', 'Название программы', 'program_name', 'Время выхода', 
-                    'Время окончания', 'Share_weighted', 'Жанр']]
+                    'Время окончания', 'Share_weighted', 'Жанр', 'Вид спорта', 'Метка']]
             
                 Pal.rename(columns = 
                         {
@@ -2281,7 +2301,11 @@ class ProgramMatcher(BaseParser):
 
             Pal['Название программы'] = Pal['Название программы'].str.lower()
             
-            VIMB = vimb_df[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
+            if self.channel != 'МатчТВ':
+                VIMB = vimb_df[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
+            else:
+                VIMB = vimb_df[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания', 'Вид спорта', 'Метка']]
+
             VIMB.rename(columns = {
                 'Название программы': 'Название программы vimb',
                 'program_name': 'Название программы'
@@ -2298,6 +2322,7 @@ class ProgramMatcher(BaseParser):
                                         replacement_name = 'мультфильм о маше'
                                         )
                 df = assistant.replace_cartoons(df, 'Название программы')
+        
             # =========================================================================================================================
             VIMB_init = VIMB.copy()
             Pal_init = Pal.copy()
@@ -2313,13 +2338,11 @@ class ProgramMatcher(BaseParser):
                         ]
             VIMB_init, Pal_init = self.find_nameless_vimb_programs(program_names, VIMB_init, Pal_init)
 
-           
-
             result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
 
-            # НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
-            if self.channel == 'МатчТВ':
-                result_df[['Вид спорта', 'Метка']] = result_df.apply(Assistant().process_row, axis = 1)
+            ## НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
+            #if self.channel == 'МатчТВ':
+            #    result_df[['Вид спорта', 'Метка']] = result_df.apply(Assistant().process_row, axis = 1)
             # КОНЕЦ НОВОГО КУСКА ДЛЯ МАТЧ ТВ
             
             # Считаем длительности программ

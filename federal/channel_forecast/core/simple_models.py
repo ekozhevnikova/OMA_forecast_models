@@ -215,7 +215,7 @@ class DataPreparator:
             vimb.rename(columns = {'Название программы': 'program_name'}, inplace = True)
             
             # Делаем поиск по схожим программам
-            similar = CosineSimilarity(palomars_prgms, vimb_prgms, grid_hist, vimb)
+            similar = CosineSimilarity(self.channel, palomars_prgms, vimb_prgms, grid_hist, vimb)
             # Составление таблицей со схожестью (similarity)
             result, not_found, comparison = similar.comparison(self.vocabulary, min_similarity = 0.5, use_vocabulary = True)
             results[date] = result
