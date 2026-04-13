@@ -119,10 +119,13 @@ class DataPreparator:
             
             VIMB = VIMB[['Дата', 'Название программы', 'program_name', 'Время выхода', 'Время окончания']]
             
-            # Находим базовые названия программ. Производим замену
-            base_names = ProgramMatcher.find_common_base_names(VIMB['program_name'].tolist())
-            
-            VIMB['Базовое_название'] = VIMB['program_name'].map(base_names)
+            if self.channel != 'МатчТВ':
+                # Находим базовые названия программ. Производим замену
+                base_names = ProgramMatcher.find_common_base_names(VIMB['program_name'].tolist())
+                
+                VIMB['Базовое_название'] = VIMB['program_name'].map(base_names)
+            else:
+                VIMB.rename(columns = {'program_name': 'Базовое_название'}, inplace = True)
             
             # Отсавляем только нужные столбцы для анализа
             VIMB = VIMB[['Дата', 'Базовое_название', 'Время выхода', 'Время окончания', 'Название программы']]
@@ -205,7 +208,7 @@ class DataPreparator:
         palomars_prgms = list(set(grid_hist['program_name']))
 
         need_forecast = {}
-        self.new_programs = {}
+        new_programs_dict = {}
         results = {}
         vimb_converted = {}
 
@@ -230,13 +233,14 @@ class DataPreparator:
             need_forecast[date] = features_dict
 
             new_ones = result[result['similarity'].round(5) == 0.00000]
+
             if len(new_ones) != 0:
-                self.new_programs[date] = new_ones
+                new_programs_dict[date] = new_ones
             
         # Программы, для которых нашлась история
-        self.merged_dict = self.merge_programs_by_name(need_forecast)
-        
-        return self.merged_dict, self.new_programs
+        self.merged_dict = self.merge_programs_by_name(need_forecast)    
+    
+        return self.merged_dict, new_programs_dict
     
 
     def separate_programs_by_volume(self, window_size: int = 7):
@@ -254,7 +258,8 @@ class DataPreparator:
             data['День недели'] = data['Дата'].dt.strftime('%A')
             
             #Отбираем только ненулевые элементы
-            if program != 0:
+            #if program != 0:
+            if program and str(program) != '0':
                 if len(data) < 3 * window_size:
                     small[program] = data.reset_index(drop = True)
                 else:
@@ -262,19 +267,35 @@ class DataPreparator:
 
         # Для новых программ
         result = []
+        
+        vimb_copy = self.vimb_analysis.copy()
+
+        if self.channel == 'МатчТВ':
+            vimb_copy[['Вид спорта', 'Метка']] = vimb_copy.apply(
+                lambda row: Assistant().process_row(row, column_with_initial_name = 'Название программы vimb'), 
+                axis = 1
+            )
+
         for date, df in self.new_programs.items():
             
-            vimb_copy = self.vimb_analysis.copy()
+            vimb_copy_ = vimb_copy.copy()
             
             # Отбираем новые программы для конкретного дня
             programs = list(df['Программа VIMB'])
-            vimb_copy['Flag'] = self.vimb_analysis['Название программы'].str.contains('|'.join(programs))
-            found = vimb_copy[vimb_copy['Flag'] == True].reset_index(drop = True)
+            
+            #vimb_copy_['Flag'] = vimb_copy_['Название программы'].str.contains('|'.join(programs))
+
+            # Экранируем спецсимволы в названиях программ
+            escaped_programs = [re.escape(prog) for prog in programs]
+            pattern = '|'.join(escaped_programs)
+            vimb_copy_['Flag'] = vimb_copy_['Название программы'].str.contains(pattern, case = False, na = False, regex = True)
+
+            found = vimb_copy_[vimb_copy_['Flag'] == True].reset_index(drop = True)
 
             data = found[found['Дата'] == date]
             data_ = data.drop('Flag', axis = 1)
             result.append(data_)
-
+        
         if len(result) != 0:
             not_found = pd.concat(result).reset_index(drop = True)
 
@@ -282,7 +303,10 @@ class DataPreparator:
             not_found['Дата'] = pd.to_datetime(not_found['Дата'])
             not_found['День недели'] = not_found['Дата'].dt.strftime('%A')
 
-            not_found = not_found[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'День недели']]
+            if self.channel == 'МатчТВ':
+                not_found = not_found[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'День недели', 'Вид спорта', 'Метка']]
+            else:
+                not_found = not_found[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'День недели']]
             not_found['Share'] = ''
 
             programs = not_found['Название программы'].unique()
@@ -339,16 +363,25 @@ class DataPreparator:
 
             # Шаг 3. Поиск схожих программ
             # ==== Поиск схожих программ для спортивных трансляций ====
-            self.sport_merged_dict, self.sport_new_programs  = self.find_and_categorize_programs(
+            self.sport_merged_dict, sport_new_programs  = self.find_and_categorize_programs(
                                                             sport_df, self.sport_palomars_df, year, month_num
                                                                     )
-
             # ==== Поиск схожих программ для НЕспортивных трансляций ====
-            self.not_sport_merged_dict, self.not_sport_new_programs = self.find_and_categorize_programs(
+            self.not_sport_merged_dict, not_sport_new_programs = self.find_and_categorize_programs(
                                                             not_sport, self.not_sport_palomars_df, year, month_num
                                                                 )
             self.merged_dict = self.sport_merged_dict | self.not_sport_merged_dict
-            self.new_programs = self.sport_new_programs | self.not_sport_new_programs
+
+            # Объединяем new_programs БЕЗ ПОТЕРЬ
+            self.new_programs = {}
+            for date, df in sport_new_programs.items():
+                self.new_programs[date] = df
+
+            for date, df in not_sport_new_programs.items():
+                if date in self.new_programs:
+                    self.new_programs[date] = pd.concat([self.new_programs[date], df], ignore_index=True)
+                else:
+                    self.new_programs[date] = df
         
         else:
             # Шаг 2. Поиск схожих программ
@@ -388,43 +421,93 @@ class RuleBasedForecaster:
         self.DURATION_TOLERANCE = 0.7
 
         # КОМБИНАЦИИ ДЛЯ ПРОГНОЗИРОВАНИЯ КРУПНЫХ И МЕЛКИХ ПРОГРАММ
-        # Список со всевозможными комбинациями c обязательным параметром "dur_min".
-        self.combinations_list_general = self.generate_field_combinations(
-                                    ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
-                                    min_fields = 4,
-                                    must_include = ['dur_min', 'dt_start', 'dt_end'],
-                                    exclude = None,
-                                    debug = False
-                        )
-        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
-        self.combinations_list_general_without_dur_min = [
-            [field for field in combination if field != 'dur_min'] 
-            for combination in self.combinations_list_general
-        ]
-        
-        # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
-        self.combinations_list = self.generate_field_combinations(
-                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'dur_min'],  # Без 'dur_min'
-                            min_fields = 2,
-                            must_include = ['dur_min'],
-                            exclude = None,
-                            debug = False
-                        )
-        
-        # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
-        self.combinations_list_without_dur_min = [
-            [field for field in combination if field != 'dur_min'] 
-            for combination in self.combinations_list_general
-        ]
-        
-        # Генерируем комбинации БЕЗ параметра 'dur_min', но с обязательными параметрами 'dt_start', 'dt_end'.
-        self.combinations_list_no_duration = self.generate_field_combinations(
-                            ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
-                            min_fields = 3,
-                            must_include = ['dt_start', 'dt_end'],
-                            exclude = None,
-                            debug = False
-                        )
+        self.combinations_list_general = []
+        self.combinations_list_general_without_dur_min  = []
+        self.combinations_list = []
+        self.combinations_list_without_dur_min = []
+        self.combinations_list_no_duration = []
+
+        # Генерируем различные комбинации для канала "МатчТВ"
+        if self.channel == 'МатчТВ':
+            # Список со всевозможными комбинациями c обязательным параметром "dur_min".
+            self.combinations_list_general = self.generate_field_combinations(
+                                        ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'Вид спорта', 'Метка'], 
+                                        min_fields = 6,
+                                        must_include = ['dur_min', 'dt_start', 'dt_end', 'Вид спорта', 'Метка'],
+                                        exclude = None,
+                                        debug = False
+                            )
+            # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+            self.combinations_list_general_without_dur_min = [
+                [field for field in combination if field != 'dur_min'] 
+                for combination in self.combinations_list_general
+            ]
+
+            # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
+            self.combinations_list = self.generate_field_combinations(
+                                ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'dur_min', 'Вид спорта', 'Метка'],  # Без 'dur_min'
+                                min_fields = 2,
+                                must_include = ['dur_min', 'Вид спорта'],
+                                exclude = None,
+                                debug = False
+                            )
+            
+            # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+            self.combinations_list_without_dur_min = [
+                [field for field in combination if field != 'dur_min'] 
+                for combination in self.combinations_list
+            ]
+
+            # Генерируем комбинации БЕЗ параметра 'dur_min', но с обязательными параметрами 'dt_start', 'dt_end'.
+            self.combinations_list_no_duration = self.generate_field_combinations(
+                                ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'Вид спорта'],  # Без 'dur_min'
+                                min_fields = 3,
+                                must_include = ['dt_start', 'dt_end', 'Вид спорта'],
+                                exclude = None,
+                                debug = False
+                            )
+            
+            
+        # Генерируем различные комбинации для всех остальных каналов
+        else:
+            # Список со всевозможными комбинациями c обязательным параметром "dur_min".
+            self.combinations_list_general = self.generate_field_combinations(
+                                        ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
+                                        min_fields = 4,
+                                        must_include = ['dur_min', 'dt_start', 'dt_end'],
+                                        exclude = None,
+                                        debug = False
+                            )
+
+            # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+            self.combinations_list_general_without_dur_min = [
+                [field for field in combination if field != 'dur_min'] 
+                for combination in self.combinations_list_general
+            ]
+            
+            # Генерируем комбинации C ПАРАМЕТРОМ 'dur_min' и требуем, чтобы он был обязательным
+            self.combinations_list = self.generate_field_combinations(
+                                ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'dur_min'],  # Без 'dur_min'
+                                min_fields = 2,
+                                must_include = ['dur_min'],
+                                exclude = None,
+                                debug = False
+                            )
+            
+            # Тот же список combinations_list_general, но без обязательного параметра "dur_min"
+            self.combinations_list_without_dur_min = [
+                [field for field in combination if field != 'dur_min'] 
+                for combination in self.combinations_list
+            ]
+            
+            # Генерируем комбинации БЕЗ параметра 'dur_min', но с обязательными параметрами 'dt_start', 'dt_end'.
+            self.combinations_list_no_duration = self.generate_field_combinations(
+                                ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'],  # Без 'dur_min'
+                                min_fields = 3,
+                                must_include = ['dt_start', 'dt_end'],
+                                exclude = None,
+                                debug = False
+                            )
     
 
     @staticmethod
@@ -832,6 +915,7 @@ class RuleBasedForecaster:
                 Таблица из последних N недель для какой-то программы
 
         """
+        columns_order = []
         palomars_last_n_weeks = pd.DataFrame()
         last_n_weeks = pd.DataFrame()
 
@@ -855,10 +939,6 @@ class RuleBasedForecaster:
         # Шаг 3. Определение типа дня: 0 - Будни, 1 - Выходные
         data['Тип дня'] = data['Дата'].apply(lambda x: RuleBasedForecaster.get_day_type(x, all_holidays, work_saturdays))
         palomars_history['Тип дня'] = palomars_history['Дата'].apply(lambda x: RuleBasedForecaster.get_day_type(x, all_holidays, work_saturdays))
-
-        # Шаг 4. Определение праздник/не праздник
-        data['is_weekend'] = data['Дата'].apply(lambda x: RuleBasedForecaster.get_holidays(x, all_holidays))
-        palomars_history['is_weekend'] = palomars_history['Дата'].apply(lambda x: RuleBasedForecaster.get_holidays(x, all_holidays))
 
 
         columns = ['Время выхода', 'Время окончания']
@@ -884,12 +964,20 @@ class RuleBasedForecaster:
             print('=============== ЗАПУСКАЮ ДЕБАГГЕР ===============\n')
             print(f'Анализ программы: {program_name}')
         
-        columns_order = [
-            'Дата', 'Название программы', 'Время выхода', 
-            'Время окончания', 'Продолжительность',
-            'dur_min', 'День недели', 'Тип дня', 'is_weekend',
-            'dt_start', 'dt_end', 'Share'
-                    ]
+        if self.channel == 'МатчТВ':
+            columns_order = [
+                'Дата', 'Название программы', 'Время выхода', 
+                'Время окончания', 'Продолжительность',
+                'dur_min', 'День недели', 'Тип дня',
+                'dt_start', 'dt_end', 'Вид спорта', 'Метка', 'Share'
+                        ]
+        else:
+            columns_order = [
+                'Дата', 'Название программы', 'Время выхода', 
+                'Время окончания', 'Продолжительность',
+                'dur_min', 'День недели', 'Тип дня',
+                'dt_start', 'dt_end', 'Share'
+                        ]
 
         
         # Шаг 4. Отбираем ТОЛЬКО те даты, которые нужно спрогнозировать
@@ -906,12 +994,21 @@ class RuleBasedForecaster:
         # Шаг 5. Отбираем ТОЛЬКО исторические значения из исходного датафрейма для конкретной программы
         history = data[data['Share'] != ''].reset_index(drop = True)
         history = history[columns_order]
-        palomars_history = palomars_history[[
-                    'Дата', 'Название программы', 'Время выхода', 
-                    'Время окончания', 'Продолжительность', 'Жанр',
-                    'dur_min', 'День недели', 'Тип дня', 'is_weekend',
-                    'dt_start', 'dt_end', 'Share'
-                        ]]
+
+        if self.channel == 'МатчТВ':
+            palomars_history = palomars_history[[
+                        'Дата', 'Название программы', 'Время выхода', 
+                        'Время окончания', 'Продолжительность', 'Жанр',
+                        'dur_min', 'День недели', 'Тип дня',
+                        'dt_start', 'dt_end', 'Вид спорта', 'Метка', 'Share'
+                            ]]
+        else:
+            palomars_history = palomars_history[[
+                        'Дата', 'Название программы', 'Время выхода', 
+                        'Время окончания', 'Продолжительность', 'Жанр',
+                        'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'Share'
+                            ]]
+
         
         current_year = pd.DataFrame()
         # Шаг 6. Отбор ТОЛЬКО текущего года
@@ -951,10 +1048,9 @@ class RuleBasedForecaster:
             palomars_last_n_weeks =  palomars_history[palomars_history['Дата'] > date_n_weeks_ago].reset_index(drop = True).copy()
 
         else:
-            #print('Программы ' + Color.BLUE + f"'{program_name}'" + Color.END + ' ещё не было в текущем году.')
-
             # Отбираем после N недель из истории Palomars
             if debug:
+                print('Программы ' + Color.BLUE + f"'{program_name}'" + Color.END + ' ещё не было в текущем году.')
                 print(f"Последняя фактическая дата в истории Palomars: {last_fact_date.strftime('%Y-%m-%d')}.")
             date_n_weeks_ago = last_fact_date - pd.Timedelta(weeks = n_weeks_ago)
 
@@ -1029,6 +1125,8 @@ class RuleBasedForecaster:
                 used_mask: использованная маска
                 found: bool - найден ли результат
         """
+        sport_type = None
+
         # Задаем параметры
         share_mean = 0.0
         used_mask = None
@@ -1041,6 +1139,9 @@ class RuleBasedForecaster:
 
         # Вычленяем длительность программы.
         dur_min = search_values['dur_min']
+
+        if self.channel == 'МатчТВ':
+            sport_type = search_values['Вид спорта']
 
         # Определяем границы люфта
         dur_min_lower = dur_min * 0.7  # -30%
@@ -1223,17 +1324,30 @@ class RuleBasedForecaster:
                 if debug:
                     print(Color.ITALIC  + '🔍 Пробую поиск ТОЛЬКО по длительности с люфтом ±30% ...' + Color.END)
                 
-                duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & \
-                                        (data['dur_min'] <= dur_min_upper)
-
-                filtered_data = data[duration_backlash_mask].reset_index(drop = True)
-                # Шаг 2. Попытка построить прогноз на основании найденной mask
-                if len(filtered_data) > 1:    
-                    share_mean = np.median(list(filtered_data['Share']))
-                    used_mask = duration_backlash_mask
-                    found = True
-                    if debug:
-                        print(f'✅ Найдено {len(filtered_data)} записей только по длительности с люфтом ±30%.')
+                # Базовый люфт по длительности
+                duration_backlash_mask = (data['dur_min'] >= dur_min_lower) & (data['dur_min'] <= dur_min_upper)
+                
+                # Для МатчТВ пробуем сначала с видом спорта
+                if self.channel == 'МатчТВ' and sport_type is not None:
+                    mask_with_sport = duration_backlash_mask & (data['Вид спорта'] == sport_type)
+                    filtered_data = data[mask_with_sport].reset_index(drop = True)
+                    
+                    if len(filtered_data) > 1:
+                        share_mean = np.median(list(filtered_data['Share']))
+                        used_mask = mask_with_sport
+                        found = True
+                        if debug:
+                            print(f'✅ Найдено {len(filtered_data)} записей по длительности с люфтом ±30% и целевым видом спорта.')
+                
+                # Если не нашли с видом спорта или канал не МатчТВ, ищем только по длительности
+                if not found:
+                    filtered_data = data[duration_backlash_mask].reset_index(drop = True)
+                    if len(filtered_data) > 1:
+                        share_mean = np.median(list(filtered_data['Share']))
+                        used_mask = duration_backlash_mask
+                        found = True
+                        if debug:
+                            print(f'✅ Найдено {len(filtered_data)} записей только по длительности с люфтом ±30%.')
         
         # Если ничего не нашли, возвращаем нулевые значения
         if not found:
@@ -1402,28 +1516,6 @@ class RuleBasedForecaster:
                         print('🔍 В качестве прогноза беру медиану за последние N недель ...')
                 
                     share_mean = np.median(list(palomars_last_n_weeks['Share']))
-            ## Попытка найти данные по длительности
-            #used_mask = last_n_weeks['dur_min'] == dur_min
-            #filtered_data = last_n_weeks[used_mask].reset_index(drop = True)
-#
-            #if len(filtered_data) != 0:
-            #    share_mean = np.median(list(filtered_data['Share']))
-#
-            #if len(last_n_weeks) >= 3:
-            #    table = last_n_weeks.tail(3)
-            #    share_mean = np.median(list(table['Share']))
-            #    if debug:
-            #        print('Нахожу медиану последних 3х значений истории')
-            #
-            #elif len(last_n_weeks) == 1:
-            #    share_mean = list(last_n_weeks['Share'])[0]
-            #    if debug:
-            #        print('Всего 1 значение в истории. В качестве прогноза беру именно его.')
-            #
-            #elif len(last_n_weeks) == 2:
-            #    share_mean = np.mean(list(last_n_weeks['Share']))
-            #    if debug:
-            #        print('Два значения в истории. В качестве прогноза беру Среднее между ними.')
             
         return share_mean, used_mask
     
@@ -1458,6 +1550,9 @@ class RuleBasedForecaster:
                 used_mask:
                     Маска, которая использовалась для построения прогноза
         """
+        combinations_list_general = []
+        combinations_list_no_duration = []
+
         found = False
 
         dur_min = search_values['dur_min']
@@ -1468,18 +1563,38 @@ class RuleBasedForecaster:
 
         share_mean = 0.0
         used_mask = None
+        
 
-        # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
-        combinations_list_general = self.generate_field_combinations(
-                            fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
-                            min_fields = 2,
-                            must_include = 'dur_min',
+        if self.channel == 'МатчТВ':
+            # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
+            combinations_list_general = self.generate_field_combinations(
+                                fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'Вид спорта'], 
+                                min_fields = 2,
+                                must_include = ['dur_min', 'Вид спорта'],
+                                exclude = None,
+                                debug = debug
+                            )
+            
+            # Генерируем всевозможные комбинации без обязательного параметра
+            combinations_list_no_duration = self.generate_field_combinations(
+                            fields = ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'Вид спорта'], 
+                            min_fields = 1,
+                            must_include = None,
                             exclude = None,
                             debug = debug
                         )
-        
-        # Генерируем всевозможные комбинации без обязательного параметра
-        combinations_list_no_duration = self.generate_field_combinations(
+        else:
+            # Генерируем всевозможные комбинации. Требуем, чтобы "Продолжительность" фигурировала в каждом варианте.
+            combinations_list_general = self.generate_field_combinations(
+                                fields = ['Время выхода', 'dur_min', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
+                                min_fields = 2,
+                                must_include = 'dur_min',
+                                exclude = None,
+                                debug = debug
+                            )
+            
+            # Генерируем всевозможные комбинации без обязательного параметра
+            combinations_list_no_duration = self.generate_field_combinations(
                             fields = ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end'], 
                             min_fields = 1,
                             must_include = None,
@@ -1696,13 +1811,19 @@ class RuleBasedForecaster:
                 
                 # Итерируемся по выделенным данным
                 for i in range(len(future_df)):
-                    
+                    sport_type = None
+                    specific_flag = None
+
                     time_start = future_df.iloc[i]['Время выхода']
                     dur_min = future_df.iloc[i]['dur_min']
                     day_of_week = future_df.iloc[i]['День недели']
                     day_type = future_df.iloc[i]['Тип дня']
                     dt_start = future_df.iloc[i]['dt_start']
                     dt_end = future_df.iloc[i]['dt_end']
+
+                    if self.channel == 'МатчТВ':
+                        sport_type = future_df.iloc[i]['Вид спорта']
+                        specific_flag = future_df.iloc[i]['Метка']
             
                     if debug:
                         print(f'Для {date} буду искать следующие кейсы в истории:')
@@ -1713,6 +1834,11 @@ class RuleBasedForecaster:
                         print(f' - Тип дня:                                 {day_type}')
                         print(f' - Тип части суток начала программы:        {dt_start}')
                         print(f' - Тип части суток окончания программы:     {dt_end}')
+                        # Добавляем дополнительный вывод параметров, если канал "МатчТВ"
+                        if self.channel == 'МатчТВ':
+                            print(f' - Вид спорта:                           {sport_type}')
+                            print(f' - Метка:                                   {specific_flag}')
+
                         print('\n')
                 
                     # Шаг 2. Задаем значения для поиска
@@ -1725,6 +1851,10 @@ class RuleBasedForecaster:
                         'dt_start': dt_start,
                         'dt_end': dt_end
                     }
+                    # Добавляем дополнительные параметры, если канал "МатчТВ"
+                    if self.channel == 'МатчТВ':
+                        search_values['Вид спорта'] = sport_type
+                        search_values['Метка'] = specific_flag
 
                     # Построение прогноза для крупной программы
                     if volume_flag == 'big':
