@@ -1958,6 +1958,11 @@ class RuleBasedForecaster:
 
         # Если есть накопленный факт, то мы соединяем между собой две таблицы
         if len(fact_part_of_month) != 0:
+
+            # Добавляем колонку program_type, если её нет
+            if 'program_type' not in fact_part_of_month.columns:
+                fact_part_of_month['program_type'] = 'FACT'
+
             fact_part_of_month = fact_part_of_month[columns]
             forecast_df = pd.concat([fact_part_of_month, data_full]).reset_index(drop = True)
         else:
