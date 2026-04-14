@@ -1099,6 +1099,7 @@ class RuleBasedForecaster:
         else:
             return 0.0, None, False
     
+    
 
     def _search_by_combinations(
             self, 
@@ -1205,11 +1206,9 @@ class RuleBasedForecaster:
                 # Печатаем заголовок при итерации по третьему элементу массива
                 elif idx == 2: 
                     print(Color.VIOLET + f'Попытка построить прогноз, добавляя люфт ±30% в параметр длительность.' + Color.END)
-
-                print(comment)
             
             # Если специальный ключ не указан
-            if special_key == None:
+            if special_key is None:
                 for fields in combo_list:
                     condition = pd.Series(True, index = data.index)
                     for field in fields:
@@ -1228,14 +1227,16 @@ class RuleBasedForecaster:
                     
                     share_mean, used_mask, found = self._try_find(data, condition, fields, dur_gap = dur_gap, debug = debug)
                     if found:
-                        break
+                        break # выход из внутреннего цикла
+                
+                if found:
+                    continue  # Переход к следующей стратегии
             
             # ШЕСТОЙ ПРОХОД
             elif special_key == 'special_day_part':
                 if debug:
                     print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по ТИПУ ЧАСТИ ДНЯ начала и окончания программы, а также по длительности ...' + Color.END)
-                day_part_mask = (data['dt_start'] == day_part_start) & \
-                            (data['dt_end'] == day_part_end)
+                day_part_mask = (data['dt_start'] == day_part_start) & (data['dt_end'] == day_part_end)
             
                 # -------- ДОБАВЛЯЕМ ДЛИТЕЛЬНОСТЬ СЮДА --------
                 duration_mask = (data['dur_min'] == dur_min)
@@ -1250,6 +1251,8 @@ class RuleBasedForecaster:
                     found = True
                     if debug:
                         print(f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы, а также по длительности.')
+                    
+                    continue
                 
                 # Добавляем люфт в длительность
                 else:
@@ -1270,6 +1273,7 @@ class RuleBasedForecaster:
                             print(
                                 f'✅ Найдено {len(filtered_data)} записей по типу части дня начала и окончания программы, а также по длительности с люфтом ±30%.'
                             )
+                        continue
                 
                     else:
                         if debug:
@@ -1302,6 +1306,7 @@ class RuleBasedForecaster:
                                     found = True
                                     if debug:
                                         print(f'✅ Найдено {len(filtered_data_)} записей только по длительности с минимальным расхождением с таргетом.')
+                                    continue
 
             # СЕДЬМОЙ ПРОХОД
             elif special_key == 'special_duration':
@@ -1318,6 +1323,7 @@ class RuleBasedForecaster:
                     found = True
                     if debug:
                         print(f'✅ Найдено {len(filtered_data)} записей только по длительности.')
+                    continue
 
             # ВОСЬМОЙ ПРОХОД
             elif special_key == 'special_duration_with_gap':
@@ -1338,6 +1344,7 @@ class RuleBasedForecaster:
                         found = True
                         if debug:
                             print(f'✅ Найдено {len(filtered_data)} записей по длительности с люфтом ±30% и целевым видом спорта.')
+                        continue
                 
                 # Если не нашли с видом спорта или канал не МатчТВ, ищем только по длительности
                 if not found:
@@ -1348,6 +1355,7 @@ class RuleBasedForecaster:
                         found = True
                         if debug:
                             print(f'✅ Найдено {len(filtered_data)} записей только по длительности с люфтом ±30%.')
+                        continue
         
         # Если ничего не нашли, возвращаем нулевые значения
         if not found:
@@ -1554,6 +1562,7 @@ class RuleBasedForecaster:
         combinations_list_no_duration = []
 
         found = False
+        sport_type = None
 
         dur_min = search_values['dur_min']
 
@@ -1563,6 +1572,9 @@ class RuleBasedForecaster:
 
         share_mean = 0.0
         used_mask = None
+
+        if self.channel == 'МатчТВ':
+            sport_type = search_values['Вид спорта']
         
 
         if self.channel == 'МатчТВ':
@@ -1603,12 +1615,13 @@ class RuleBasedForecaster:
                         )
         
         # ========== ПЕРВЫЙ ПРОХОД: БЕЗ ЛЮФТА ==========
+        if debug:
+            print(Color.VIOLET + 'Строю прогноз, опираясь на список комбинаций с обязательным параметром "dur_min". ' + \
+                'Минимальное количество параметров в комбинации 2.' + Color.END)
+
         for fields in combinations_list_general:
-            if debug:
-                print(Color.VIOLET + 'Строю прогноз, опираясь на список комбинаций с обязательным параметром "dur_min". ' + \
-                      'Минимальное количество параметров в комбинации 2.' + Color.END)
             # Создаем маску для комбинации полей
-            condition = pd.Series(True, index = palomars_last_n_weeks.index)
+            condition = pd.Series(True, index=palomars_last_n_weeks.index)
             for field in fields:
                 if field in palomars_last_n_weeks.columns:
                     condition &= (palomars_last_n_weeks[field] == search_values.get(field))
@@ -1616,55 +1629,52 @@ class RuleBasedForecaster:
             if not condition.any():
                 if debug:
                     print(f"  ❌ Нет совпадений по полям: {fields}")
-                continue
+                continue  # ← Ищем дальше
             
             filtered_data = palomars_last_n_weeks[condition]
 
-            # ========== Обработка в зависимости от размера выборки ==========
-            # Случай 2: Маленькая выборка (≤ SMALL_SAMPLE_SIZE)
             if len(filtered_data) <= self.SMALL_SAMPLE_SIZE:
                 if len(filtered_data) == self.EXACT_MATCH_SIZE:
-                    # Ровно 3 записи - используем точное среднее
-                    share_mean, used_mask = self.calculate_share(filtered_data, condition, parent_df = palomars_last_n_weeks)
+                    share_mean, used_mask = self.calculate_share(filtered_data, condition, parent_df=palomars_last_n_weeks)
                     found = True
                     if debug:
-                        print(f"  📊 Выборка малеькая. Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
+                        print(f"  📊 Выборка маленькая. Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
                         print(f"  ✅ Нашёл совпадения по полям: {fields}")
                 else:
-                    # Меньше 3 записей - тоже используем среднее, но без маски
                     share_mean = RuleBasedForecaster.get_clean_mean(filtered_data['Share'])
                     used_mask = condition
                     found = True
                     if debug:
                         print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
                         print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                break  # Нашли - выходим
             
-            # Случай 3: Большая выборка (> SMALL_SAMPLE_SIZE)
-            else:
-                # Фильтруем по минимальной длительности
+            else:  # Большая выборка
                 duration_mask = filtered_data['dur_min'] >= dur_min
-                duration_filtered = filtered_data[duration_mask].reset_index(drop = True)
+                duration_filtered = filtered_data[duration_mask].reset_index(drop=True)
                 
                 if debug:
                     print(f"  📊 Выборка большая. Фильтрация по длительности ≥ {dur_min} мин: найдено {len(duration_filtered)} записей")
                 
                 if len(duration_filtered) > 0:
-                    # Комбинируем маски
                     combined_mask = condition.copy()
                     valid_indices = filtered_data[duration_mask].index
                     combined_mask[~combined_mask.index.isin(valid_indices)] = False
                     
-                    share_mean, used_mask = self.calculate_share(duration_filtered, combined_mask, parent_df = palomars_last_n_weeks)
+                    share_mean, used_mask = self.calculate_share(duration_filtered, combined_mask, parent_df=palomars_last_n_weeks)
                     found = True
                     
                     if debug and not np.isclose(share_mean, 0.0):
                         print(f"  📈 Рассчитано среднее: {share_mean:.4f}")
-        
-            break
+                    break  # Нашли - выходим
+                # Если не нашли, продолжаем цикл (без break)
         
         # ========== ВТОРОЙ ПРОХОД: С ЛЮФТОМ ==========
         # Осуществляем поиск по комбинациям без ДЛИТЕЛЬНОСТИ, при этом добавляем люфт в ДЛИТЕЛЬНОСТЬ.
         if not found and np.isclose(share_mean, 0.0):
+            if debug:
+                print(Color.VIOLET + 'Добавляю люфт ±30% в длительность и снова делаю проход по комбинациям. ' + \
+                      'Минимальное количество параметров в комбинации 2.' + Color.END)
 
             duration_backlash_mask = (palomars_last_n_weeks['dur_min'] >= dur_min_lower) & \
                                      (palomars_last_n_weeks['dur_min'] <= dur_min_upper)
@@ -1711,7 +1721,7 @@ class RuleBasedForecaster:
                         if debug:
                             print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
                             print(f"  ✅ Нашёл совпадения по полям: {fields}")
-                break
+                    break
         
         # Если ничего не нашли
         if not found and np.isclose(share_mean, 0.0):
@@ -1806,6 +1816,8 @@ class RuleBasedForecaster:
                 # Отбор даты, которую собираемся спрогнозировать
                 per_forecast = dict_analysis['target_data']
                 future_df = per_forecast[per_forecast['Дата'] == date].reset_index(drop = True)
+
+                future_df['program_type'] = None
                 
                 share_forecast = 0.0
                 
@@ -1881,6 +1893,7 @@ class RuleBasedForecaster:
             
                     # Запись прогнозного значения в ячейку
                     future_df.at[i, 'Share'] = share_forecast
+                    future_df.at[i, 'program_type'] = volume_flag
             
                 forecast_results.append(future_df)
                 
@@ -1938,7 +1951,7 @@ class RuleBasedForecaster:
         # Итоговая таблица с прогнозом
         data_full = pd.concat(results).reset_index(drop = True)
 
-        columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']
+        columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share', 'program_type']
         data_full = data_full[columns]
 
         forecast_df = pd.DataFrame()
