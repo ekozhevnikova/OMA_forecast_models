@@ -1819,7 +1819,7 @@ class CosineSimilarity:
                 if data_unique.empty:
                     data_unique = fuzzy_df
                 else:
-                    data_unique = pd.concat([data_unique, fuzzy_df], ignore_index=True)
+                    data_unique = pd.concat([data_unique, fuzzy_df], ignore_index = True)
         
         # Добавляем программы, которые так и не нашли (ни TF-IDF, ни fuzzy)
         for program in programs_not_found:
@@ -1836,11 +1836,11 @@ class CosineSimilarity:
             if data_unique.empty:
                 data_unique = pd.DataFrame([new_row])
             else:
-                data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index=True)
+                data_unique = pd.concat([data_unique, pd.DataFrame([new_row])], ignore_index = True)
         
         # Разделяем найденные и ненайденные программы
-        found_programs = data_unique[data_unique['similarity'] != 0.0].reset_index(drop=True)
-        not_found = data_unique[data_unique['similarity'] == 0.0].reset_index(drop=True)
+        found_programs = data_unique[data_unique['similarity'] != 0.0].reset_index(drop = True)
+        not_found = data_unique[data_unique['similarity'] == 0.0].reset_index(drop = True)
         
         # Используем справочник только если он предоставлен и use_vocabulary=True
         if use_vocabulary and vocabulary is not None:
@@ -1848,8 +1848,8 @@ class CosineSimilarity:
             not_found_updated = pd.merge(
                 not_found, 
                 vocabulary, 
-                on=f'Программа {column_name_second}', 
-                how='left'
+                on = f'Программа {column_name_second}', 
+                how = 'left'
             )
             
             # Проверяем наличие необходимых колонок в vocabulary

@@ -1065,8 +1065,7 @@ class RuleBasedForecaster:
             'target_data': per_forecast,                # данные для прогнозирования
             'history_last_n_weeks': last_n_weeks,       # история программы за N недель
             'palomars_history': palomars_last_n_weeks,  # история Palomars за N недель
-            'full_history': history,                    # история программы за N недель
-            'full_palomars_history': palomars_history,  # история Palomars за N недель
+            'full_palomars_history': palomars_history,  # полная история Palomars
         }
 
         return program_forecast_package
@@ -1104,6 +1103,7 @@ class RuleBasedForecaster:
     def _search_by_combinations(
             self, 
             data: pd.DataFrame, 
+            whole_history: pd.DataFrame, 
             search_values: dict, 
             debug: bool = False
         ):
@@ -1114,6 +1114,8 @@ class RuleBasedForecaster:
             ----------
             data : pd.DataFrame
                 Датафрейм, с помощью которого будем строить прогноз
+            whole_history: pd.DataFrame
+                Датафрейм с историей
             search_values : dict
                 Словарь с искомыми значениями
             debug : bool
@@ -1126,6 +1128,9 @@ class RuleBasedForecaster:
                 used_mask: использованная маска
                 found: bool - найден ли результат
         """
+        if len(data) == 0:
+            raise ValueError(f"Таблица с историей пустая! Не могу построить прогноз.")
+        
         sport_type = None
 
         # Задаем параметры
@@ -1150,6 +1155,8 @@ class RuleBasedForecaster:
 
         # Для канала '2X2' оставляем возможность присутствия нуль
         if self.channel != '2X2':
+            if 'Share' not in data.columns:
+                raise ValueError(f"Колонка 'Share' отсутствует в данных. Доступные колонки: {data.columns.tolist()}")
             # Отфильтровываем ненулевые значения долей (чтобы случайно нули не попали в усреднение и тем самым занизили прогноз)
             data = data[data['Share'] != 0].reset_index(drop = True)
 
@@ -1310,6 +1317,24 @@ class RuleBasedForecaster:
 
             # СЕДЬМОЙ ПРОХОД
             elif special_key == 'special_duration':
+
+                # Для МатчТВ сначала пробуем поиск по спорту
+                if self.channel == 'МатчТВ' and search_values['Вид спорта'] is not None:
+                    if len(data) > 1:
+                        share_mean = self._search_by_sport(data, search_values['Вид спорта'], debug = debug)
+                    
+                    if share_mean == 0.0:
+                        share_mean = self._search_by_sport(whole_history, search_values['Вид спорта'], debug = debug)
+                    
+                    # Если нашли по спорту - выходим
+                    if share_mean != 0.0:
+                        found = True
+                        used_mask = None
+                        if debug:
+                            print(f'✅ Найдено по спорту: {share_mean:.4f}')
+                        continue
+
+                # Если не нашли по спорту ИЛИ канал не МатчТВ - пробуем по длительности
                 if debug:
                     print(Color.ITALIC + '🔍 Пробую поиск ТОЛЬКО по длительности ...' + Color.END)
 
@@ -1365,6 +1390,41 @@ class RuleBasedForecaster:
 
         return share_mean, used_mask
 
+
+    def _search_by_sport(self, palomars_history: pd.DataFrame, sport_type: str, debug: bool = False):
+        """
+            Метод для прогнозирования, опираясь на "Вид спорта", который шёл в течение текущего/прошлого года.
+            !!!ВАЖНО!!! Метод применим для канала "МатчТВ".
+            Параметры:
+            ----------
+                palomars_history: pd.DataFrame: 
+                    Датафрейм с полной историей Palomars
+                sport_type: str
+                    Вид спорта, который будем искать в истории
+                debug: bool
+                    Дебаггер
+        """
+        share_mean = 0.0
+        hist = pd.DataFrame()
+        # Если текущий месяц "Январь", то обираем весь прошлый год
+        if self.month_num == 1:
+            hist = palomars_history[palomars_history['Дата'] >= f'{self.current_year - 1}-01-01']
+        else:
+            hist = palomars_history[palomars_history['Дата'] >= f'{self.current_year}-01-01']
+        
+        if len(hist) == 0:
+            raise ValueError('Таблица с историей пустая. Проверьте входные данные.')
+
+        # Отбираем нужный вид спорта
+        target_sport_data = hist[hist['Вид спорта'] == sport_type].reset_index(drop = True)
+        
+        if len(target_sport_data) > 0:
+            if debug:
+                print('🔍 В качестве прогноза беру медиану по выбранному спорту за всю историю ...')
+            share_mean = np.median(list(target_sport_data['Share']))
+
+        return share_mean
+
         
 
     def forecast_big(
@@ -1374,6 +1434,7 @@ class RuleBasedForecaster:
             search_values: dict,
             last_n_weeks: pd.DataFrame,
             palomars_last_n_weeks: pd.DataFrame,
+            palomars_history: pd.DataFrame,
             debug = False
         ):
         """
@@ -1391,6 +1452,8 @@ class RuleBasedForecaster:
                 Датафрейм с последними N неделями для конкретной программы
             palomars_last_n_weeks: pd.DataFrame: 
                 Датафрейм с последними N неделями Palomars (внезависимости от программы)
+            palomars_history: pd.DataFrame: 
+                Датафрейм со всей историей Palomars
             debug: bool
                 Дебаггер
             
@@ -1416,7 +1479,7 @@ class RuleBasedForecaster:
                 print('\n')
 
             # Шаг 1. Попытка построить прогноз, используя данные за последние N недель для конкретной программы
-            share_mean, used_mask = self._search_by_combinations(last_n_weeks, search_values, debug = debug)
+            share_mean, used_mask = self._search_by_combinations(last_n_weeks, palomars_history, search_values, debug = debug)
 
             # Шаг 2. Попытка построить прогноз, используя исторические данные по ВСЕМ программам за последние N недель
             if np.isclose(share_mean, 0.0):
@@ -1429,19 +1492,46 @@ class RuleBasedForecaster:
                         )
                     print('\n')
                 
-                share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
+                share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, palomars_history, search_values, debug = debug)
         
         
         else:
-            if debug:
-                print('\n')
-                print(
-                    Color.NAVY + \
-                    f'Нет истории за последние N недель для программы {program_name} в {date}. ' + \
-                    f'При прогнозировании опираюсь на историческую сетку без упора на конкретную программу.' + \
-                    Color.END
-                    )
-            share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
+            # Если прогнозируем канал "МатчТВ" и указан "Вид спорта"
+            if self.channel == 'МатчТВ' and search_values['Вид спорта'] is not None:
+                if debug:
+                    print('\n')
+                    print(
+                        Color.NAVY + \
+                        f"Нет истории за последние N недель для программы {program_name} в {date}. " + \
+                        f"Попробуем найти историю по спорту '{search_values['Вид спорта']}' в текущем году." + \
+                        Color.END
+                        )
+                
+                share_mean = self._search_by_sport(palomars_history, search_values['Вид спорта'], debug = debug)
+
+                # Если по спорту ничего не нашли - идем в общую логику (как для других каналов)
+                if share_mean == 0:
+                    if debug:
+                        print('\n')
+                        print(
+                            Color.NAVY + \
+                            f'Нет истории за последние N недель для программы {program_name} в {date}. ' + \
+                            f'При прогнозировании опираюсь на историческую сетку без упора на конкретную программу.' + \
+                            Color.END
+                            )
+                    share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, palomars_history, search_values, debug = debug)
+            
+            else:
+                if debug:
+                    print('\n')
+                    print(
+                        Color.NAVY + \
+                        f'Нет истории за последние N недель для программы {program_name} в {date}. ' + \
+                        f'При прогнозировании опираюсь на историческую сетку без упора на конкретную программу.' + \
+                        Color.END
+                        )
+                share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, palomars_history, search_values, debug = debug)
+
         
         # Шаг 3. Построение прогноза путем расчета среднего за последние N недель.
         if np.isclose(share_mean, 0.0):
@@ -1462,6 +1552,7 @@ class RuleBasedForecaster:
             search_values: dict,
             last_n_weeks: pd.DataFrame,
             palomars_last_n_weeks: pd.DataFrame,
+            palomars_history: pd.DataFrame,
             debug = False
         ):
         """
@@ -1478,6 +1569,8 @@ class RuleBasedForecaster:
                     Датафрейм с последними N неделями для конкретной программы
                 palomars_last_n_weeks: pd.DataFrame: 
                     Датафрейм с последними N неделями Palomars (внезависимости от программы)
+                palomars_history: pd.DataFrame: 
+                    Датафрейм с полной историей
                 debug: bool
                     Дебаггер
             Returns:
@@ -1489,51 +1582,63 @@ class RuleBasedForecaster:
         """
         share_mean = 0.0
         used_mask = None
-        dur_min = search_values['dur_min']
-
-        # Рассматриваем случай, когда истории по текущему году нет
+        
+        # Случай 1: Нет истории по текущему году/программе
         if len(last_n_weeks) == 0:
             if debug:
                 print(f'Истории по текущему году нет. Использую историю Palomars.')
                 print(f'Генерируем всевозможные комбинации при условии, что параметр "Продолжительность" встречается в каждой.')
-
-            share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
             
-            # Построение прогноза путем расчета среднего за последние N недель.
+            # Пытаемся найти по комбинациям в истории Palomars
+            share_mean, used_mask = self._search_by_combinations(
+                palomars_last_n_weeks, palomars_history, search_values, 
+                debug = debug
+            )
+            
+            # Если ничего не нашли - берем медиану
             if np.isclose(share_mean, 0.0):
-                # Построение прогноза путем расчета среднего за последние N недель.
                 if debug:
                     print('🔍 В качестве прогноза беру медиану за последние N недель ...')
-            
-                share_mean = np.median(list(palomars_last_n_weeks['Share']))
+                share_mean = np.median(palomars_last_n_weeks['Share'])
+                used_mask = None  # Для медианы маска не определена
         
+        # Случай 2: История по текущему году/программе есть
         else:
-
-            share_mean, used_mask = self._search_by_combinations(last_n_weeks, search_values, debug = debug)
-
+            if debug:
+                print(f'История по текущему году есть ({len(last_n_weeks)} записей).')
+            
+            # Сначала пробуем найти в истории конкретной программы
+            share_mean, used_mask = self._search_by_combinations(
+                last_n_weeks, palomars_history, search_values, 
+                debug = debug
+            )
+            
+            # Если не нашли - пробуем в общей истории Palomars
             if np.isclose(share_mean, 0.0):
                 if debug:
-                    print(f'Попытка построить прогноз, основываясь на истории Palomars.')
-
-                share_mean, used_mask = self._search_by_combinations(palomars_last_n_weeks, search_values, debug = debug)
-
-                # Построение прогноза путем расчета среднего за последние N недель.
+                    print(f'Не удалось найти совпадений в истории программы. Попытка построить прогноз, основываясь на истории Palomars.')
+                
+                share_mean, used_mask = self._search_by_combinations(
+                    palomars_last_n_weeks, palomars_history, search_values, 
+                    debug = debug
+                )
+                
+                # Если и там не нашли - берем медиану
                 if np.isclose(share_mean, 0.0):
-                    # Построение прогноза путем расчета среднего за последние N недель.
                     if debug:
                         print('🔍 В качестве прогноза беру медиану за последние N недель ...')
-                
-                    share_mean = np.median(list(palomars_last_n_weeks['Share']))
-            
-        return share_mean, used_mask
-    
+                    share_mean = np.median(palomars_last_n_weeks['Share'])
+                    used_mask = None
+        
+        return share_mean, used_mask    
 
 
     def forecast_new(
             self,
             search_values: dict,
             palomars_last_n_weeks: pd.DataFrame,
-            debug = False
+            palomars_history: pd.DataFrame,
+            debug: bool = False
         ):
         """
             Метод для прогнозирования НОВЫХ программ.
@@ -1549,6 +1654,8 @@ class RuleBasedForecaster:
                     Датафрейм с последними N неделями для конкретной программы
                 palomars_last_n_weeks: pd.DataFrame: 
                     Датафрейм с последними N неделями Palomars (внезависимости от программы)
+                palomars_history: pd.DataFrame: 
+                    Датафрейм с полной историей Palomars
                 debug: bool
                     Дебаггер
             Returns:
@@ -1591,7 +1698,7 @@ class RuleBasedForecaster:
             combinations_list_no_duration = self.generate_field_combinations(
                             fields = ['Время выхода', 'День недели', 'Тип дня', 'dt_start', 'dt_end', 'Вид спорта'], 
                             min_fields = 1,
-                            must_include = None,
+                            must_include = ['Вид спорта'],
                             exclude = None,
                             debug = debug
                         )
@@ -1621,7 +1728,7 @@ class RuleBasedForecaster:
 
         for fields in combinations_list_general:
             # Создаем маску для комбинации полей
-            condition = pd.Series(True, index=palomars_last_n_weeks.index)
+            condition = pd.Series(True, index = palomars_last_n_weeks.index)
             for field in fields:
                 if field in palomars_last_n_weeks.columns:
                     condition &= (palomars_last_n_weeks[field] == search_values.get(field))
@@ -1635,7 +1742,7 @@ class RuleBasedForecaster:
 
             if len(filtered_data) <= self.SMALL_SAMPLE_SIZE:
                 if len(filtered_data) == self.EXACT_MATCH_SIZE:
-                    share_mean, used_mask = self.calculate_share(filtered_data, condition, parent_df=palomars_last_n_weeks)
+                    share_mean, used_mask = self.calculate_share(filtered_data, condition, parent_df = palomars_last_n_weeks)
                     found = True
                     if debug:
                         print(f"  📊 Выборка маленькая. Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
@@ -1651,7 +1758,7 @@ class RuleBasedForecaster:
             
             else:  # Большая выборка
                 duration_mask = filtered_data['dur_min'] >= dur_min
-                duration_filtered = filtered_data[duration_mask].reset_index(drop=True)
+                duration_filtered = filtered_data[duration_mask].reset_index(drop = True)
                 
                 if debug:
                     print(f"  📊 Выборка большая. Фильтрация по длительности ≥ {dur_min} мин: найдено {len(duration_filtered)} записей")
@@ -1661,7 +1768,7 @@ class RuleBasedForecaster:
                     valid_indices = filtered_data[duration_mask].index
                     combined_mask[~combined_mask.index.isin(valid_indices)] = False
                     
-                    share_mean, used_mask = self.calculate_share(duration_filtered, combined_mask, parent_df=palomars_last_n_weeks)
+                    share_mean, used_mask = self.calculate_share(duration_filtered, combined_mask, parent_df = palomars_last_n_weeks)
                     found = True
                     
                     if debug and not np.isclose(share_mean, 0.0):
@@ -1672,56 +1779,127 @@ class RuleBasedForecaster:
         # ========== ВТОРОЙ ПРОХОД: С ЛЮФТОМ ==========
         # Осуществляем поиск по комбинациям без ДЛИТЕЛЬНОСТИ, при этом добавляем люфт в ДЛИТЕЛЬНОСТЬ.
         if not found and np.isclose(share_mean, 0.0):
-            if debug:
-                print(Color.VIOLET + 'Добавляю люфт ±30% в длительность и снова делаю проход по комбинациям. ' + \
-                      'Минимальное количество параметров в комбинации 2.' + Color.END)
 
-            duration_backlash_mask = (palomars_last_n_weeks['dur_min'] >= dur_min_lower) & \
-                                     (palomars_last_n_weeks['dur_min'] <= dur_min_upper)
-            
-            for fields in combinations_list_no_duration:
-                # Создаем маску для комбинации полей
-                condition = pd.Series(True, index = palomars_last_n_weeks.index)
-                for field in fields:
-                    if field in palomars_last_n_weeks.columns:
-                        condition &= (palomars_last_n_weeks[field] == search_values.get(field))
+            if self.channel == 'МатчТВ' and search_values['Вид спорта'] is not None:
+                if debug:
+                    print('\n')
+                    print(
+                        Color.NAVY + 
+                        f'Не удалось найти совпадений по полям выше. ' + 
+                        f"Попробуем найти историю по спорту '{search_values['Вид спорта']}' в текущем году." + 
+                        Color.END
+                    )
                 
-                if not condition.any():
+                share_mean = self._search_by_sport(palomars_history, search_values['Вид спорта'], debug = debug)
+                if share_mean != 0.0:
+                    found = True
+            
+                # Поиск с люфтом
+                if not found:
+
                     if debug:
-                        print(f"  ❌ Нет совпадений по полям: {fields}")
-                    continue
+                        print(Color.VIOLET + 'Добавляю люфт ±30% в длительность и снова делаю проход по комбинациям. ' + \
+                            'Минимальное количество параметров в комбинации 2.' + Color.END)
 
-                # Комбинируем условия
-                final_condition = condition & duration_backlash_mask
+                    duration_backlash_mask = (palomars_last_n_weeks['dur_min'] >= dur_min_lower) & \
+                                            (palomars_last_n_weeks['dur_min'] <= dur_min_upper)
+                    
+                    for fields in combinations_list_no_duration:
+                        # Создаем маску для комбинации полей
+                        condition = pd.Series(True, index = palomars_last_n_weeks.index)
+                        for field in fields:
+                            if field in palomars_last_n_weeks.columns:
+                                condition &= (palomars_last_n_weeks[field] == search_values.get(field))
+                        
+                        if not condition.any():
+                            if debug:
+                                print(f"  ❌ Нет совпадений по полям: {fields}")
+                            continue
 
-                if not final_condition.any():
-                    if debug:
-                        print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
-                    continue
+                        # Комбинируем условия
+                        final_condition = condition & duration_backlash_mask
 
-                filtered_data = palomars_last_n_weeks[final_condition]
+                        if not final_condition.any():
+                            if debug:
+                                print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
+                            continue
 
-                # ========== Обработка в зависимости от размера выборки ==========
-                # Случай 2: Маленькая выборка (≤ SMALL_SAMPLE_SIZE)
-                if len(filtered_data) > 1:
-                    if len(filtered_data) >= self.EXACT_MATCH_SIZE:
-                        # Ровно 3 записи - используем точное среднее
-                        share_mean, used_mask = self.calculate_share(
-                            filtered_data, final_condition, parent_df = palomars_last_n_weeks
-                        )
-                        found = True
+                        filtered_data = palomars_last_n_weeks[final_condition]
+
+                        # ========== Обработка в зависимости от размера выборки ==========
+                        # Случай 2: Маленькая выборка (≤ SMALL_SAMPLE_SIZE)
+                        if len(filtered_data) > 1:
+                            if len(filtered_data) >= self.EXACT_MATCH_SIZE:
+                                # Ровно 3 записи - используем точное среднее
+                                share_mean, used_mask = self.calculate_share(
+                                    filtered_data, final_condition, parent_df = palomars_last_n_weeks
+                                )
+                                found = True
+                                if debug:
+                                    print(f"  📊 Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
+                                    print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                            else:
+                                # Меньше 3 записей - тоже используем среднее, но без маски
+                                share_mean = RuleBasedForecaster.get_clean_mean(filtered_data['Share'])
+                                used_mask = final_condition
+                                found = True
+                                if debug:
+                                    print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
+                                    print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                            break
+            
+            else:
+                if debug:
+                    print(Color.VIOLET + 'Добавляю люфт ±30% в длительность и снова делаю проход по комбинациям. ' + \
+                        'Минимальное количество параметров в комбинации 2.' + Color.END)
+
+                duration_backlash_mask = (palomars_last_n_weeks['dur_min'] >= dur_min_lower) & \
+                                        (palomars_last_n_weeks['dur_min'] <= dur_min_upper)
+                
+                for fields in combinations_list_no_duration:
+                    # Создаем маску для комбинации полей
+                    condition = pd.Series(True, index = palomars_last_n_weeks.index)
+                    for field in fields:
+                        if field in palomars_last_n_weeks.columns:
+                            condition &= (palomars_last_n_weeks[field] == search_values.get(field))
+                    
+                    if not condition.any():
                         if debug:
-                            print(f"  📊 Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
-                            print(f"  ✅ Нашёл совпадения по полям: {fields}")
-                    else:
-                        # Меньше 3 записей - тоже используем среднее, но без маски
-                        share_mean = RuleBasedForecaster.get_clean_mean(filtered_data['Share'])
-                        used_mask = final_condition
-                        found = True
+                            print(f"  ❌ Нет совпадений по полям: {fields}")
+                        continue
+
+                    # Комбинируем условия
+                    final_condition = condition & duration_backlash_mask
+
+                    if not final_condition.any():
                         if debug:
-                            print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
-                            print(f"  ✅ Нашёл совпадения по полям: {fields}")
-                    break
+                            print(f"  ❌ Нет совпадений по полям {fields} с люфтом по длительности")
+                        continue
+
+                    filtered_data = palomars_last_n_weeks[final_condition]
+
+                    # ========== Обработка в зависимости от размера выборки ==========
+                    # Случай 2: Маленькая выборка (≤ SMALL_SAMPLE_SIZE)
+                    if len(filtered_data) > 1:
+                        if len(filtered_data) >= self.EXACT_MATCH_SIZE:
+                            # Ровно 3 записи - используем точное среднее
+                            share_mean, used_mask = self.calculate_share(
+                                filtered_data, final_condition, parent_df = palomars_last_n_weeks
+                            )
+                            found = True
+                            if debug:
+                                print(f"  📊 Использую точное среднее по {len(filtered_data)} записям: {share_mean:.4f}")
+                                print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                        else:
+                            # Меньше 3 записей - тоже используем среднее, но без маски
+                            share_mean = RuleBasedForecaster.get_clean_mean(filtered_data['Share'])
+                            used_mask = final_condition
+                            found = True
+                            if debug:
+                                print(f"  📊 Выборка мала ({len(filtered_data)} записей), среднее: {share_mean:.4f}")
+                                print(f"  ✅ Нашёл совпадения по полям: {fields}")
+                        break
+
         
         # Если ничего не нашли
         if not found and np.isclose(share_mean, 0.0):
@@ -1803,6 +1981,7 @@ class RuleBasedForecaster:
 
             last_n_weeks = dict_analysis['history_last_n_weeks']
             palomars_last_n_weeks = dict_analysis['palomars_history']
+            full_history = dict_analysis['full_palomars_history']
 
             if debug:
                 print(f'==== ПОСТРОЕНИЕ ПРОГНОЗА ДЛЯ ПРОГРАММЫ {program_name} ====')
@@ -1873,21 +2052,21 @@ class RuleBasedForecaster:
                         share_forecast, mask = self.forecast_big(
                             program_name, date, search_values, 
                             last_n_weeks, palomars_last_n_weeks,
-                            debug = debug
+                            full_history, debug = debug
                         )
 
                     # Построение прогноза для мелкой программы
                     elif volume_flag == 'small':
                         share_forecast, mask = self.forecast_small(
                             search_values, last_n_weeks, palomars_last_n_weeks,
-                            debug = debug
+                            full_history, debug = debug
                         )
                     
                     # Построение прогноза для НОВОЙ программы
                     elif volume_flag == 'new':
                         share_forecast, mask = self.forecast_new(
                             search_values, palomars_last_n_weeks,
-                            debug = debug)
+                            full_history, debug = debug)
 
                     date_masks[date.strftime('%Y-%m-%d')] = mask
             

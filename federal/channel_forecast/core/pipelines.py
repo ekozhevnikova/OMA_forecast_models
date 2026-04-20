@@ -162,6 +162,13 @@ class ChannelAnalysisMaster:
         VIMBGridProcessor(self.hist_vimb_file).update_vimb_file(combined)
     
 
+    def grid_matching_pipeline(self):
+        """
+            Пайплайн для мэтчинга исторических сеток VIMB и Palomars
+        """
+
+    
+
     def unified_pipeline(self, run_all: bool = True, **kwargs):
         """
         Гибкий объединенный пайплайн.

@@ -395,6 +395,9 @@ class LeaderShipDataExtractor:
             #for key, params in regions_params.items():
             #    json_tasks[key] = LeaderShipDataExtractor.build_json_tasks(date_filter, *params)
             #####################################################################################################
+            #df = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
+            #df.to_excel(f'/Users/kkozhevnikova/Documents/NSC/РЕГИОНЫ/{period}.xlsx')
+            
             results[period] = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
 
             time.sleep(45)
