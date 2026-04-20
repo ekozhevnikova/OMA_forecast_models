@@ -1,3 +1,5 @@
+import sys
+
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
@@ -11,6 +13,9 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor
 import locale
+
+from OMA_tools.federal.channel_forecast.calculator import TVScheduleProcessor
+
 locale.setlocale(locale.LC_ALL, 'ru_RU')
 
 from OMA_tools.io_data.operations import File, Table, Dict_Operations
@@ -1165,63 +1170,112 @@ class VIMBGridProcessor(BaseParser):
             )
         
         self.channel_name = channel_name
-    
 
-    def parse_VIMB(self, filepath, sheet_name: str = 'ГРАФИК', skiprows = 1):
+# ====================================== ПАРСИНГ НОВЫХ СЕТОК ВИМБ, КОТОРЫЕ ПРИСЫЛАЮТ В 02:00 =========================================
+    def parse_VIMB(self, filepath: str):
         """
-            Метод для парсинга файла с сеткой VIMB из отчета Размещение -> Сводная таблица
-
-            Параметры:
-            ----------
-                sheet_name: str
-                    Имя листа, который будем считывать из файла. По умолчанию ГРАФИК.
-                skiprows: int
-                    Количество строк, которые будем пропускать в файле. По умолчанию 1.
+            Метод для парсинга файла с сеткой VIMB, который присылают на почту
+            Args:
+                filepath: путь к файлу.
             Returns:
             ----------
                 VIMB: pd.DataFrame
                     Причёсанный DataFrame с сеткой VIMB.
         """
         # Чтение файла
-        df = pd.read_excel(filepath, sheet_name = sheet_name, skiprows = skiprows)
+        new_vimb = pd.read_csv(
+                            filepath,
+                            sep = '\t',           # табуляция как разделитель
+                            encoding = 'cp1251',  # Windows Cyrillic
+                            skiprows = 1          # пропускаем первую строку с "sep=	"
+                        )
+
+        new_vimb.columns = new_vimb.columns.str.capitalize()
 
         # Оставляем только нужные столбцы
-        data = df[['Дата', 'Время выхода', 'Прод-ть', 'Название программы']]
+        new_vimb = new_vimb[
+            [
+                'Название канала', 'Дата', 'Название выпуска', 'Время начала выпуска', 'Время окончания выпуска'
+            ]
+        ]
+
+        new_vimb.rename(columns = {
+            'Название канала': 'Канал',
+            'Название выпуска': 'Название программы',
+            'Время начала выпуска': 'Время выхода',
+            'Время окончания выпуска': 'Время окончания'
+        },
+            inplace = True)
+
+        # Словарь замен
+        replacements = {
+            'Звезда': 'ЗВЕЗДА',
+            'Че': 'ЧЕ',
+            'Солнце': 'СОЛНЦЕ',
+            'Спас': 'СПАС',
+            'Карусель': 'КАРУСЕЛЬ',
+            'Муз ТВ': 'МузТВ',
+            'ТВ Центр': 'ТВЦ',
+            'СТС ЛАВ': 'СТСЛав',
+            'Матч ТВ': 'МатчТВ',
+            '2х2': '2X2',
+            'Мир Федеральный': 'МИР'}
 
         # Преобразование столбца в datetime
-        data['Дата'] = pd.to_datetime(data['Дата'], format = '%d.%m.%Y')
-        
+        new_vimb['Канал'].replace(replacements, inplace = True)
+        data = new_vimb[new_vimb['Канал'] == self.channel_name]
+
+        # Приводим дату в формат datetime для сортировки по возрастанию даты
+        data['Дата'] = pd.to_datetime(data['Дата'], format = '%d.%m.%Y', errors = 'coerce')
+
         # Вычленяем день недели
         data['День недели'] = data['Дата'].dt.strftime('%A').str.capitalize()
 
         data['Время выхода_'] = pd.to_timedelta(data['Время выхода'].astype(str))
         data['Время выхода'] = data['Время выхода_'].apply(
-            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
-        )
-
-        data['Прод-ть_'] = pd.to_timedelta(data['Прод-ть'].astype(str))
-        data['Прод-ть'] = data['Прод-ть_'].apply(
-            lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
+            lambda
+                x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
         )
 
         # Считаем время окончания
-        data['Время окончания _'] = data['Время выхода_'] + data['Прод-ть_']
+        data['Время окончания _'] = pd.to_timedelta(data['Время окончания'].astype(str))
 
         # Если время окончания превышает 24 часа, корректируем отображение
         data['Время окончания'] = data['Время окончания _'].apply(
             lambda x: f"{(x.days * 24 + x.seconds // 3600) % 24:02d}:{(x.seconds % 3600) // 60:02d}:{x.seconds % 60:02d}"
         )
-
         # Оставляем только нужные столбцы
         VIMB = data[['Дата', 'Время выхода', 'Время окончания', 'Название программы', 'День недели']]
+
+        res = []
+        dates_unique = VIMB['Дата'].unique()
+        for date in dates_unique:
+            t = VIMB[VIMB['Дата'] == date]
+            # Создаем колонку для сортировки на основе времени начала
+            t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
+
+            # Сортируем по sort_key
+            final = t.sort_values('sort_key').reset_index(drop = True)
+
+            # Удаляем вспомогательную колонку
+            final = final.drop('sort_key', axis = 1)
+            final['Дата'] = pd.to_datetime(final['Дата'])
+
+            res.append(final)
+
+        VIMB = pd.concat(res).reset_index(drop = True)
+
+        # Добавляем столбец с исходной датой, для дальнейшего правильного объединения файлов
+        VIMB['Исходная_дата'] = pd.to_datetime(VIMB['Дата'])
 
         # Преобразуем столбец 'Дата' в datetime
         VIMB['Дата'] = pd.to_datetime(VIMB['Дата'])
 
         # Не на всех каналах эфирные сутки начинаются в 05:00:00. Поэтому нужна дополнительная конвертация на + 1 день
-        # Создаем маску и увеличиваем дату 
+        # Создаем маску и увеличиваем дату
         if self.channel_name in ['2X2', 'ТНТ4', 'МатчТВ', 'СТСЛав', 'СУББОТА', 'ЧЕ', 'ЗВЕЗДА', 'ТВЦ']:
-            time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
+            time_mask = (pd.to_timedelta(VIMB['Время выхода']) >= pd.Timedelta(hours = 5)) & (
+                        pd.to_timedelta(VIMB['Время выхода']) < pd.Timedelta(hours = 6))
             VIMB.loc[time_mask, 'Дата'] = VIMB.loc[time_mask, 'Дата'] + pd.Timedelta(days = 1)
 
         VIMB['День недели'] = VIMB['Дата'].dt.strftime('%A').str.capitalize()
@@ -1235,6 +1289,7 @@ class VIMBGridProcessor(BaseParser):
                VIMB['Название программы'].str.contains('межпрограммный', case = False, na = False) | \
                VIMB['Название программы'].str.contains('рекламный блок', case = False, na = False) | \
                VIMB['Название программы'].str.contains('р/б до мультфильмов', case = False, na = False)
+
         VIMB = VIMB[~mask]
 
         # Убираем строки, которые содержат Р/Б. Применительно с детским каналам
@@ -1243,20 +1298,17 @@ class VIMBGridProcessor(BaseParser):
         # Для канала Карусель удаляем программы "Новости", "Погода"
         if self.channel_name == 'КАРУСЕЛЬ':
             VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
-        
+
         # Для канала СТС Лав удаляем программы "это надо знать", "распаковка", "экодело"
         elif self.channel_name == 'СТСЛав':
             # список из программ, которые не нужны. Возможно, это реклама
             stop_words = ['это надо знать', 'распаковка', 'экодело', 'открывариум']
             pattern = '|'.join(stop_words)
             VIMB = VIMB[~VIMB['Название программы'].str.contains(pattern, case = False, na = False)]
-        
+
         elif self.channel_name == 'ТВЦ':
             VIMB = VIMB[~VIMB['Название программы'].str.contains('погода', case = False, na = False)]
 
-        # НОВЫЙ КУСОК - С ГРУППИРОВКОЙ ПО ДАТЕ
-        # Требуем, чтобы "Время выхода" следующей программы равнялось "Время окончания" предыдущей программы.
-        # Группируем по дате, чтобы не смешивать дни
         for date in VIMB['Дата'].unique():
             date_mask = VIMB['Дата'] == date
             date_indices = VIMB[date_mask].index.tolist()
@@ -1266,69 +1318,133 @@ class VIMBGridProcessor(BaseParser):
                 current_idx = date_indices[i]
                 next_idx = date_indices[i + 1]
                 VIMB.loc[current_idx, 'Время окончания'] = VIMB.loc[next_idx, 'Время выхода']
-        # КОНЕЦ НОВОГО КУСКА
 
         return VIMB
+# ====================================== КОНЕЦ ПАРСИНГА НОВЫХ СЕТОК ВИМБ, КОТОРЫЕ ПРИСЫЛАЮТ В 02:00 =========================================
 
-
-    def parse_new_vimb_grids(
-                self, 
-                file_format: str = '*.xlsm', 
-                date_column: str = 'Дата', 
-                time_column: str = 'Время выхода'
-            ) -> pd.DataFrame:
+    def load_data(self, path: str, file_format = '*.csv'):
         """
-            Метод для чтения новых сеток ТВ-программ из VIMB (Сводная таблица) для какого-то одного канала. (Применительно к историческим данным)
-            
+            Загружает данные из одного файла или всех файлов в папке
             Параметры:
             ----------
-                file_format: : str 
-                    Формат файлов с новыми сетками ТВ-программ. По умолчанию '*.xlsm'.
+                path: str
+                    Путь к папке или путь к файлу, из которого будем извлекать данные. Если передаем папку, то будем извлекаться самый свежий файл.
+                file_format: str
+                    Формат файлов, которые будут парситься
+            Returns:
+            ----------
+                pd.DataFrame: таблица с данными
+        """
+        # Проверяем, что путь действительно существует
+        if not os.path.exists(path):
+            raise FileNotFoundError(f'Указанный путь {path} не существует!')
+        
+        # Если это файл, а не папка
+        if os.path.isfile(path):
+            try:
+                df = self.parse_VIMB(path)
+                df['_file_idx'] = 0
+                return df
+            except Exception as e:
+                print(f'Ошибка при чтении файла {path}: {e}\n')
+                return pd.DataFrame()
+        
+        # Если это папка - работаем со всеми файлами (старая логика)
+        files = glob.glob(os.path.join(path, file_format))
+        files.sort(key = os.path.getmtime)
+
+        if not files:
+            print(Color.BOLD + Color.RED + f'⚠️ В папке {path} не найдено файлов с форматом {file_format}' + Color.END)
+            return pd.DataFrame()
+        
+        newest_file = files[-1]  # самый новый файл (последний после сортировки)
+    
+        print(f'📁 Найдено {len(files)} файлов с сетками VIMB в папке {path}')
+        print('✅ Берём самый новый файл: ' + Color.BOLD + f"{os.path.basename(newest_file)}" + Color.END)
+        
+        try:
+            df = self.parse_VIMB(newest_file)
+            df['_file_idx'] = len(files) - 1  # максимальный индекс
+            return df
+        except Exception as e:
+            print(f'❌ Ошибка при чтении файла {newest_file}: {e}\n')
+            return pd.DataFrame()
+    
+
+    def parse_new_vimb_grids(
+            self,
+            path: str,
+            file_format: str = '*.csv',
+            date_column: str = 'Дата',
+            time_column: str = 'Время выхода',
+                        ) -> pd.DataFrame:
+        """
+            Метод для чтения новых сеток ТВ-программ из VIMB (Сводная таблица) для какого-то одного канала. (Применительно к историческим данным)
+
+            Параметры:
+            ----------
+                path: str
+                    Путь к файлу/файлам с сетками ВИМБ, которые будем парсить.
+                file_format: str
+                    Формат файлов с новыми сетками ТВ-программ. По умолчанию '*.csv'.
                 date_column: str
                     Название колонки с датой. По умолчанию 'Дата'.
                 time_column: str
                     Название колонки с временем выхода программы. По умолчанию 'Время выхода'.
-                
+
             Returns:
             ----------
                 combined: pd.DataFrame: 
                     Фулл-таблица с новыми сетками с сортировкой по дате и слоту от 05:00-29:00.
         """
-        # Проверяем, что путь действительно существует
-        if not os.path.exists(self.folder_path):
-            raise FileNotFoundError(f'Указанный путь {self.folder_path} не существует!')
+        full = self.load_data(path, file_format = file_format)
 
-        xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
+        ## Проверяем, что путь действительно существует
+        #if not os.path.exists(self.folder_path):
+        #    raise FileNotFoundError(f'Указанный путь {self.folder_path} не существует!')
 
-        files = []
-        # Перебираем найденные файлы и читаем их
-        for file_path in xlsx_files:
-            try:
-                # Читаем файл в DataFrame
-                vimb = self.parse_VIMB(file_path)
-                files.append(vimb)
-        
-            except Exception as e:
-                print(f'Ошибка при чтении файла {file_path}: {e}\n')
+        #xlsx_files = glob.glob(os.path.join(self.folder_path, file_format))
+        #xlsx_files.sort(key = os.path.getmtime)  # сортировка по дате изменения
 
-        # Полный датафрейм со всеми сетками (неотсортированный)
-        full_vimb = pd.concat(files).reset_index(drop = True)
+        #files_with_idx = []
+
+        #for idx, file_path in enumerate(xlsx_files):
+        #    try:
+        #        df = self.parse_VIMB(file_path)
+        #        df['_file_idx'] = idx  # индекс файла (чем больше, тем новее)
+        #        files_with_idx.append(df)
+        #    except Exception as e:
+        #        print(f'Ошибка при чтении файла {file_path}: {e}\n')
+
+        #full = pd.concat(files_with_idx, ignore_index = True)
+
+        # Группируем по ИСХОДНОЙ дате, выбираем строки из самого нового файла
+        # (заменяем только те записи, у которых исходная дата совпадает)
+        max_idx_per_key = full.groupby(['Исходная_дата'])['_file_idx'].transform('max')
+        full_filtered = full[full['_file_idx'] == max_idx_per_key].copy()
+
+        # Удаляем служебные колонки
+        full_filtered.drop(columns = ['_file_idx'], inplace = True)
+        full_filtered.reset_index(drop = True, inplace = True)
+
+        full_vimb = full_filtered
+        full_vimb.drop(columns = ['Исходная_дата'], inplace = True)
 
         # Устанавливаем правильные сортировки для столбцов с датой и временем начала программы
         full_vimb[date_column] = pd.to_datetime(full_vimb[date_column])
         sorted_vimb = full_vimb.sort_values(date_column).reset_index(drop = True)
-        
+
         # Создаем столбец с Месяцем
         sorted_vimb['Месяц'] = sorted_vimb[date_column].dt.month
         sorted_vimb[date_column] = sorted_vimb[date_column].dt.strftime('%Y-%m-%d')
-        
+
         months_unique = sorted_vimb['Месяц'].unique()
-        
+
         result = {}
         for month in months_unique:
             df = sorted_vimb[sorted_vimb['Месяц'] == month].reset_index(drop = True)
             data = df.drop('Месяц', axis = 1)
-            
+
             dates_unique = data[date_column].unique()
             res = []
             for date in dates_unique:
@@ -1337,9 +1453,9 @@ class VIMBGridProcessor(BaseParser):
                 final = t.sort_values('sort_key').reset_index(drop = True)
                 final = final.drop('sort_key', axis = 1)
                 res.append(final)
-            
+
             general_result = pd.concat(res).reset_index(drop = True)
-        
+
             result[month] = general_result
 
         result_df = pd.concat(result.values(), ignore_index = True)
@@ -1348,7 +1464,7 @@ class VIMBGridProcessor(BaseParser):
 
         vimb['hour_start'] = pd.to_datetime(vimb['Время выхода']).dt.hour
         vimb['hour_end'] = pd.to_datetime(vimb['Время окончания']).dt.hour
-        
+
         vimb['original_index'] = vimb.index
         vimb['original_index'] = vimb['original_index'].round().astype(int)
 
@@ -1356,42 +1472,41 @@ class VIMBGridProcessor(BaseParser):
         # Создаем временные колонки для сравнения
         vimb['time_start_dt'] = pd.to_datetime(vimb['Время выхода'], format = '%H:%M:%S')
         vimb['time_end_dt'] = pd.to_datetime(vimb['Время окончания'], format = '%H:%M:%S')
-        
+
         # Исправляем время окончания для программ, переходящих через полночь
         # Если время окончания меньше времени начала, значит программа переходит через полночь
         mask_overnight = vimb['time_end_dt'] < vimb['time_start_dt']
         vimb.loc[mask_overnight, 'time_end_dt'] += pd.Timedelta(days = 1)
-        
+
         # Теперь корректно фильтруем программы, пересекающие 5:00
         split_time = pd.to_datetime('05:00:00', format = '%H:%M:%S')
 
         mask_crosses_5am = (
         # Случай 1: начинается до 05:00, заканчивается после 05:00 (включая переход через полночь)
         (vimb['time_start_dt'] < vimb['time_end_dt']) &  # обычный случай (без перехода через полночь)
-        (vimb['time_start_dt'] < split_time) & 
+        (vimb['time_start_dt'] < split_time) &
         (vimb['time_end_dt'] > split_time)
         ) | (
         # Случай 2: переходит через полночь (start > end без коррекции)
         # Но time_end_dt уже скорректирован +1 день
         # Так что time_end_dt всегда > time_start_dt после коррекции
         # Поэтому этот случай уже покрыт Случаем 1
-        (vimb['time_start_dt'] >= split_time) & 
+        (vimb['time_start_dt'] >= split_time) &
         (vimb['time_end_dt'] > split_time + pd.Timedelta(days=1))
         )
-        
+
         df = vimb[mask_crosses_5am].reset_index(drop = True)
 
         # Удаляем временные колонки
         vimb = vimb.drop(['time_start_dt', 'time_end_dt'], axis = 1)
-        
+
         df = df[
             [
-                'Дата', 'Время выхода', 'Время окончания', 
-                #'Прод-ть',
+                'Дата', 'Время выхода', 'Время окончания',
                 'Название программы', 'День недели', 'original_index'
              ]
         ]
-    
+
         weekdays = ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье']
 
         new_rows = []
@@ -1419,15 +1534,14 @@ class VIMBGridProcessor(BaseParser):
             }
             new_rows.append(row_1)
 
-            
-            # Часть 2: После 05:00:00    
+
+            # Часть 2: После 05:00:00
             next_date = pd.to_datetime(current_date, format = '%Y-%m-%d', errors = 'coerce') + pd.Timedelta(days = 1)
 
             row_2 = {
                 'Дата': next_date.strftime('%Y-%m-%d'),
                 'Время выхода': start_time_part_2,
                 'Время окончания': time_end,
-                #'Прод-ть': VIMBGridProcessor.calculate_duration(start_time_part_2, time_end),
                 'Название программы': pr_name,
                 'День недели': weekdays[next_date.weekday()],
                 'original_index': idx_orig
@@ -1436,7 +1550,7 @@ class VIMBGridProcessor(BaseParser):
 
         df_new = pd.DataFrame(new_rows)
 
-        # НОВЫЙ КУСОК: Дополнительная корректировка времени
+        # Дополнительная корректировка времени
 
         vimb = vimb[['Дата', 'Время выхода', 'Время окончания', 'Название программы', 'День недели', 'original_index']]
 
@@ -1447,8 +1561,6 @@ class VIMBGridProcessor(BaseParser):
         vimb_new['Дата'] = pd.to_datetime(vimb_new['Дата'])
         vimb_new = vimb_new.sort_values('Дата').reset_index(drop = True)
 
-
-        #vimb_new = vimb_new[['Дата', 'Время выхода', 'Время окончания', 'Прод-ть', 'Название программы', 'День недели']]
         vimb_new = vimb_new[['Дата', 'Время выхода', 'Время окончания', 'Название программы', 'День недели']]
 
         # Считаем длительности программ
@@ -1495,7 +1607,6 @@ class VIMBGridProcessor(BaseParser):
 
         general_result.drop_duplicates(keep = 'first', inplace = True)
 
-        # НОВЫЙ КУСОК
         # Сохраняем исходное время окончания
         original_end = general_result['Время окончания'].copy()
         # Требуем, чтобы "Время выхода" следующей программы равнялось "Время окончания" предыдущей программы.
@@ -1514,7 +1625,6 @@ class VIMBGridProcessor(BaseParser):
                 print("-" * 80)
 
         return general_result
-    
 
     @staticmethod
     def calculate_duration(start_time, end_time):
@@ -1853,6 +1963,9 @@ class VIMBGridProcessor(BaseParser):
         """
             Функция для обновления файла с сетками ТВ-программ VIMB.
         """
+        # Список каналов, у которых эфирные сутки с 6:00
+        special_channels = ['СУББОТА', '2X2', 'ЗВЕЗДА', 'МатчТВ', 'СТСЛав', 'ТВЦ', 'ТНТ4', 'ЧЕ']
+
         if len(web_new) == 0:
             print('Ошибка! Вы пытаетесь сохранить пустой DataFrame!')
 
@@ -1888,6 +2001,42 @@ class VIMBGridProcessor(BaseParser):
             new = web_new.copy()
             # Читаем существующие данные
             old_web = pd.read_excel(self.folder_path)
+
+            # Добавлен кусок для корректного обновления общего файла с сетками
+            old_web['Дата'] = pd.to_datetime(old_web['Дата'])
+            last_web = old_web['Дата'].max()
+            print(f"Последняя дата в общем файле: {last_web}")
+
+            new['Дата'] = pd.to_datetime(new['Дата'])
+            first_new = new['Дата'].min()
+            print(f"Первая дата в новых сетках: {first_new}")
+
+            if first_new > last_web:
+                print(
+                    f'Обнаружен пропуск данных! Проверьте сетки... Последняя дата в файле {file_path} - {last_web}, первая дата в новых сетках {first_new}')
+                sys.exit(1)
+
+            # Если у канала эфирные сутки с 6:00, то делаем доп обработку
+            if self.channel_name in special_channels:
+                # Фильтруем старые данные: оставляем строки, где дата строго меньше first_new и строки с датой == first_new и временем выхода < 6:00:00
+                mask_date_lt = old_web['Дата'] < first_new
+                mask_date_eq = old_web['Дата'] == first_new
+                df_eq = old_web[mask_date_eq]
+
+                # Берём первые 5 строк с датой == first_new
+                first_5_indices = df_eq.head(5).index
+
+                # И отбираем те, у которых время выхода < 06:00:00
+                times_first5 = old_web.loc[first_5_indices, 'Время выхода']
+                keep_indices = times_first5[times_first5 < '06:00:00'].index
+
+                mask_keep_eq = old_web.index.isin(keep_indices)
+
+                final_mask = mask_date_lt | mask_keep_eq
+                old_web = old_web[final_mask]
+            else:
+                # Для нормальных каналов
+                old_web = old_web[old_web['Дата'] < first_new]
 
             # Приводим даты к единому формату
             for col in new.columns:
@@ -2174,15 +2323,51 @@ class ProgramMatcher(BaseParser):
             minutes: int: 
                 Количество минут, до которых округляем столбцы "Время начала", "Время окончания" программы. По дефолту равно 10.
             Returns:
-            ---------
-            general_result: pd.DataFrame
-                Смэтченная таблица
-            not_matched_programs: dict
-                Словарь из несмэтченых программ
         """
+        ###################################################################
+        file_path = Path(self.folder_path)
 
-        vimb_full = self.vimb_grid.copy()
-        plmrs = self.palomars_grid.copy()
+        if file_path.exists():
+
+            old_web = pd.read_excel(self.folder_path)
+
+            # Проверка на пустой файл
+            if old_web.empty:
+                raise ValueError(Color.BOLD + Color.RED + \
+                                 f"Файл {self.folder_path} существует, но он пустой! Нет данных для определения последней даты." + Color.END)
+
+
+            last_match = pd.to_datetime(old_web['Дата']).max()
+
+            plmrs = self.palomars_grid.copy()
+            last_plmrs = pd.to_datetime(plmrs['Дата']).max()
+
+            print(f"Последняя дата в смэтченном файле: {last_match.strftime('%Y-%m-%d')}")
+            print(f"Последняя дата в palomars: {last_plmrs.strftime('%Y-%m-%d')}")
+
+            vimb_full = self.vimb_grid.copy()
+            plmrs = self.palomars_grid.copy()
+            
+            for df in (plmrs, vimb_full):
+                df['Дата'] = pd.to_datetime(df['Дата'])
+            
+            plmrs = plmrs[plmrs['Дата'] >= last_match]
+            vimb_full = vimb_full[(vimb_full['Дата'] >= last_match) & (vimb_full['Дата'] <= last_plmrs)]
+            
+            print(f"После обрезки: palomars - {len(plmrs):,} записей; vimb - {len(vimb_full):,} записей".replace(',', ' '))
+
+            if plmrs.empty or vimb_full.empty:
+                print("⚠️ Внимание: один из DataFrame пуст после обрезки!")
+                return pd.DataFrame(), {}
+
+        else:
+            plmrs, vimb_full = self.palomars_grid.copy(), self.vimb_grid.copy()
+            print(Color.BOLD + Color.NAVY + f"Файл {file_path} не найден. Будет создан новый файл после мэтчинга." + Color.END)
+            print(f"Для нового файла беру полные сетки: palomars - {len(plmrs):,} записей; vimb - {len(vimb_full):,} записей".replace(',', ' '))
+
+
+        plmrs['Дата'] = plmrs['Дата'].astype(str)
+        vimb_full['Дата'] = vimb_full['Дата'].astype(str)
 
         # НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
         if self.channel == 'МатчТВ':
@@ -2339,11 +2524,6 @@ class ProgramMatcher(BaseParser):
             VIMB_init, Pal_init = self.find_nameless_vimb_programs(program_names, VIMB_init, Pal_init)
 
             result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
-
-            ## НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
-            #if self.channel == 'МатчТВ':
-            #    result_df[['Вид спорта', 'Метка']] = result_df.apply(Assistant().process_row, axis = 1)
-            # КОНЕЦ НОВОГО КУСКА ДЛЯ МАТЧ ТВ
             
             # Считаем длительности программ
             result_df = Assistant().calculate_program_duration(result_df)
@@ -2382,7 +2562,7 @@ class ProgramMatcher(BaseParser):
         return general_result, not_matched_programs
     
 
-    def update_file(self, web_new):
+    def update_file(self, web_new, sheet_name = 'Sheet1'):
         """
             Функция для обновления файла с сетками ТВ-программ VIMB.
         """
@@ -2397,17 +2577,21 @@ class ProgramMatcher(BaseParser):
             
             # Подготавливаем данные для записи
             new_cleaned = web_new.copy()
+
+            # Заменяем NaN на пустую строку ДО преобразования в строку
+            new_cleaned = new_cleaned.where(pd.notna(new_cleaned), '')
             
             # Приводим все к строковому типу и обрезаем пробелы
             for col in new_cleaned.columns:
                 new_cleaned[col] = new_cleaned[col].astype(str).str.strip()
+                new_cleaned[col] = new_cleaned[col].replace('nan', '')
             
             # Создаем Excel файл с форматированием
             self.folder_path = file_path # Добавляем путь для сохранения
 
             self.style_of_table(
                 df = new_cleaned, 
-                sheet_name = 'Sheet1'
+                sheet_name = sheet_name
             )
             
             print(f'Создан новый файл: {file_path}')
@@ -2422,6 +2606,12 @@ class ProgramMatcher(BaseParser):
             for col in new.columns:
                 new[col] = new[col].astype(str).str.strip()
                 old_web[col] = old_web[col].astype(str).str.strip()
+
+                new[col] = new[col].replace('nan', '')
+                old_web[col] = old_web[col].replace('nan', '')
+            
+            # Заменяем NaN на пустую строку в новых данных
+            new = new.where(pd.notna(new), '')
             
             full = pd.concat([old_web, new]).reset_index(drop = True)
 
@@ -2431,18 +2621,14 @@ class ProgramMatcher(BaseParser):
             )
             print(f'Удалено {len(full) - len(df_no_duplicates)} дубликатов.')
 
-            # Проверяем границы дней
-            #(df_no_duplicates)
-
             self.style_of_table(
                 df = df_no_duplicates, 
-                sheet_name = 'Sheet1'
+                sheet_name = sheet_name
             )
 
         except Exception as e:
             print(f'Ошибка при обновлении файла: {e}')
         
-
             # Создаем резервную копию и новый файл
             try:
                 backup_path = file_path.with_suffix('-копия.xlsx')
@@ -2453,9 +2639,15 @@ class ProgramMatcher(BaseParser):
                 # Создаем новый файл с web_new данными
                 self.folder_path = file_path
 
+                web_clean = web_new.copy()
+                web_clean = web_clean.where(pd.notna(web_clean), '')
+                for col in web_clean.columns:
+                    web_clean[col] = web_clean[col].astype(str).str.strip()
+                    web_clean[col] = web_clean[col].replace('nan', '')
+
                 self.style_of_table(
-                    df = web_new, 
-                    sheet_name = 'Sheet1'
+                    df = web_clean, 
+                    sheet_name = sheet_name
                 )
                 print(f'Создан новый файл с предоставленными данными.')
                 
@@ -2467,6 +2659,9 @@ class ProgramMatcher(BaseParser):
         """
             Функция для генерации внешнего вида таблицы с сеткой ВИМБ.
         """
+        # Заменяем NaN на None (xlsxwriter преобразует None в пустую ячейку)
+        df_clean = df.where(pd.notna(df), '')
+
         if self.channel == 'МатчТВ':
             column_configs = [
                 {'header': 'Дата', 'width': 14.0, 'format': 'date'},
@@ -2495,7 +2690,7 @@ class ProgramMatcher(BaseParser):
 
         
         self.make_style_of_table(
-            df = df,
+            df = df_clean,
             sheet_name = sheet_name,
             column_configs = column_configs,
             date_columns = ['Дата']

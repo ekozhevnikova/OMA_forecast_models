@@ -3,6 +3,7 @@ import numpy as np
 from collections import defaultdict
 from itertools import combinations
 import json
+import calendar
 
 from OMA_tools.federal.channel_forecast.grid_preprocessing import *
 from OMA_tools.federal.channel_forecast.core.pipelines import *
