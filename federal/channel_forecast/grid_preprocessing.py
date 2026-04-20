@@ -1094,6 +1094,9 @@ class TVPreprocessing(BaseParser):
         general_result = pd.concat(res).reset_index(drop = True)
 
         # Округление столбцов с долей
+        general_result['Share'] = general_result['Share'].astype(float)
+        general_result['Share_weighted'] = general_result['Share_weighted'].astype(float)
+
         general_result['Share'] = general_result['Share'].round(5)
         general_result['Share_weighted'] = general_result['Share_weighted'].round(8)
 
@@ -2324,50 +2327,8 @@ class ProgramMatcher(BaseParser):
                 Количество минут, до которых округляем столбцы "Время начала", "Время окончания" программы. По дефолту равно 10.
             Returns:
         """
-        ###################################################################
-        file_path = Path(self.folder_path)
-
-        if file_path.exists():
-
-            old_web = pd.read_excel(self.folder_path)
-
-            # Проверка на пустой файл
-            if old_web.empty:
-                raise ValueError(Color.BOLD + Color.RED + \
-                                 f"Файл {self.folder_path} существует, но он пустой! Нет данных для определения последней даты." + Color.END)
-
-
-            last_match = pd.to_datetime(old_web['Дата']).max()
-
-            plmrs = self.palomars_grid.copy()
-            last_plmrs = pd.to_datetime(plmrs['Дата']).max()
-
-            print(f"Последняя дата в смэтченном файле: {last_match.strftime('%Y-%m-%d')}")
-            print(f"Последняя дата в palomars: {last_plmrs.strftime('%Y-%m-%d')}")
-
-            vimb_full = self.vimb_grid.copy()
-            plmrs = self.palomars_grid.copy()
-            
-            for df in (plmrs, vimb_full):
-                df['Дата'] = pd.to_datetime(df['Дата'])
-            
-            plmrs = plmrs[plmrs['Дата'] >= last_match]
-            vimb_full = vimb_full[(vimb_full['Дата'] >= last_match) & (vimb_full['Дата'] <= last_plmrs)]
-            
-            print(f"После обрезки: palomars - {len(plmrs):,} записей; vimb - {len(vimb_full):,} записей".replace(',', ' '))
-
-            if plmrs.empty or vimb_full.empty:
-                print("⚠️ Внимание: один из DataFrame пуст после обрезки!")
-                return pd.DataFrame(), {}
-
-        else:
-            plmrs, vimb_full = self.palomars_grid.copy(), self.vimb_grid.copy()
-            print(Color.BOLD + Color.NAVY + f"Файл {file_path} не найден. Будет создан новый файл после мэтчинга." + Color.END)
-            print(f"Для нового файла беру полные сетки: palomars - {len(plmrs):,} записей; vimb - {len(vimb_full):,} записей".replace(',', ' '))
-
-
-        plmrs['Дата'] = plmrs['Дата'].astype(str)
-        vimb_full['Дата'] = vimb_full['Дата'].astype(str)
+        vimb_full = self.vimb_grid.copy()
+        plmrs = self.palomars_grid.copy()
 
         # НОВЫЙ КУСОК ДЛЯ МАТЧ ТВ
         if self.channel == 'МатчТВ':
@@ -2524,7 +2485,7 @@ class ProgramMatcher(BaseParser):
             VIMB_init, Pal_init = self.find_nameless_vimb_programs(program_names, VIMB_init, Pal_init)
 
             result_df = TVScheduleProcessor(self.channel, VIMB_init, Pal_init).find_matches(minutes, target_date)
-            
+
             # Считаем длительности программ
             result_df = Assistant().calculate_program_duration(result_df)
             
@@ -2568,6 +2529,7 @@ class ProgramMatcher(BaseParser):
         """
         if len(web_new) == 0:
             print('Ошибка! Вы пытаетесь сохранить пустой DataFrame!')
+            return 
 
         # Проверяем существование файла
         file_path = Path(self.folder_path)
@@ -2577,24 +2539,21 @@ class ProgramMatcher(BaseParser):
             
             # Подготавливаем данные для записи
             new_cleaned = web_new.copy()
-
-            # Заменяем NaN на пустую строку ДО преобразования в строку
-            new_cleaned = new_cleaned.where(pd.notna(new_cleaned), '')
             
             # Приводим все к строковому типу и обрезаем пробелы
             for col in new_cleaned.columns:
-                new_cleaned[col] = new_cleaned[col].astype(str).str.strip()
-                new_cleaned[col] = new_cleaned[col].replace('nan', '')
+                if col == 'Share_weighted':
+                    new_cleaned[col] = pd.to_numeric(new_cleaned[col], errors='coerce')
+                else:
+                    new_cleaned[col] = new_cleaned[col].astype(str).str.strip()
+                    new_cleaned[col] = new_cleaned[col].replace('nan', '')
             
             # Создаем Excel файл с форматированием
-            self.folder_path = file_path # Добавляем путь для сохранения
-
-            self.style_of_table(
-                df = new_cleaned, 
-                sheet_name = sheet_name
-            )
+            self.folder_path = file_path
+            self.style_of_table(new_cleaned, sheet_name)
             
             print(f'Создан новый файл: {file_path}')
+            return
         
         # Файл существует - читаем и обновляем
         try:
@@ -2602,53 +2561,83 @@ class ProgramMatcher(BaseParser):
             # Читаем существующие данные
             old_web = pd.read_excel(self.folder_path)
 
-            # Приводим даты к единому формату
+            # Преобразуем даты для сравнения
+            old_web['Дата'] = pd.to_datetime(old_web['Дата'])
+            last_web = old_web['Дата'].max()
+            print(f"Последняя дата в общем файле: {last_web.strftime('%Y-%m-%d')}")
+
+            new['Дата'] = pd.to_datetime(new['Дата'])
+            first_new = new['Дата'].min()
+            print(f"Первая дата в новых схлопнутых сетках: {first_new.strftime('%Y-%m-%d')}")
+
+            # Проверка на пропуск данных
+            if first_new > last_web:
+                print(f'⚠️ Обнаружен пропуск данных! Последняя дата в файле: {last_web.strftime("%Y-%m-%d")}, первая дата в новых сетках: {first_new.strftime("%Y-%m-%d")}')
+                print("⚠️ Продолжаю ... Но рекомендую проверить данные!")  # или просто предупреждение
+
+            # Оставляем только даты строго меньше first_new
+            old_web = old_web[old_web['Дата'] < first_new]
+
+            # Приводим все колонки к строковому типу для конкатенации
             for col in new.columns:
-                new[col] = new[col].astype(str).str.strip()
-                old_web[col] = old_web[col].astype(str).str.strip()
-
-                new[col] = new[col].replace('nan', '')
-                old_web[col] = old_web[col].replace('nan', '')
+                if col == 'Share_weighted':
+                    new[col] = pd.to_numeric(new[col], errors = 'coerce')
+                    old_web[col] = pd.to_numeric(old_web[col], errors = 'coerce')
+                else:
+                    new[col] = new[col].astype(str).str.strip()
+                    new[col] = new[col].replace('nan', '')
+                    old_web[col] = old_web[col].astype(str).str.strip()
+                    old_web[col] = old_web[col].replace('nan', '')
             
-            # Заменяем NaN на пустую строку в новых данных
-            new = new.where(pd.notna(new), '')
-            
-            full = pd.concat([old_web, new]).reset_index(drop = True)
+            # Объединяем
+            full = pd.concat([old_web, new], ignore_index = True)
 
+            # Удаляем дубликаты (keep='last' оставляет новые данные)
             df_no_duplicates = full.drop_duplicates(
                 subset = ['Дата', 'Название программы', 'Время выхода', 'Время окончания'],
-                keep = 'first'
+                keep = 'last'  # чтобы новые данные заменяли старые
             )
             print(f'Удалено {len(full) - len(df_no_duplicates)} дубликатов.')
+            print(f'Всего записей после объединения: {len(df_no_duplicates)}')
 
-            self.style_of_table(
-                df = df_no_duplicates, 
-                sheet_name = sheet_name
+            # Сортируем по дате и времени
+            df_no_duplicates['_sort_date'] = pd.to_datetime(df_no_duplicates['Дата'])
+            df_no_duplicates['_sort_time'] = df_no_duplicates['Время выхода'].apply(
+                lambda x: int(x.replace(':', '')) if isinstance(x, str) else 0
+            )
+            df_no_duplicates = df_no_duplicates.sort_values(['_sort_date', '_sort_time']).drop(
+                columns = ['_sort_date', '_sort_time']
             )
 
+            # Сохраняем
+            self.style_of_table(df_no_duplicates, sheet_name)
+            
+            print(f'✅ Файл успешно обновлен: {file_path}')
+
         except Exception as e:
-            print(f'Ошибка при обновлении файла: {e}')
-        
+            print(f'❌ Ошибка при обновлении файла: {e}')
+            import traceback
+            traceback.print_exc()
+
             # Создаем резервную копию и новый файл
             try:
-                backup_path = file_path.with_suffix('-копия.xlsx')
+                backup_path = file_path.with_suffix('.backup.xlsx')
                 if file_path.exists():
                     shutil.copy2(file_path, backup_path)
                     print(f'Создана резервная копия: {backup_path}')
                 
+                # Подготавливаем новые данные
+                web_clean = web_new.copy()
+                for col in web_clean.columns:
+                    if col == 'Share_weighted':
+                        web_clean[col] = pd.to_numeric(web_clean[col], errors = 'coerce')
+                    else:
+                        web_clean[col] = web_clean[col].astype(str).str.strip()
+                        web_clean[col] = web_clean[col].replace('nan', '')
+                
                 # Создаем новый файл с web_new данными
                 self.folder_path = file_path
-
-                web_clean = web_new.copy()
-                web_clean = web_clean.where(pd.notna(web_clean), '')
-                for col in web_clean.columns:
-                    web_clean[col] = web_clean[col].astype(str).str.strip()
-                    web_clean[col] = web_clean[col].replace('nan', '')
-
-                self.style_of_table(
-                    df = web_clean, 
-                    sheet_name = sheet_name
-                )
+                self.style_of_table(web_clean, sheet_name)
                 print(f'Создан новый файл с предоставленными данными.')
                 
             except Exception as backup_error:

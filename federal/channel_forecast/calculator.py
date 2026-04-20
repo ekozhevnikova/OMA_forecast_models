@@ -275,6 +275,7 @@ class TVShareCalculator:
 
         df = result_df.copy()
 
+        df['Share'] = df['Share'].astype(float)
         # Создаём столбец с новой долей
         df['Share_weighted'] = 0.0
 
@@ -406,6 +407,8 @@ class TVShareCalculator:
                 'Share', 'Share_weighted', 'Жанр', 'День недели'
                 ]
             ]
+        
+        res['Share_weighted'] = res['Share_weighted'].astype(float)
         # Расчёт суммарной доли по дню
         share_sum = np.sum(list(res['Share_weighted']))
         return res, share_sum
@@ -511,12 +514,7 @@ class TVScheduleProcessor:
             columns = ['Дата', 'Название программы', 'Время выхода', 'Время окончания']
             if include_share:
                 columns.append('Share')
-                #if self.channel != 'МатчТВ':
-                #    columns.append('Share')
-                #else:
-                #    columns.append('Share')
-                #    columns.append('Вид спорта')
-                #    columns.append('Метка')
+                data['Share'] = data['Share'].astype(float)
 
             return pd.DataFrame(columns = columns)
         
@@ -790,7 +788,7 @@ class TVScheduleProcessor:
         plmrs_joined = self.join_broadcasts(self.palomars_init, type = 'palomars')
 
         # Исходная суммарная доля по дню
-        share_init = plmrs_joined['Share'].sum()
+        share_init = self.palomars_init['Share'].sum()
 
         # Округление времени
         calculator = TVShareCalculator(self.channel, plmrs_joined)
