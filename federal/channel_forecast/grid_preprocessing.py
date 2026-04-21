@@ -409,6 +409,10 @@ class ShareParser(BaseParser):
     
 
     def share_pipeline(self, date_filter: list, targets: dict):
+        """
+            Пайплайн для выгрузки долей по дням для всех Федеральных Каналов.
+        """
+        print(Color.BOLD + Color.CHARCOAL + '=== 🎬 Запуск выгрузки Share by days пайплайна ===' + Color.END)
         # 1. Выгрузка данных из БД
         new_data = self.share_by_days(date_filter, targets)
         new_data['Дата'] = pd.to_datetime(new_data['Дата'])
@@ -425,6 +429,9 @@ class ShareParser(BaseParser):
 
         print('🔄 Обновляю файл c долями в разбивке по дням по всем Федеральным Каналам. Пожалуйста, подождите ...')
         self.make_style_of_share_table(updated, 'Sheet1')
+
+        print(Color.BOLD + f'✅ 🏁 Данные для успешно выгружены! Спасибо за Ваше ожидание! 😊' + Color.END)
+        print('\n')
         return new_data, updated
 
 
