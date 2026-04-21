@@ -94,10 +94,10 @@ class GeneralTextCleaner:
         # Базовые специальные названия
         self.BASE_SPECIAL_NAMES = [
                 'художественный фильм', 'документальный фильм', 'документальный сериал', 'серия мультфильмов',
-                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'мультфильм', 
+                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'мультфильм', 'телесериал',
                 'мультфильмы', 'юмористический концерт', 'короткометражные х фильмы', 'мультсериал', 
                 'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
-                'сериал фильм', 'сериал х ф', 'х фильмы'
+                'сериал фильм', 'сериал х ф', 'х фильмы', 'док фильм'
         ]
 
         # Базовые стоп-паттерны названия
@@ -438,7 +438,7 @@ class GeneralTextCleaner:
         result = re.sub(r'\s+', ' ', result).strip()
 
         if result == '':
-            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой для канала {self.channel}. Проверьте обработку текста!' + Color.END)
             return ''
 
         if debug:
@@ -540,12 +540,12 @@ class SportChannelCleaner:
 
         self.BASE_SPECIAL_NAMES = [
                 'художественный фильм', 'документальный фильм', 'документальный сериал', 
-                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 
+                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'телесериал',
                 'анимационный сериал фильм', 'анимационный фильм сериал', 'документальный цикл',
                 'документальный цикл', 'мультфильм', 'мультфильмы', 'юмористический концерт', 
-                'короткометражные х фильмы', 'мультсериал', 'серия мультфильмов',
+                'короткометражные х фильмы', 'мультсериал', 'серия мультфильмов', 
                 'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
-                'сериал фильм', 'сериал х ф', 'х фильмы'
+                'сериал фильм', 'сериал х ф', 'х фильмы', 'док фильм'
         ]
 
         self.PROGRAMS_TO_REMAIN_CATEGORIES = {
@@ -851,7 +851,7 @@ class SportChannelCleaner:
         result = re.sub(r'\s+', ' ', result).strip()
 
         if result == '':
-            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой для канала {self.channel}. Проверьте обработку текста!' + Color.END)
             return ''
 
         if debug:
@@ -1227,6 +1227,17 @@ class MusicChannelCleaner:
             r'\bспец\b', r'\bд\W*ф\b', r'\bдок\.?\s*', r'(?:нон|non)[\s\-]?(?:стоп|stop)', r'\bbest\b', r'\bлучшее\b'
         ]
 
+        self.BASE_SPECIAL_NAMES = [
+                'художественный фильм', 'документальный фильм', 'документальный сериал', 
+                'комедийный сериал', 'анимационный фильм', 'специальный репортаж', 'телесериал',
+                'анимационный сериал фильм', 'анимационный фильм сериал', 'документальный цикл',
+                'документальный цикл', 'мультфильм', 'мультфильмы', 'юмористический концерт', 
+                'короткометражные х фильмы', 'мультсериал', 'серия мультфильмов',
+                'сериал', 'худ фильм', 'худ фильм сериал', 'док фильм сериал', 'док сериал фильм', 
+                'сериал фильм', 'сериал х ф', 'х фильмы', 'док фильм'
+        ]
+        
+
     def divide_programs_by_categories(self, df: pd.DataFrame):
         """
             Метод для разделения программ на различные группы в зависимости от названия передачи
@@ -1305,18 +1316,32 @@ class MusicChannelCleaner:
         
 
 
-    def general_preprocess_text(self, text: str):
+    def general_preprocess_text(self, text: str, debug = False):
         """
             Метод по общей обработке текста
         """
-        # Приведение к нижнему регистру
-        #text_lowered  = text.lower().strip()
-    
         # Замена буквы е на ё
         text_lower = text.lower().strip().replace('ё', 'е')
     
         # Удаление подстрок типа '№5', '№09'
         text_lower = re.sub(r'[n#№]\s*\d+', '', text_lower)
+
+        # Удаляем тире, чтобы '80-х' -> '80х'
+        text_lower = re.sub(r'[-—–]', '', text_lower)
+        
+        # Удаляем всю пунктуацию, оставляем цифры и буквы
+        text_lower = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', text_lower)
+        text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+        if debug:
+            print(f'После удаления пунктуации: "{text_lower}"')
+
+        # Проверка на специальные имена
+        for special_name in self.BASE_SPECIAL_NAMES:
+            if text_lower == special_name.lower().strip():
+                if debug:
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {text_lower}')
+                special_name = re.sub(r'\s+', ' ', special_name).strip()
+                return special_name.strip()
     
         sorted_patterns = sorted(self.STOP_PATTERNS, key = len, reverse = True)
             
@@ -1328,8 +1353,9 @@ class MusicChannelCleaner:
             if stop_word in text_lower:
                 pattern = r'\b' + re.escape(stop_word) + r'\b'
                 text_lower = re.sub(pattern, '', text_lower, flags = re.IGNORECASE)
-                
-        return text_lower.strip()
+        
+        text_lower = re.sub(r'\s+', ' ', text_lower).strip()
+        return text_lower
     
     
     def clean_special_elements(self, text: str, debug = False):
@@ -1340,13 +1366,20 @@ class MusicChannelCleaner:
             
         result = text
         # Основная предобработка
-        result = self.general_preprocess_text(result)
+        result = self.general_preprocess_text(result, debug = debug)
 
-        if 'концерт муз-тв ко дню города' in result:
-            return 'концерт муз-тв ко дню города'
+        for special_name in self.BASE_SPECIAL_NAMES:
+            if result == special_name.lower().strip():
+                if debug:
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {result}')
+                special_name = re.sub(r'\s+', ' ', special_name).strip()
+                return special_name
+
+        if 'концерт музтв ко дню города' in result:
+            return 'концерт музтв ко дню города'
         
-        elif 'концерт муз-тв в день города' in result:
-            return 'концерт муз-тв в день города'
+        elif 'концерт музтв в день города' in result:
+            return 'концерт музтв в день города'
 
         elif 'вк фест' in result:
             return 'вк фест'
@@ -1361,12 +1394,12 @@ class MusicChannelCleaner:
             print(f'После удаления стоп-слов: "{result}"')
     
         # Удаляем тире, чтобы '80-х' -> '80х'
-        result = re.sub(r'[-—–]', '', result)
+        #result = re.sub(r'[-—–]', '', result)
         
-        # Удаляем всю пунктуацию, оставляем цифры и буквы
-        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result)
-        if debug:
-            print(f'После удаления пунктуации: "{result}"')
+        ## Удаляем всю пунктуацию, оставляем цифры и буквы
+        #result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result)
+        #if debug:
+        #    print(f'После удаления пунктуации: "{result}"')
     
         # Удаляем номера частей 
         pattern = r'\b(?:\d+\s+(?:часть|части|ч)\b|\b(?:часть|части|ч)\s+\d+(?:\s+\d+)*)\b'
@@ -1405,7 +1438,7 @@ class MusicChannelCleaner:
         result = re.sub(r'\s+', ' ', result).strip()
 
         if result == '':
-            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой для канала {self.channel}. Проверьте обработку текста!' + Color.END)
             return ''
             
         if debug:
@@ -1427,10 +1460,17 @@ class MusicChannelCleaner:
             
         result = text
         # Основная предобработка
-        result = self.general_preprocess_text(result)
-    
+        result = self.general_preprocess_text(result, debug = debug)
+
+        for special_name in self.BASE_SPECIAL_NAMES:
+            if result == special_name.lower().strip():
+                if debug:
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {result}')
+                special_name = re.sub(r'\s+', ' ', special_name).strip()
+                return special_name
+        
         # Удаляем всю пунктуацию, оставляем цифры и буквы
-        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', '', result)
+        #result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', '', result)
         
         result = re.sub(r'\s+', ' ', result).strip()
         
@@ -1465,14 +1505,21 @@ class MusicChannelCleaner:
             
         result = text
         # Основная предобработка
-        result = self.general_preprocess_text(result)
+        result = self.general_preprocess_text(result, debug = debug)
+
+        for special_name in self.BASE_SPECIAL_NAMES:
+            if result == special_name.lower().strip():
+                if debug:
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {result}')
+                special_name = re.sub(r'\s+', ' ', special_name).strip()
+                return special_name
     
         # Удаляем тире, чтобы '80-х' -> '80х'
         result = re.sub(r'[-—–]', '', result)
         # Удаляем всю пунктуацию, оставляем цифры и буквы
-        result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result)
-        if debug:
-            print(f'После удаления пунктуации: "{result}"')
+        #result = re.sub(r'[^а-яА-Яa-zA-Z0-9\s]', ' ', result)
+        #if debug:
+        #    print(f'После удаления пунктуации: "{result}"')
     
         stop_words = ['документальный', 'фильм', 'док']
         
@@ -1492,7 +1539,7 @@ class MusicChannelCleaner:
         result = re.sub(r'\s+', ' ', result).strip()
 
         if result == '':
-            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой для канала {self.channel}. Проверьте обработку текста!' + Color.END)
             return ''
         
         if debug:
@@ -1514,7 +1561,14 @@ class MusicChannelCleaner:
             
         result = text
         # Основная предобработка
-        result = self.general_preprocess_text(result)
+        result = self.general_preprocess_text(result, debug = debug)
+
+        for special_name in self.BASE_SPECIAL_NAMES:
+            if result == special_name.lower().strip():
+                if debug:
+                    print(Color.GREEN + f'Прошёл проверку на специальное имя: {result}')
+                special_name = re.sub(r'\s+', ' ', special_name).strip()
+                return special_name
     
         # Удаляем тире, чтобы '80-х' -> '80х'
         result = re.sub(r'[-—–]', ' ', result)
@@ -1537,7 +1591,7 @@ class MusicChannelCleaner:
         result = re.sub(r'\s+', ' ', result).strip()
 
         if result == '':
-            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой. Проверьте обработку текста!' + Color.END)
+            print(Color.BOLD + Color.RED + f'‼️ Строка {text} оказалась пустой для канала {self.channel}. Проверьте обработку текста!' + Color.END)
             return ''
         
         if debug:

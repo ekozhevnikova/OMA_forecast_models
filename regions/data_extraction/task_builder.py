@@ -55,7 +55,7 @@ class BaseDataService:
     def _build_timeband_common_params(date_filter, company_filter, basedemo_filter, regions_id, targets,
                            time_filter, statistics, slices, sortings, options,
                            location_filter, weekday_filter, daytype_filter, 
-                           targetdemo_filter, add_city_to_basedemo_from_region, add_city_to_targetdemo_from_region):
+                           targetdemo_filter, add_city_to_basedemo_from_region = False, add_city_to_targetdemo_from_region = False):
         """
             Построение общих параметров для задач типа TimeBand
         """
@@ -115,6 +115,7 @@ class BaseDataService:
 
         # 2. Случай, когда задан словарь с ЦА targets
         elif targets is not None and regions_id is None and basedemo_filter is None:
+            print('Задан словарь из целевых аудиторий. Генерирую задачи. Пожалуйста, подождите ...')
             tasks = []
             for target, syntax in safe_targets.items():
                 basedemo_filter = syntax
@@ -142,7 +143,7 @@ class BaseDataService:
                 time.sleep(2)
             return tasks
         
-        # 2. Случай, когда задан словарь с ЦА targets
+        # 2. Случай, когда задан словарь с ЦА targets и регионами
         elif targets is not None and regions_id is not None and basedemo_filter is None:
             if type(regions_id) == int:
                 current_company_filter = safe_params['company_filter'] + f' AND regionId IN ({regions_id})' 
