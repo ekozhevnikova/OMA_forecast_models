@@ -272,8 +272,8 @@ class ShareParser(BaseParser):
 
         super().__init__(filepath)
 
-        # Вызываем ensure_file_exists с нужными колонками
-        self._ensure_file_exists(['Дата', 'TimeSlot', 'Auedience', 'Slot_weight', 'hour_start'])
+        # Создаем файл только с нужной колонкой 'Дата', если его нет
+        self._ensure_file_exists(['Дата'])
 
         self.channels_id_file = channels_id_file
         # Чтение ID каналов

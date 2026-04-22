@@ -24,6 +24,9 @@ class ChannelAnalysisMaster:
             date_filter: list,
             company_filter: str,
             basedemo_filter: str,
+            matched_grid_file: str,
+            vocabulary_file: str,
+            cities_file: str,
             auedience_file: Optional[str] = None,           # опциональный параметр
             web_file: Optional[str] = None,                 # опциональный параметр
             weighted_share_file: Optional[str] = None,      # опциональный параметр
@@ -33,11 +36,22 @@ class ChannelAnalysisMaster:
 
         """
             Атрибуты класса (Можно передавать только нужные параметры)
-                auedience_file: str: Полный путь к файлу с Total TV Auedience для какого-то конкретного канала.
-                web_file: str: Полный путь к файлу с исторической сеткой Mediascope для какого-то конкретного канала.
-                weighted_share_file: str: Полный путь к файлу со взвешенной долей и исторической сеткой Mediascope для какого-то конкретного канала.
-                new_vimb_grids: Полный путь к файлам с новыми сетками для какого-то конкретного канала.
-                hist_vimb_file: Полный путь к файлу с исторической сеткой VIMB для какого-то конкретного канала.
+                auedience_file: str: 
+                    Полный путь к файлу с Total TV Auedience для какого-то конкретного канала.
+                web_file: str: 
+                    Полный путь к файлу с исторической сеткой Mediascope для какого-то конкретного канала.
+                weighted_share_file: str: 
+                    Полный путь к файлу со взвешенной долей и исторической сеткой Mediascope для какого-то конкретного канала.
+                new_vimb_grids: str
+                    Полный путь к файлам с новыми сетками для какого-то конкретного канала.
+                hist_vimb_file: str
+                    Полный путь к файлу с исторической сеткой VIMB для какого-то конкретного канала.
+                matched_grid_file: str
+                    Полный путь к файлу со смэтченной исторической сеткой VIMB-Palomars для какого-то конкретного канала.
+                vocabulary_file: str
+                    Полный путь к файлу - справочнику по выбранному каналу.
+                cities_file: str
+                    Полный путь к файлу - справочнику с городами некоторых стран. (!!! Нужен для МатчТВ !!!)
             
         """
         self.channel = channel
@@ -51,6 +65,9 @@ class ChannelAnalysisMaster:
         self.weighted_share_file = weighted_share_file
         self.new_vimb_grids = new_vimb_grids
         self.hist_vimb_file = hist_vimb_file
+        self.matched_grid_file = matched_grid_file
+        self.vocabulary_file = vocabulary_file
+        self.cities_file = cities_file
         
         # Кэшируем результаты
         self._total_tv_auedience = None
@@ -58,6 +75,9 @@ class ChannelAnalysisMaster:
 
         self.STOP_WORDS = ['погода', 'межпрограммные заставки']
         self.PATTERN = '|'.join(self.STOP_WORDS)
+
+        # Справочник с особенными названиями для сопоставления программ по выбранному каналу
+        self.vocabulary = pd.read_excel(self.vocabulary_file, sheet_name = f'{self.channel}')
     
 
     def auedience_pipeline(self):
@@ -150,24 +170,47 @@ class ChannelAnalysisMaster:
         """
         # Если файлы с новыми сетками, историческими данными не переданы, то пайплайн не запустится.
         if not self.new_vimb_grids:
-            raise ValueError('🚨 Для выполнения VIMB пайплайна необходимо указать путь к файлам с новыми сетками VIMB.')
+            raise ValueError('🚨 Для выполнения VIMB пайплайна необходимо указать путь к файлам/папке с новыми сетками VIMB.')
 
         if not self.hist_vimb_file:
             raise ValueError('🚨 Для выполнения VIMB пайплайна необходимо указать путь к файлу с исторической сеткой VIMB.')
+        
+        vimb_parser = VIMBGridProcessor(self.hist_vimb_file, self.channel)
 
         # 1. Составление таблицы с новой сеткой
-        combined = VIMBGridProcessor(self.new_vimb_grids).parse_new_vimb_grids()
+        new_grids = vimb_parser.parse_new_vimb_grids(self.new_vimb_grids)
 
         # 2. Обновление файла с историческими данными
-        VIMBGridProcessor(self.hist_vimb_file).update_vimb_file(combined)
+        vimb_parser.update_vimb_file(new_grids)
     
 
-    def grid_matching_pipeline(self):
+    def matched_grids_pipeline(self, start_date: str, stop_date: str):
         """
-            Пайплайн для мэтчинга исторических сеток VIMB и Palomars
-        """
+            Паплайн для объединения сеток VIMB и Palomars между собой
+            Параметры:
+            ----------
+                start_date: str
+                    Дата, начиная с которой начинаем обновлять фактические данные в файле.
+                stop_date: str
+                    Дата, до которой будем обновлять фактические данные в файле.
+        """   
+        # 1. Чтение данных с сеткой Mediascope
+        palomars = pd.read_excel(self.weighted_share_file)
 
-    
+        # 2. Чтение данных с сеткой VIMB
+        vimb = pd.read_excel(self.hist_vimb_file)
+        
+        # 3. Отбираем период из исторической сетки Palomars, для которого будем производить преобразования.
+        plmrs = palomars[(palomars['Дата'] >= start_date) & (palomars['Дата'] <= stop_date)].reset_index(drop = True)
+        vimb = vimb[(vimb['Дата'] >= start_date) & (vimb['Дата'] <= stop_date)].reset_index(drop = True)
+
+        # 4. Реализация процесса сопоставления сеток
+        matcher = ProgramMatcher(self.channel, self.vocabulary, self.matched_grid_file, plmrs, vimb)
+        result_webs, not_matched = matcher.match_vimb_with_palomars_grids(self.cities_file)
+
+        # 5. Обновление файла с фактическими данными по выбранному каналу
+        matcher.update_file(result_webs, 'Sheet1')
+
 
     def unified_pipeline(self, run_all: bool = True, **kwargs):
         """
@@ -176,7 +219,10 @@ class ChannelAnalysisMaster:
         Args:
             run_all: Если True, запускает все доступные пайплайны
             **kwargs: Можно передать какие пайплайны запускать:
-                      run_auedience=True/False, run_web=True/False и т.д.
+                      run_auedience = True/False, run_web = True/False, 
+                      run_plmrs = True/False, run_vimb = True/False, 
+                      run_matched = True/False, 
+                      matched_start_date = None, matched_stop_date = None  # Обязательные для matched пайплайна!
         """
         results = {}
         
@@ -185,8 +231,10 @@ class ChannelAnalysisMaster:
         run_web = kwargs.get('run_web', run_all or self.web_file)
         run_plmrs = kwargs.get('run_plmrs', run_all or self.weighted_share_file)
         run_vimb = kwargs.get('run_vimb', run_all or (self.new_vimb_grids and self.hist_vimb_file))
+        run_matched = kwargs.get('run_matched', run_all or (self.matched_grid_file and self.hist_vimb_file))
         
         print(Color.BOLD + f'🚀 Начинаю расчет для канала {self.channel}' + Color.END)
+
         # 1. Audience пайплайн
         if run_auedience and self.auedience_file:
             print(Color.BOLD + Color.VIOLET + '=== 🎬 Запуск выгрузки Total Channels Auedience пайплайна ===' + Color.END)
@@ -203,7 +251,7 @@ class ChannelAnalysisMaster:
                 if 'auedience' in results and results['auedience'] is not None:
                     print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
                     web_new, _ = results['web']
-                    results['plmrs'] = self.plmrs_web_pipeline(web_new)
+                    results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
 
                 else:
                     # Проверяем существование файла с Total TV Auedience. Без этого не можем продолжить!
@@ -216,17 +264,59 @@ class ChannelAnalysisMaster:
                         print(Color.BOLD + Color.GREEN + f'Файл c Total TV Auedience для канала {self.channel} найден!' + Color.END)
                         print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
                         web_new, _ = results['web']
-                        results['plmrs'] = self.plmrs_web_pipeline(web_new)
+                        results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
 
             else:
                 print('⏭️ Пропускаем PLMRS пайплайн: требуется выполнить web пайплайн')
         
         # 4. VIMB пайплайн
         if run_vimb and self.new_vimb_grids and self.hist_vimb_file:
-            print(Color.BOLD + Color.GREEN + '=== 📺 Запуск VIMB пайплайна ===' + Color.END)
+            print(Color.BOLD + Color.GREEN + '=== 📺 Запуск VIMB пайплайна (обновление исторической сетки VIMB) ===' + Color.END)
             results['vimb'] = self.vimb_web_pipeline()
+        
+        # 5. Matched Grids пайплайн (сопоставление сеток VIMB и Palomars)
+        if run_matched and self.matched_grid_file and self.hist_vimb_file:
+            # ВАЖНО: Для сопоставления сеток нужно явно передать даты через kwargs!
+            matched_start_date = kwargs.get('matched_start_date')
+            matched_stop_date = kwargs.get('matched_stop_date')
+
+            # Проверяем, что даты для сопоставления переданы
+            if matched_start_date is None or matched_stop_date is None:
+                print(
+                    Color.BOLD + Color.MAROON + \
+                    '❌ Ошибка: для Matched Grids пайплайна необходимо указать matched_start_date и matched_stop_date в kwargs!' + \
+                    Color.END
+                    )
+                print('💡 Пример: unified_pipeline(run_matched = True, matched_start_date = "2024-01-01", matched_stop_date = "2024-12-31")')
+                print('⏭️ Пропускаем Matched Grids пайплайн')
+
+            else:
+                # Определяем источник данных для Palomars grid
+                if self.weighted_share_file and os.path.exists(self.weighted_share_file):
+                    print(Color.BOLD + Color.DEEP_PINK + '=== 🔗 Запуск пайплайна сопоставления сеток VIMB-Palomars (использую существующий файл) ===' + Color.END)
+                    print(Color.BOLD + f'📅 Период сопоставления: {matched_start_date} - {matched_stop_date}' + Color.END)
+
+                    try:
+                        results['matched_grids'] = self.matched_grids_pipeline(matched_start_date, matched_stop_date)
+
+                    except Exception as e:
+                        print(Color.BOLD + Color.RED + f'❌ Ошибка в Matched Grids пайплайне: {e}' + Color.END)
+
+                else:
+                    print(Color.BOLD + Color.RED + '❌ Ошибка: нет данных для сопоставления сеток (требуется weighted_share_file или результаты PLMRS пайплайна)' + Color.END)
+                    print('⏭️ Пропускаем Matched Grids пайплайн')
         
         print(Color.BOLD + f'✅ 🏁 Данные для канала {self.channel} успешно выгружены! Спасибо за Ваше ожидание! 😊' + Color.END)
         print('\n')
         
         return results
+
+
+
+class ChannelForecasterMaster:
+    """
+        Класс, в котором реализованы пайплайн для прогнозирования.
+
+        !!! В А Ж Н О !!!
+        Класс работает только для конкретного канала!
+    """
