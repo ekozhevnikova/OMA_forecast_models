@@ -1699,7 +1699,7 @@ class VIMBGridProcessor(BaseParser):
         warnings = self.check_program_gaps(general_result)
         # Выводим результаты
         if warnings:
-            print(Color.RED + f'Найдены разрывы более 30 мин для канала {self.channel_name}' + Color.END)
+            print(Color.BOLD + Color.MAROON + f'Найдены разрывы более 30 мин для канала {self.channel_name}' + Color.END)
             for i, warning in enumerate(warnings, 1):
                 print(f"\n{i}. Для {warning['дата']} предупреждение: {warning['предупреждение']}")
                 print("-" * 80)
@@ -2372,19 +2372,17 @@ class VIMBGridProcessor(BaseParser):
             extra_days = days_set - expected_days
             
             if missing_days:
-                print(f'❌ ОШИБКА: В {year}-{month:02d} отсутствуют дни: {sorted(missing_days)}')
+                print(Color.BOLD + Color.RED + '🚩 WARNING:' + Color.END + f' В {year}-{month:02d} отсутствуют дни: {sorted(missing_days)}')
                 print(f'   Должно быть дней: {correct_days}, имеется: {len(days_set)}')
             
             if extra_days:
-                print(f'❌ ОШИБКА: В {year}-{month:02d} найдены лишние дни: {sorted(extra_days)}')
+                print(Color.BOLD + Color.RED + f'❌ ОШИБКА:' + Color.END + f' В {year}-{month:02d} найдены лишние дни: {sorted(extra_days)}')
             
             # Проверяем непрерывность дней
             if actual_days and len(actual_days) != actual_days[-1] - actual_days[0] + 1:
-                print(f'⚠️ ПРЕДУПРЕЖДЕНИЕ: В {year}-{month:02d} дни идут не подряд')
+                print(Color.BOLD + Color.RED + '⚠️ ПРЕДУПРЕЖДЕНИЕ:' + Color.END + f' В {year}-{month:02d} дни идут не подряд')
                 print(f'Присутствуют дни: {actual_days}')
         
-        #print(f"\nПроверка месяцев завершена. Всего уникальных месяцев: {len(month_days)}")
-
 
         corrections_made = False
         # Проверка, что каждый день начинается в 05:00:00 и заканчивается в 05:00:00
@@ -2431,21 +2429,21 @@ class VIMBGridProcessor(BaseParser):
             # Если дней с профилактикой не обнаружено
             if prophylactic_count == 0:
                 if len(start) == 0 and len(table_check) != 1 :
-                    print(f'⚠️ Для {date} не найдена стартовая программа дня.')
+                    #print(f'⚠️ Для {date} не найдена стартовая программа дня.')
 
                     # Если разница между фактической датой старта и нужной больше 45 мин, то замена не производится
                     if abs(old_start_dt - need_start_dt).total_seconds() / 60.0 < 45:
-                        print(f'Делаем замену с {old_start} на 05:00:00.')
+                        #print(f'Делаем замену с {old_start} на 05:00:00.')
                         df.loc[first_idx_original, 'Время выхода'] = '05:00:00'
                         corrections_made = True
                         time_changed = True
 
                 elif len(stop) == 0  and len(table_check) != 1:
-                    print(f'⚠️ Для {date} не найдена кульминационная программа дня')
+                    #print(f'⚠️ Для {date} не найдена кульминационная программа дня')
 
                     # Если разница между фактической датой окончания и нужной больше 45 мин, то замена не производится
                     if (abs(old_end_dt - need_end_dt).total_seconds()) / 60.0 < 45:
-                        print(f'Делаем замену с {old_end} на 04:59:59.')
+                        #print(f'Делаем замену с {old_end} на 04:59:59.')
                         df.loc[last_idx_original, 'Время окончания'] = '04:59:59'
                         corrections_made = True
                         time_changed = True
@@ -2460,7 +2458,7 @@ class VIMBGridProcessor(BaseParser):
             
             # Если время было изменено, пересчитываем длительность для всех программ этого дня
             if time_changed:
-                print(f"Пересчитываем длительность программ для даты {date}...")
+                #print(f"Пересчитываем длительность программ для даты {date}...")
                 
                 # Получаем все индексы для текущей даты
                 day_indices = df[df[date_column] == date].index
@@ -2475,14 +2473,18 @@ class VIMBGridProcessor(BaseParser):
                     
                     if new_duration:
                         df.loc[idx, 'Продолжительность'] = new_duration
-                        if idx == first_idx_original or idx == last_idx_original:
-                            print(f"  Программа '{df.loc[idx, 'Название программы']}': новая длительность {new_duration}")
+                        #if idx == first_idx_original or idx == last_idx_original:
+                        #    print(f"  Программа '{df.loc[idx, 'Название программы']}': новая длительность {new_duration}")
                     else:
                         print(f"  Ошибка при вычислении длительности для программы '{df.loc[idx, 'Название программы']}'")
 
         # Удаляем строки с профилактикой из исходного df
         if delete_mask.any():
-            print(f'Найдены строки с ПРОФИЛАКТИКОЙ. Удалено строк с профилактикой: {delete_mask.sum()}')
+            print(
+                Color.BOLD + Color.DARK_ORANGE + \
+                f'Найдены строки с ПРОФИЛАКТИКОЙ для канала {self.channel_name}. Удалено строк с профилактикой: {delete_mask.sum()}' + \
+                Color.END
+            )
             df.drop(df[delete_mask].index, inplace = True)
         
         if corrections_made:
@@ -2540,15 +2542,16 @@ class VIMBGridProcessor(BaseParser):
             # Добавлен кусок для корректного обновления общего файла с сетками
             old_web['Дата'] = pd.to_datetime(old_web['Дата'])
             last_web = old_web['Дата'].max()
-            print(f"Последняя дата в общем файле: {last_web}")
+            print(f"Последняя дата в общем файле: {last_web.strftime('%Y-%m-%d')}")
 
             new['Дата'] = pd.to_datetime(new['Дата'])
             first_new = new['Дата'].min()
-            print(f"Первая дата в новых сетках: {first_new}")
+            print(f"Первая дата в новых сетках: {first_new.strftime('%Y-%m-%d')}")
 
             if first_new > last_web:
                 print(
-                    f'Обнаружен пропуск данных! Проверьте сетки... Последняя дата в файле {file_path} - {last_web}, первая дата в новых сетках {first_new}')
+                    f'Обнаружен пропуск данных! Проверьте сетки... ' + \
+                    f"Последняя дата в файле {file_path} - {last_web.strftime('%Y-%m-%d')}, первая дата в новых сетках {first_new.strftime('%Y-%m-%d')}")
                 sys.exit(1)
 
             # Если у канала эфирные сутки с 6:00, то делаем доп обработку

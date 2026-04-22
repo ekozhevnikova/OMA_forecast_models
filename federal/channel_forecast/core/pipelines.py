@@ -8,6 +8,8 @@ warnings.filterwarnings('ignore')
 
 from OMA_tools.io_data.colors import *
 from OMA_tools.federal.channel_forecast.grid_preprocessing import *
+from OMA_tools.federal.channel_forecast.core.simple_models import *
+
 
 
 class ChannelAnalysisMaster:
@@ -320,3 +322,112 @@ class ChannelForecasterMaster:
         !!! В А Ж Н О !!!
         Класс работает только для конкретного канала!
     """
+    def __init__(
+            self, 
+            channel: str, 
+            num_month: int, 
+            year: int,
+            n_weeks_ago: int,
+            n_days_in_fact: int,
+            historical_palomars_df: pd.DataFrame,
+            historical_vimb_df: pd.DataFrame,
+            cities_file: str,
+            holidays_file: str
+        ):
+        """
+            Атрибуты класса.
+
+            Параметры:
+            ----------
+            channel: str
+                Название канала, для которого будем строить прогноз.
+            num_month: int
+                Номер месяца, который будем прогнозировать.
+            year: int
+                Номер года, в котором будем строить прогноз.
+            n_weeks_ago: int
+                Количество недель из истории, которое будет браться для построения прогноза.
+            n_days_in_fact: int
+                Количество дней в факте. 
+                Если 0, то прогноз строится на весь месяц целиком. 
+                В противном случае на часть месяца. Остальные значения фактические!
+            historical_palomars_df: str
+                Путь к файлу со смэтченными сетками Palomars-VIMB
+            historical_vimb_df: str
+                Путь к файлу с историческими сетками VIMB
+            cities_file: str
+                Путь к файлу с городами по некоторым странам
+            holidays_file: str
+                Путь к файлу с праздниками и рабочими субботами для РФ
+
+        """
+        self.channel = channel
+        self.num_month = num_month
+        self.year = year
+        self.n_weeks_ago = n_weeks_ago
+        self.n_days_in_fact = n_days_in_fact
+        self.historical_palomars_file = historical_palomars_df
+        self.historical_vimb_file = historical_vimb_df
+        self.cities_file = cities_file
+        self.holidays_file = holidays_file
+
+        self.MONTHS = {
+            1: 'январь', 2: 'февраль', 3: 'март',
+            4: 'апрель', 5: 'май', 6: 'июнь',
+            7: 'июль', 8: 'август', 9: 'сентябрь',
+            10: 'октябрь', 11: 'ноябрь', 12: 'декабрь'
+        }
+
+        self.CHANNEL_TARGET_BCA = {
+            'ТНТ4': 'All 14-44', 
+            '2X2': 'All 11-34', 
+            'СТСЛав': 'All 11-34', 
+            'СОЛНЦЕ': 'All 10-45', 
+            'КАРУСЕЛЬ': 'All 4-45', 
+            'МатчТВ': 'M 14-59', 
+            'СУББОТА': 'W 18-45', 
+            'ЧЕ': 'All 25-49', 
+            'МузТВ': 'All 18-44', 
+            'МИР': 'All 25-59', 
+            'СПАС': 'All 18+', 
+            'ТВЦ': 'All 18+', 
+            'ЗВЕЗДА': 'All 18+', 
+            'Ю': 'W 14-44'
+        }
+
+        # Генерация праздников на основе json файла
+        self.work_saturdays, self.all_holidays = RuleBasedForecaster.build_russian_holidays(self.holidays_file)
+
+
+    def make_params_per_forecast(self):
+        """
+            Метод по генерации параметров для построения прогноза
+        """
+        historical_data_copy = self.historical_palomars_file.copy()
+        vimb_grid_copy = self.historical_vimb_file.copy()
+
+        # 1. Генерируем параметры для построения прогноза
+        self.params = RuleBasedForecaster.generate_forecast_period(
+            self.CHANNEL_TARGET_BCA, self.MONTHS, self.num_month, 
+            self.channel, self.year, self.n_days_in_fact
+        )
+
+        # ПОДГОТОВКА ДАННЫХ Palomars
+        fact_part_of_month = pd.DataFrame()
+        self.train = pd.DataFrame()
+
+        if self.params['last_fact_date']:
+            print(Color.BOLD + Color.GREEN + '🤩 Есть накопленный факт!' + Color.END)
+            mask_fact = (historical_data_copy['Дата'] >= self.params['start_month']) & (historical_data_copy['Дата'] <= self.params['last_fact_date'])
+            fact_part_of_month = historical_data_copy[mask_fact].reset_index(drop = True)
+            fact_part_of_month.rename(columns = {'Share_weighted': 'Share'}, inplace = True)
+        
+            # Отделяем тренировочную выборку, которую будем использовать для прогнозирования
+            self.train = historical_data_copy[historical_data_copy['Дата'] <= self.params['last_fact_date']].reset_index(drop = True)
+            self.train.rename(columns = {'Share_weighted': 'Share', 'Название программы': 'program_name'}, inplace = True)
+        
+        else:
+            print(Color.GREEN + Color.DARK_GRAY + '🙁 Накопленного факта нет. Буду строить прогноз на весь месяц целиком.' + Color.END)
+            # Отделяем тренировочную выборку, которую будем использовать для прогнозирования
+            self.train = historical_data_copy[historical_data_copy['Дата'] < self.params['start_month']].reset_index(drop = True)
+            self.train.rename(columns = {'Share_weighted': 'Share', 'Название программы': 'program_name'}, inplace = True)

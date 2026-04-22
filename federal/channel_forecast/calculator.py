@@ -788,7 +788,7 @@ class TVScheduleProcessor:
         plmrs_joined = self.join_broadcasts(self.palomars_init, type = 'palomars')
 
         # Исходная суммарная доля по дню
-        share_init = self.palomars_init['Share'].sum()
+        share_init = plmrs_joined['Share'].sum()
 
         # Округление времени
         calculator = TVShareCalculator(self.channel, plmrs_joined)
