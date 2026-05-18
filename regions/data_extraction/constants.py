@@ -165,18 +165,18 @@ class Constants:
             DATE_FILTER_BY_DATES = [(start_date, stop_date)]
         else:
             # ПОСЛЕДНИЕ 2 НЕДЕЛИ
-            DATE_FILTER_LAST_14_DAYS = Dates_Operations(number_of_previous_days=[-15, -2]).date_filter
+            DATE_FILTER_LAST_14_DAYS = Dates_Operations(number_of_previous_days=[-17, -4]).date_filter #заменить на -15, -2
             
             # ПОСЛЕДНИЕ 3 НЕДЕЛИ
-            DATE_FILTER_LAST_21_DAYS = Dates_Operations(number_of_previous_days=[-22, -2]).date_filter
+            DATE_FILTER_LAST_21_DAYS = Dates_Operations(number_of_previous_days=[-24, -4]).date_filter #заменить на -22, -2
             
             # ДВЕ НЕДЕЛИ ПЕРЕД ПОСЛЕДНИМИ ДВУМЯ НЕДЕЛЯМИ
-            DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-29, -16]).date_filter
+            DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-31, -18]).date_filter #заменить на -29, -16
             
             # ПОСЛЕДНИЕ 50 ДНЕЙ
-            date_start = datetime.now() + timedelta(days=-50)
+            date_start = datetime.now() + timedelta(days=-70) #заменить на -50
             start_date = date_start.strftime('%Y-%m-%d')
-            date_stop = datetime.now() + timedelta(days=-2)
+            date_stop = datetime.now() + timedelta(days=-4) #заменить на -2
             stop_date = date_stop.strftime('%Y-%m-%d')
             DATE_FILTER_BY_DATES = [(start_date, stop_date)]
 

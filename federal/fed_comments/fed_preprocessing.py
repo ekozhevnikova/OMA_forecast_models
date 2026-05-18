@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
+from datetime import datetime
+import glob
 import os
 import re
-from datetime import datetime
+
 
 
 class Federal_Preprocessing:
@@ -320,22 +322,77 @@ class Federal_Preprocessing:
             return None
 
         elif param == 'КУС':
+            # Преобразуем start_date в объект datetime
+            try:
+                start_date_obj = datetime.strptime(start_date, '%d.%m.%Y')
+            except ValueError:
+                # Пробуем другие форматы даты
+                try:
+                    start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                except ValueError:
+                    print(f"Ошибка: Не удалось преобразовать дату '{start_date}' в формат datetime")
+                    return None
+            
+            valid_files = []
+            
             for file in os.listdir(folder_path):
                 # Ищем файлы, которые содержат KUS и имеют расширение .xlsx
                 if 'KUS' in file and file.endswith('.xlsx'):
-                    #try:
                     file_path = os.path.join(folder_path, file)
-                    KUS_forecast = pd.read_excel(file_path, sheet_name = 'было-стало', skiprows = 5, nrows = 3)
                     
-                    # Вычленяем год из файла
-                    #forecast_year = int(re.findall(r'\d+', KUS_forecast['Unnamed: 13'].loc[0])[0])
-                    forecast_year = int(re.findall(r'\d+', KUS_forecast.columns[13])[0])
-                    
-                    if desired_year == forecast_year:
-                        print(f"Найден подходящий файл KUS: {file}")
-                        return file_path
+                    try:
+                        # Получаем дату модификации файла
+                        mod_timestamp = os.path.getmtime(file_path)
+                        mod_date = datetime.fromtimestamp(mod_timestamp)
+                        
+                        # Вычисляем разницу в днях
+                        date_diff = abs((mod_date - start_date_obj).days)
+                        
+                        # Проверяем, что дата модификации отличается не более чем на неделю
+                        if date_diff > 7:
+                            #print(f"Файл {file} пропущен: дата модификации {mod_date.strftime('%d.%m.%Y')} отличается от {start_date} на {date_diff} дней (>7)")
+                            continue
+                        
+                        # Читаем файл для проверки года
+                        KUS_forecast = pd.read_excel(file_path, sheet_name='было-стало', skiprows=5, nrows=3)
+                        
+                        # Вычленяем год из файла
+                        forecast_year = int(re.findall(r'\d+', KUS_forecast.columns[13])[0])
+                        
+                        if desired_year == forecast_year:
+                            valid_files.append({
+                                'path': file_path,
+                                'name': file,
+                                'mod_date': mod_date,
+                                'diff': date_diff,
+                                'mod_timestamp': mod_timestamp
+                            })
+                            #print(f"Найден подходящий файл KUS: {file} (модифицирован {mod_date.strftime('%d.%m.%Y')}, разница {date_diff} дн.)")
+                        else:
+                            print(f"Файл {file} пропущен: год прогноза {forecast_year} не соответствует желаемому {desired_year}")
                             
-            return None
+                    except Exception as e:
+                        print(f"Ошибка при обработке файла {file}: {e}")
+                        continue
+            
+            if not valid_files:
+                print(f"Не найден подходящий файл KUS за {desired_year} год с датой модификации ±7 дней от {start_date}")
+                return None
+            
+            # Выбираем файл с минимальным отклонением по дате
+            if len(valid_files) == 1:
+                selected_file = valid_files[0]
+                print(f"\n ✅ Выбран файл: {selected_file['name']}")
+            else:
+                # Сортируем по отклонению (чем меньше, тем лучше)
+                valid_files.sort(key=lambda x: x['diff'])
+                selected_file = valid_files[0]
+                print(f"\nНайдено несколько файлов. Выбран файл с минимальным отклонением ({selected_file['diff']} дн.): {selected_file['name']}")
+            
+            print(f"   Дата модификации: {selected_file['mod_date'].strftime('%d.%m.%Y')}")
+            return selected_file['path']
+                            
+        return None
     
 
     @staticmethod

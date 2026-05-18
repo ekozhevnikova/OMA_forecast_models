@@ -1,5 +1,12 @@
 import pandas as pd
 import numpy as np
+
+from datetime import date, datetime, timedelta
+from calendar import monthrange
+
+import os
+import glob
+
 from OMA_tools.io_data.colors import *
 
 
@@ -267,3 +274,71 @@ class Assistant:
             lambda x: f"{int(x//3600):02d}:{int((x%3600)//60):02d}:{int(x%60):02d}"
         )
         return df
+    
+
+    def get_month_boundaries(self, target_date):
+        """
+            Возвращает начальную и конечную даты месяца переданной даты, а также последнюю дату прошлого месяца.
+
+            Пример:
+                date_obj = '02.02.2026'
+                date_obj = datetime.strptime(date_obj, '%d.%m.%Y').date()
+                Именно date_obj нужно передавать!
+            
+            Параметры:
+            ----------
+                target_date: дата в формате datetime.date
+
+        """
+        # Стартовая дата текущего месяца
+        start_of_cur_month = date(target_date.year, target_date.month, 1)
+        
+        # Последний день текущего месяца
+        last_day_of_cur_month = monthrange(target_date.year, target_date.month)[1]
+        # Последняя дата текущего месяца
+        end_of_cur_month = date(target_date.year, target_date.month, last_day_of_cur_month)
+        # Последняя дата предыдущего месяца
+        last_day_prev_month = start_of_cur_month - timedelta(days = 1)
+
+        result = {
+            'start_of_month': start_of_cur_month.strftime('%d.%m.%Y'),
+            'end_of_month': end_of_cur_month.strftime('%d.%m.%Y'),
+            'last_day_prev_month': last_day_prev_month.strftime('%d.%m.%Y')
+        }
+        return result
+
+
+    def find_files_glob(self, directory: str, substring: str) -> list:
+        """
+            Поиск файлов с подстрокой используя glob.
+
+            Параметры:
+            ----------
+                directory: str
+                    Путь к директории, в которой будем будем искать файл с нужной подстрокой.
+                substring: str
+                    Подстрока для поиска файла.
+        """
+        pattern = f"{directory}/*{substring}*"
+        files = glob.glob(pattern)
+        
+        # Выводим названия найденных файлов
+        if files:
+            if len(files) == 1:
+                print(Color.BOLD + Color.SEA_GREEN + f"Найден файл с подстрокой '{substring}':" + Color.END)
+
+            else:
+                print(Color.BOLD + Color.SEA_GREEN + f"Найден {len(files)} файлов с подстрокой '{substring}':" + Color.END)
+
+            for file in files:
+                # Извлекаем только имя файла без пути
+                filename = os.path.basename(file)
+                print(Color.DODGER_BLUE + f"{file}" + Color.END)
+                print('\n')
+        else:
+            print(Color.BOLD + Color.RED + f"❌ Файлы с подстрокой '{substring}' не найдены в директории {directory}" + Color.END)
+
+        if len(files) == 1:
+            return files[0]
+            
+        return files

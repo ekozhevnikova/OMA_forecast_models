@@ -292,9 +292,12 @@ class Federal_Postprocessing:
             table_fmt_3 = workbook.add_format({'align': 'left', 'italic': True})
         
             #Стиль тела таблицы для Даты, Изменения и Порога
-            table_fmt_4 = workbook.add_format({'align': 'right', 'num_format': '0'})
+            table_fmt_4 = workbook.add_format({'align': 'right', 'num_format': '@'})
+
+            #Стиль тела таблицы для Изменения и Порога
+            table_fmt_5 = workbook.add_format({'align': 'right', 'num_format': '0'})
         
-            format_column = workbook.add_format({'align': 'right', 'bg_color': '#FFFFE1'})
+            format_column = workbook.add_format({'align': 'right', 'bg_color': '#FFFFE1', 'num_format': '0'})
         
             
             worksheet.write('A1', 'Канал', header_format)
@@ -307,7 +310,7 @@ class Federal_Postprocessing:
             worksheet.set_column('A:A', 14.0, table_fmt_1)
             worksheet.set_column('B:B', 11.7, table_fmt_1)
             worksheet.set_column('C:C', 13.9, table_fmt_4)
-            worksheet.set_column('D:D', 13.9, table_fmt_4)
+            worksheet.set_column('D:D', 13.9, table_fmt_5)
             worksheet.set_column('E:E', 10.7, format_column)
             worksheet.set_column('F:F', 55.0, table_fmt_3)
             worksheet.set_column('G:G', 145.0, table_fmt_2)

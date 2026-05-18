@@ -142,7 +142,6 @@ class SMI_info:
         return SMI_info.combine_comments(group, False)
 
     
-
     def read_smi_file(self, channel: str, month: str, channels_need_replace: dict, year: int):
         """
             Функция для чтения файла от отдела СМИ по переброскам.
@@ -180,7 +179,8 @@ class SMI_info:
                         'GRP сокращено', 
                         'GRP открыто', 
                         'Итог GRP в регионы -', 
-                        'Итог GRP из регионов +', 
+                        'Итог GRP из регионов +',
+                        'Дата запуска переброски', 
                         'Дата осуществления переброски', 
                         'Комментарий',
                         'excel_row'  # Сохраняем номер строки
@@ -211,23 +211,67 @@ class SMI_info:
 
             old_dates = list(volume_transfer['Дата осуществления переброски'])
             new_dates = []
+
             for i in range(len(old_dates)):
                 try:
-                    
-                    new_date = old_dates[i].strftime('%Y-%m-%d')
-                    new_dates.append(new_date)
-
-                except (ValueError, pd.errors.ParserError) as e:
-                    excel_row = excel_rows[i]
-                    
-                    error_msg = (
-                                f'Отдел СМИ забыл заполнить ячейку "Дата осуществления переброски" в строке {excel_row}. '
-                                f'Пожалуйста, заполните самостоятельно. '
-                                f'Скопируйте дату из столбца "Дата запуска переброски" из строки {excel_row} и вставьте её в ячейку {excel_row} столбца "Дата осуществления переброски". '
-                                f'Сохраните изменения в файле и запустите код повторно.'
+                    # Проверяем, является ли значение NaN или пустой строкой
+                    if pd.isna(old_dates[i]) or str(old_dates[i]).strip() == '':
+                        excel_row = excel_rows[i]
+                        # Берем значение из столбца 'Дата запуска переброски'
+                        launch_date = volume_transfer.iloc[i]['Дата запуска переброски']
+                        
+                        if pd.isna(launch_date) or str(launch_date).strip() == '':
+                            # Если и там пусто, тогда выдаем сообщение об ошибке
+                            error_msg = (
+                                f'Отдел СМИ забыл заполнить ячейки "Дата осуществления переброски" и "Дата запуска переброски" в строке {excel_row}. '
+                                f'Пожалуйста, заполните их самостоятельно и сохраните файл, затем запустите код повторно.'
                             )
-                    
+                            raise ValueError(error_msg)
+                        else:
+                            # Автоматически подставляем значение из 'Дата запуска переброски'
+                            try:
+                                if isinstance(launch_date, str):
+                                    new_date = pd.to_datetime(launch_date).strftime('%Y-%m-%d')
+                                else:
+                                    new_date = launch_date.strftime('%Y-%m-%d')
+                                new_dates.append(new_date)
+                                print(f'В строке {excel_row} автоматически заполнена "Дата осуществления переброски" значением "{new_date}" из "Дата запуска переброски"')
+                            except (ValueError, AttributeError) as e:
+                                error_msg = (
+                                    f'В строке {excel_row} не удалось преобразовать дату из столбца "Дата запуска переброски". '
+                                    f'Пожалуйста, проверьте формат даты в этой ячейке и исправьте его.'
+                                )
+                                raise ValueError(error_msg)
+                    else:
+                        # Если дата есть, пробуем преобразовать её обычным способом
+                        if isinstance(old_dates[i], str):
+                            new_date = pd.to_datetime(old_dates[i]).strftime('%Y-%m-%d')
+                        else:
+                            new_date = old_dates[i].strftime('%Y-%m-%d')
+                        new_dates.append(new_date)
+
+                except (ValueError, pd.errors.ParserError, AttributeError) as e:
+                    excel_row = excel_rows[i]
+                    error_msg = (
+                        f'Ошибка при обработке даты в строке {excel_row}: {str(e)}. '
+                        f'Пожалуйста, проверьте формат даты в столбцах "Дата осуществления переброски" и "Дата запуска переброски".'
+                    )
                     raise ValueError(error_msg)
+
+                #    new_date = old_dates[i].strftime('%Y-%m-%d')
+                #    new_dates.append(new_date)
+#
+                #except (ValueError, pd.errors.ParserError) as e:
+                #    excel_row = excel_rows[i]
+                #    
+                #    error_msg = (
+                #                f'Отдел СМИ забыл заполнить ячейку "Дата осуществления переброски" в строке {excel_row}. '
+                #                f'Пожалуйста, заполните самостоятельно. '
+                #                f'Скопируйте дату из столбца "Дата запуска переброски" из строки {excel_row} и вставьте её в ячейку {excel_row} столбца "Дата осуществления переброски". '
+                #                f'Сохраните изменения в файле и запустите код повторно.'
+                #            )
+                #    
+                #    raise ValueError(error_msg)
 
             volume_transfer['Дата осуществления переброски'] = volume_transfer['Дата осуществления переброски'].replace(old_dates, new_dates)
             volume_transfer_ = volume_transfer.loc[(volume_transfer['Месяц'] == month) & (volume_transfer['Канал'] == channel)].reset_index(drop = True)

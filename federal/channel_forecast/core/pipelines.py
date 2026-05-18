@@ -2,6 +2,8 @@ import os
 import numpy as np
 import pandas as pd
 from typing import Optional
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -32,7 +34,6 @@ class ChannelAnalysisMaster:
             auedience_file: Optional[str] = None,           # опциональный параметр
             web_file: Optional[str] = None,                 # опциональный параметр
             weighted_share_file: Optional[str] = None,      # опциональный параметр
-            new_vimb_grids: Optional[str] = None,           # опциональный параметр
             hist_vimb_file: Optional[str] = None            # опциональный параметр
     ):
 
@@ -44,8 +45,6 @@ class ChannelAnalysisMaster:
                     Полный путь к файлу с исторической сеткой Mediascope для какого-то конкретного канала.
                 weighted_share_file: str: 
                     Полный путь к файлу со взвешенной долей и исторической сеткой Mediascope для какого-то конкретного канала.
-                new_vimb_grids: str
-                    Полный путь к файлам с новыми сетками для какого-то конкретного канала.
                 hist_vimb_file: str
                     Полный путь к файлу с исторической сеткой VIMB для какого-то конкретного канала.
                 matched_grid_file: str
@@ -65,7 +64,6 @@ class ChannelAnalysisMaster:
         self.auedience_file = auedience_file
         self.web_file = web_file
         self.weighted_share_file = weighted_share_file
-        self.new_vimb_grids = new_vimb_grids
         self.hist_vimb_file = hist_vimb_file
         self.matched_grid_file = matched_grid_file
         self.vocabulary_file = vocabulary_file
@@ -79,7 +77,7 @@ class ChannelAnalysisMaster:
         self.PATTERN = '|'.join(self.STOP_WORDS)
 
         # Справочник с особенными названиями для сопоставления программ по выбранному каналу
-        self.vocabulary = pd.read_excel(self.vocabulary_file, sheet_name = f'{self.channel}')
+        self.vocabulary = pd.read_excel(self.vocabulary_file, sheet_name=f'{self.channel}')
     
 
     def auedience_pipeline(self):
@@ -118,7 +116,7 @@ class ChannelAnalysisMaster:
         # 1. Выгрузка новых исторических данных
         web_new = plmrs_parser.make_web(self.date_filter, self.company_filter, self.basedemo_filter)
 
-        web_new = web_new[~web_new['Название программы'].str.contains(self.PATTERN, case = False, na = False)]
+        web_new = web_new[~web_new['Название программы'].str.contains(self.PATTERN, case=False, na=False)]
 
         # 2. Обновление таблицы
         print('🔄 Обновляю файл с исторической сеткой Mediascope. Пожалуйста, подождите ...')
@@ -129,9 +127,9 @@ class ChannelAnalysisMaster:
         plmrs_parser.make_style_of_web_table(self.web_df, 'Sheet1')
 
         # Если нужно вернуть в строковый формат
-        web_new['Дата'] =  web_new['Дата'].dt.strftime('%Y-%m-%d')
-        web_new['Время выхода'] =  web_new['Время выхода'].dt.strftime('%H:%M:%S')
-        web_new['Время окончания'] =  web_new['Время окончания'].dt.strftime('%H:%M:%S')
+        web_new['Дата'] = web_new['Дата'].dt.strftime('%Y-%m-%d')
+        web_new['Время выхода'] = web_new['Время выхода'].dt.strftime('%H:%M:%S')
+        web_new['Время окончания'] = web_new['Время окончания'].dt.strftime('%H:%M:%S')
 
         return web_new, self.web_df
     
@@ -143,7 +141,7 @@ class ChannelAnalysisMaster:
                 end_time_col: str = 'Время окончания',
                 date_col: str = 'Дата'):
         """
-            Пайплайн для обновления и записис в файл рассчитанных взвешенных долей для какого-то конкретного Федерального канала и конкретной БЦА.
+            Пайплайн для обновления и записи в файл рассчитанных взвешенных долей для какого-то конкретного Федерального канала и конкретной БЦА.
         """
         # Если файл не передан, то расчет взвешенных долей не будет реализован.
         if not self.weighted_share_file:
@@ -166,29 +164,9 @@ class ChannelAnalysisMaster:
         return updated
     
 
-    def vimb_web_pipeline(self):
-        """
-            Пайплайн для обновления исторической сетки VIMB.
-        """
-        # Если файлы с новыми сетками, историческими данными не переданы, то пайплайн не запустится.
-        if not self.new_vimb_grids:
-            raise ValueError('🚨 Для выполнения VIMB пайплайна необходимо указать путь к файлам/папке с новыми сетками VIMB.')
-
-        if not self.hist_vimb_file:
-            raise ValueError('🚨 Для выполнения VIMB пайплайна необходимо указать путь к файлу с исторической сеткой VIMB.')
-        
-        vimb_parser = VIMBGridProcessor(self.hist_vimb_file, self.channel)
-
-        # 1. Составление таблицы с новой сеткой
-        new_grids = vimb_parser.parse_new_vimb_grids(self.new_vimb_grids)
-
-        # 2. Обновление файла с историческими данными
-        vimb_parser.update_vimb_file(new_grids)
-    
-
     def matched_grids_pipeline(self, start_date: str, stop_date: str):
         """
-            Паплайн для объединения сеток VIMB и Palomars между собой
+            Пайплайн для объединения сеток VIMB и Palomars между собой
             Параметры:
             ----------
                 start_date: str
@@ -203,8 +181,8 @@ class ChannelAnalysisMaster:
         vimb = pd.read_excel(self.hist_vimb_file)
         
         # 3. Отбираем период из исторической сетки Palomars, для которого будем производить преобразования.
-        plmrs = palomars[(palomars['Дата'] >= start_date) & (palomars['Дата'] <= stop_date)].reset_index(drop = True)
-        vimb = vimb[(vimb['Дата'] >= start_date) & (vimb['Дата'] <= stop_date)].reset_index(drop = True)
+        plmrs = palomars[(palomars['Дата'] >= start_date) & (palomars['Дата'] <= stop_date)].reset_index(drop=True)
+        vimb = vimb[(vimb['Дата'] >= start_date) & (vimb['Дата'] <= stop_date)].reset_index(drop=True)
 
         # 4. Реализация процесса сопоставления сеток
         matcher = ProgramMatcher(self.channel, self.vocabulary, self.matched_grid_file, plmrs, vimb)
@@ -222,17 +200,15 @@ class ChannelAnalysisMaster:
             run_all: Если True, запускает все доступные пайплайны
             **kwargs: Можно передать какие пайплайны запускать:
                       run_auedience = True/False, run_web = True/False, 
-                      run_plmrs = True/False, run_vimb = True/False, 
-                      run_matched = True/False, 
+                      run_plmrs = True/False, run_matched = True/False, 
                       matched_start_date = None, matched_stop_date = None  # Обязательные для matched пайплайна!
         """
         results = {}
         
         # Определяем, какие пайплайны запускать
-        run_auedience = kwargs.get('run_auedience', run_all or self.auedience_file)
-        run_web = kwargs.get('run_web', run_all or self.web_file)
-        run_plmrs = kwargs.get('run_plmrs', run_all or self.weighted_share_file)
-        run_vimb = kwargs.get('run_vimb', run_all or (self.new_vimb_grids and self.hist_vimb_file))
+        run_auedience = kwargs.get('run_auedience', run_all or bool(self.auedience_file))
+        run_web = kwargs.get('run_web', run_all or bool(self.web_file))
+        run_plmrs = kwargs.get('run_plmrs', run_all or bool(self.weighted_share_file))
         run_matched = kwargs.get('run_matched', run_all or (self.matched_grid_file and self.hist_vimb_file))
         
         print(Color.BOLD + f'🚀 Начинаю расчет для канала {self.channel}' + Color.END)
@@ -254,29 +230,21 @@ class ChannelAnalysisMaster:
                     print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
                     web_new, _ = results['web']
                     results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
-
                 else:
                     # Проверяем существование файла с Total TV Auedience. Без этого не можем продолжить!
                     if not os.path.exists(self.auedience_file):
                         print(Color.BOLD + Color.RED + f'❌ Ошибка: файл c Total TV Auedience для канала {self.channel} не найден: {self.auedience_file}' + Color.END)
                         print('⏭️ Пропускаем PLMRS пайплайн: требуется файл аудитории')
-                    
                     else:
                         self.total_tv_auedience = pd.read_excel(self.auedience_file)
                         print(Color.BOLD + Color.GREEN + f'Файл c Total TV Auedience для канала {self.channel} найден!' + Color.END)
                         print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
                         web_new, _ = results['web']
                         results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
-
             else:
                 print('⏭️ Пропускаем PLMRS пайплайн: требуется выполнить web пайплайн')
         
-        # 4. VIMB пайплайн
-        if run_vimb and self.new_vimb_grids and self.hist_vimb_file:
-            print(Color.BOLD + Color.GREEN + '=== 📺 Запуск VIMB пайплайна (обновление исторической сетки VIMB) ===' + Color.END)
-            results['vimb'] = self.vimb_web_pipeline()
-        
-        # 5. Matched Grids пайплайн (сопоставление сеток VIMB и Palomars)
+        # 4. Matched Grids пайплайн (сопоставление сеток VIMB и Palomars)
         if run_matched and self.matched_grid_file and self.hist_vimb_file:
             # ВАЖНО: Для сопоставления сеток нужно явно передать даты через kwargs!
             matched_start_date = kwargs.get('matched_start_date')
@@ -288,10 +256,9 @@ class ChannelAnalysisMaster:
                     Color.BOLD + Color.MAROON + \
                     '❌ Ошибка: для Matched Grids пайплайна необходимо указать matched_start_date и matched_stop_date в kwargs!' + \
                     Color.END
-                    )
-                print('💡 Пример: unified_pipeline(run_matched = True, matched_start_date = "2024-01-01", matched_stop_date = "2024-12-31")')
+                )
+                print('💡 Пример: unified_pipeline(run_matched=True, matched_start_date="2024-01-01", matched_stop_date="2024-12-31")')
                 print('⏭️ Пропускаем Matched Grids пайплайн')
-
             else:
                 # Определяем источник данных для Palomars grid
                 if self.weighted_share_file and os.path.exists(self.weighted_share_file):
@@ -300,15 +267,135 @@ class ChannelAnalysisMaster:
 
                     try:
                         results['matched_grids'] = self.matched_grids_pipeline(matched_start_date, matched_stop_date)
-
                     except Exception as e:
                         print(Color.BOLD + Color.RED + f'❌ Ошибка в Matched Grids пайплайне: {e}' + Color.END)
-
                 else:
                     print(Color.BOLD + Color.RED + '❌ Ошибка: нет данных для сопоставления сеток (требуется weighted_share_file или результаты PLMRS пайплайна)' + Color.END)
                     print('⏭️ Пропускаем Matched Grids пайплайн')
         
         print(Color.BOLD + f'✅ 🏁 Данные для канала {self.channel} успешно выгружены! Спасибо за Ваше ожидание! 😊' + Color.END)
+        print('\n')
+        
+        return results
+    
+
+    def unified_pipeline_new(self, run_all: bool = True, parallel: bool = True, **kwargs):
+        """
+            Гибкий объединенный пайплайн с поддержкой параллельного выполнения.
+            
+            Параметры:
+            ----------
+                run_all: bool
+                    Если True, запускает все доступные пайплайны
+                parallel: bool
+                    Если True, выполняет независимые пайплайны параллельно
+                **kwargs: 
+                    Можно передать какие пайплайны запускать
+        """
+        results = {}
+        
+        # Определяем, какие пайплайны запускать
+        run_auedience = kwargs.get('run_auedience', run_all or bool(self.auedience_file))
+        run_web = kwargs.get('run_web', run_all or bool(self.web_file))
+        run_plmrs = kwargs.get('run_plmrs', run_all or bool(self.weighted_share_file))
+        run_matched = kwargs.get('run_matched', run_all or (self.matched_grid_file and self.hist_vimb_file))
+        
+        print(Color.BOLD + f'🚀 Начинаю расчет для канала {self.channel}' + Color.END)
+        
+        if parallel:
+            # Параллельное выполнение независимых пайплайнов
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                futures = {}
+                
+                # Audience и Web независимы, выполняем параллельно
+                if run_auedience and self.auedience_file:
+                    print(Color.BOLD + Color.VIOLET + '=== 🎬 Запуск выгрузки Total Channels Auedience пайплайна ===' + Color.END)
+                    futures[executor.submit(self.auedience_pipeline)] = 'auedience'
+                
+                if run_web and self.web_file:
+                    print(Color.BOLD + Color.BLUE + '=== 🌐 Запуск выгрузки сетки Mediascope пайплайна ===' + Color.END)
+                    futures[executor.submit(self.mediascope_web_pipeline)] = 'web'
+                
+                # Собираем результаты
+                for future in as_completed(futures):
+                    key = futures[future]
+                    try:
+                        results[key] = future.result()
+                    except Exception as e:
+                        print(Color.BOLD + Color.RED + f'❌ Ошибка в {key}: {e}' + Color.END)
+            
+            # PLMRS пайплайн (зависит от Audience и Web)
+            if run_plmrs and self.weighted_share_file:
+                # Проверяем наличие результатов web
+                if 'web' in results and results['web'] is not None:
+                    web_new = results['web'][0]  # mediascope_web_pipeline возвращает (web_new, self.web_df)
+                    
+                    # Проверяем наличие audience
+                    if 'auedience' in results and results['auedience'] is not None:
+                        print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                        results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
+                    
+                    elif self.auedience_file and os.path.exists(self.auedience_file):
+                        # Загружаем из файла, если audience не был вычислен
+                        self.total_tv_auedience = pd.read_excel(self.auedience_file)
+                        print(Color.BOLD + Color.GREEN + f'Файл c Total TV Auedience для канала {self.channel} найден!' + Color.END)
+                        print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                        results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
+                    else:
+                        print(Color.BOLD + Color.RED + '❌ Нет данных аудитории для PLMRS пайплайна' + Color.END)
+                else:
+                    print(Color.BOLD + Color.YELLOW + '⏭️ Пропускаем PLMRS пайплайн: требуется выполнить web пайплайн' + Color.END)
+            
+            # Matched Grids пайплайн
+            if run_matched and self.matched_grid_file and self.hist_vimb_file:
+                matched_start_date = kwargs.get('matched_start_date')
+                matched_stop_date = kwargs.get('matched_stop_date')
+                
+                if matched_start_date is None or matched_stop_date is None:
+                    print(Color.BOLD + Color.MAROON + 
+                        '❌ Ошибка: для Matched Grids пайплайна необходимо указать matched_start_date и matched_stop_date в kwargs!' + 
+                        Color.END)
+                    print('💡 Пример: unified_pipeline(run_matched=True, matched_start_date="2024-01-01", matched_stop_date="2024-12-31")')
+                elif self.weighted_share_file and os.path.exists(self.weighted_share_file):
+                    print(Color.BOLD + Color.DEEP_PINK + '=== 🔗 Запуск пайплайна сопоставления сеток VIMB-Palomars ===' + Color.END)
+                    try:
+                        results['matched_grids'] = self.matched_grids_pipeline(matched_start_date, matched_stop_date)
+                    except Exception as e:
+                        print(Color.BOLD + Color.RED + f'❌ Ошибка в Matched Grids: {e}' + Color.END)
+                else:
+                    print(Color.BOLD + Color.RED + '❌ Нет данных для сопоставления сеток' + Color.END)
+        
+        else:
+            # Синхронное выполнение
+            # 1. Audience пайплайн
+            if run_auedience and self.auedience_file:
+                print(Color.BOLD + Color.VIOLET + '=== 🎬 Запуск выгрузки Total Channels Auedience пайплайна ===' + Color.END)
+                results['auedience'] = self.auedience_pipeline()
+            
+            # 2. Web пайплайн
+            if run_web and self.web_file:
+                print(Color.BOLD + Color.BLUE + '=== 🌐 Запуск выгрузки сетки Mediascope пайплайна ===' + Color.END)
+                results['web'] = self.mediascope_web_pipeline()
+            
+            # 3. PLMRS пайплайн
+            if run_plmrs and self.weighted_share_file:
+                if 'web' in results and results['web'] is not None:
+                    web_new = results['web'][0]
+                    if 'auedience' in results and results['auedience'] is not None:
+                        print(Color.BOLD + Color.ORANGE + '=== ⚖️ Запуск расчета взвешенных долей ===' + Color.END)
+                        results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
+                    elif self.auedience_file and os.path.exists(self.auedience_file):
+                        self.total_tv_auedience = pd.read_excel(self.auedience_file)
+                        results['weighted_shares'] = self.plmrs_web_pipeline(web_new)
+            
+            # 4. Matched Grids пайплайн
+            if run_matched and self.matched_grid_file and self.hist_vimb_file:
+                matched_start_date = kwargs.get('matched_start_date')
+                matched_stop_date = kwargs.get('matched_stop_date')
+                if matched_start_date and matched_stop_date and self.weighted_share_file:
+                    results['matched_grids'] = self.matched_grids_pipeline(matched_start_date, matched_stop_date)
+        
+        print(Color.BOLD + f'✅ 🏁 Данные для канала {self.channel} успешно выгружены! 😊' + Color.END)
         print('\n')
         
         return results
@@ -331,8 +418,10 @@ class ChannelForecasterMaster:
             n_days_in_fact: int,
             historical_palomars_df: pd.DataFrame,
             historical_vimb_df: pd.DataFrame,
-            cities_file: str,
-            holidays_file: str
+            vocabulary: pd.DataFrame,
+            cities: dict,
+            holidays_file: str,
+            share_fact_df: str,
         ):
         """
             Атрибуты класса.
@@ -351,14 +440,18 @@ class ChannelForecasterMaster:
                 Количество дней в факте. 
                 Если 0, то прогноз строится на весь месяц целиком. 
                 В противном случае на часть месяца. Остальные значения фактические!
-            historical_palomars_df: str
+            historical_palomars_df: pd.DataFrame
                 Путь к файлу со смэтченными сетками Palomars-VIMB
-            historical_vimb_df: str
+            historical_vimb_df: pd.DataFrame
                 Путь к файлу с историческими сетками VIMB
-            cities_file: str
-                Путь к файлу с городами по некоторым странам
+            vocabulary: pd.DataFrame
+                Таблица-справочник с некоторыми названиями программ
+            cities: dict
+                Словарь с городами разных стран
             holidays_file: str
                 Путь к файлу с праздниками и рабочими субботами для РФ
+            share_fact_file: str
+                Путь к файлу с фактическими значениями долей в разбивке по дням
 
         """
         self.channel = channel
@@ -366,10 +459,12 @@ class ChannelForecasterMaster:
         self.year = year
         self.n_weeks_ago = n_weeks_ago
         self.n_days_in_fact = n_days_in_fact
-        self.historical_palomars_file = historical_palomars_df
-        self.historical_vimb_file = historical_vimb_df
-        self.cities_file = cities_file
+        self.historical_palomars_df = historical_palomars_df
+        self.historical_vimb_df = historical_vimb_df
+        self.vocabulary = vocabulary
+        self.cities = cities
         self.holidays_file = holidays_file
+        self.share_fact_df = share_fact_df
 
         self.MONTHS = {
             1: 'январь', 2: 'февраль', 3: 'март',
@@ -382,29 +477,29 @@ class ChannelForecasterMaster:
             'ТНТ4': 'All 14-44', 
             '2X2': 'All 11-34', 
             'СТСЛав': 'All 11-34', 
-            'СОЛНЦЕ': 'All 10-45', 
-            'КАРУСЕЛЬ': 'All 4-45', 
+            'Солнце': 'All 10-45', 
+            'Карусель': 'All 4-45', 
             'МатчТВ': 'M 14-59', 
-            'СУББОТА': 'W 18-45', 
-            'ЧЕ': 'All 25-49', 
+            'Суббота': 'W 18-45', 
+            'Че': 'All 25-49', 
             'МузТВ': 'All 18-44', 
-            'МИР': 'All 25-59', 
-            'СПАС': 'All 18+', 
+            'Мир': 'All 25-59', 
+            'Спас': 'All 18+', 
             'ТВЦ': 'All 18+', 
-            'ЗВЕЗДА': 'All 18+', 
+            'Звезда': 'All 18+', 
             'Ю': 'W 14-44'
         }
 
         # Генерация праздников на основе json файла
-        self.work_saturdays, self.all_holidays = RuleBasedForecaster.build_russian_holidays(self.holidays_file)
+        #self.work_saturdays, self.all_holidays = RuleBasedForecaster.build_russian_holidays(self.holidays_file)
 
 
     def make_params_per_forecast(self):
         """
             Метод по генерации параметров для построения прогноза
         """
-        historical_data_copy = self.historical_palomars_file.copy()
-        vimb_grid_copy = self.historical_vimb_file.copy()
+        historical_data_copy = self.historical_palomars_df.copy()
+        vimb_grid_copy = self.historical_vimb_df.copy()
 
         # 1. Генерируем параметры для построения прогноза
         self.params = RuleBasedForecaster.generate_forecast_period(
@@ -414,20 +509,93 @@ class ChannelForecasterMaster:
 
         # ПОДГОТОВКА ДАННЫХ Palomars
         fact_part_of_month = pd.DataFrame()
-        self.train = pd.DataFrame()
+        train = pd.DataFrame()
+        vimb_init = pd.DataFrame()
 
         if self.params['last_fact_date']:
             print(Color.BOLD + Color.GREEN + '🤩 Есть накопленный факт!' + Color.END)
-            mask_fact = (historical_data_copy['Дата'] >= self.params['start_month']) & (historical_data_copy['Дата'] <= self.params['last_fact_date'])
-            fact_part_of_month = historical_data_copy[mask_fact].reset_index(drop = True)
-            fact_part_of_month.rename(columns = {'Share_weighted': 'Share'}, inplace = True)
+
+            # Выделяем фактические значения долей из файла с фактическими данными
+            mask_fact = (self.share_fact_df['Дата'] >= self.params['start_month']) & (self.share_fact_df['Дата'] <= self.params['last_fact_date'])
+            fact_part_of_month = self.share_fact_df[mask_fact].reset_index(drop = True)
+            #fact_part_of_month.rename(columns = {f'{self.channel}': 'Share'}, inplace = True)
         
             # Отделяем тренировочную выборку, которую будем использовать для прогнозирования
-            self.train = historical_data_copy[historical_data_copy['Дата'] <= self.params['last_fact_date']].reset_index(drop = True)
-            self.train.rename(columns = {'Share_weighted': 'Share', 'Название программы': 'program_name'}, inplace = True)
+            train = historical_data_copy[historical_data_copy['Дата'] <= self.params['last_fact_date']].reset_index(drop = True)
+            train.rename(columns = {'Share_weighted': 'Share', 'Название программы': 'program_name'}, inplace = True)
+
+            # Выделяем даты в VIMB, которые будем прогнозировать
+            mask_part_month = (vimb_grid_copy['Дата'] > self.params['last_fact_date']) & (vimb_grid_copy['Дата'] <= self.params['stop_month'])
+            vimb_init = vimb_grid_copy[mask_part_month].reset_index(drop = True)
         
         else:
             print(Color.GREEN + Color.DARK_GRAY + '🙁 Накопленного факта нет. Буду строить прогноз на весь месяц целиком.' + Color.END)
             # Отделяем тренировочную выборку, которую будем использовать для прогнозирования
-            self.train = historical_data_copy[historical_data_copy['Дата'] < self.params['start_month']].reset_index(drop = True)
-            self.train.rename(columns = {'Share_weighted': 'Share', 'Название программы': 'program_name'}, inplace = True)
+            train = historical_data_copy[historical_data_copy['Дата'] < self.params['start_month']].reset_index(drop = True)
+            train.rename(columns = {'Share_weighted': 'Share', 'Название программы': 'program_name'}, inplace = True)
+
+            # Выделяем даты в VIMB, которые будем прогнозировать
+            mask_full_month = (vimb_grid_copy['Дата'] >= self.params['start_date_forecast']) & (vimb_grid_copy['Дата'] <= self.params['stop_month'])
+            vimb_init = vimb_grid_copy[mask_full_month].reset_index(drop = True)
+        
+
+        self.input_params = {
+            'train_df': train,
+            'fact_df': fact_part_of_month,
+            'vimb_df': vimb_init
+        }
+        
+        return self.input_params
+    
+
+    def fit_predict(self):
+        """
+            Метод для прогнозирования.
+        """
+        # Финальная подготовка данных
+        data_prepr = DataPreparator(self.channel, self.input_params['train_df'], self.input_params['vimb_df'], self.vocabulary)
+        all_programs_to_forecast = data_prepr.prepare(self.year, self.num_month, self.cities)
+
+        model = RuleBasedForecaster(
+            self.channel, self.year, self.num_month, 
+            self.params['start_date_forecast'], self.input_params['train_df'],
+            self.holidays_file
+        )
+
+        # Итоговая таблица с прогнозом
+        forecast_df = model.pipeline_forecaster(
+            all_programs_to_forecast, self.input_params['fact_df'], self.n_weeks_ago
+        )
+        return forecast_df
+    
+
+    def pipeline_predictor(self):
+        """
+            Полный пайплайн для прогнозирования.
+        """
+        print(Color.BOLD + Color.ROYAL_BLUE + f'=== 🧘 Начинаю построение прогноза для канала {self.channel} ===' + Color.END)
+        print(f'Количество дней в факте {self.n_days_in_fact}. Буду строить прогноз, опираясь на данные за последние {self.n_weeks_ago} недели.')
+        print(Color.INDIGO + '🧘 Генерирую входные параметры для прогнозирования и строю прогноз Пожалуйста, подождите ...')
+
+        # 1. Генерация входных параметров
+        self.input_params = self.make_params_per_forecast()
+        
+        # 2. Построение прогноза
+        forecast_df = self.fit_predict()
+
+        data_forecast = forecast_df.groupby('Дата', as_index = False)['Share'].sum()
+        data_forecast.rename(columns = {'Share': f'{self.channel}'}, inplace = True)
+
+        forecast_df = pd.DataFrame()
+        # Если есть накопленный факт, то мы соединяем между собой две таблицы
+        if len(self.input_params['fact_df']) != 0:
+            df_fact = self.input_params['fact_df'][['Дата', f'{self.channel}']]
+            #df_fact.rename(columns = {f'{self.channel}': 'Share'}, inplace = True)
+            forecast_df = pd.concat([df_fact, data_forecast]).reset_index(drop = True)
+
+        else:
+            forecast_df = data_forecast
+
+        print(Color.BOLD + Color.CRIMSON + '⭐ Прогноз завершён!' + Color.END + '\n')
+
+        return forecast_df

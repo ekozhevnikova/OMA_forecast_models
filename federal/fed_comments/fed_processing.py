@@ -132,9 +132,21 @@ class Federal_Processing:
         try:
             df_limits = pd.read_excel(limits_file)
             df_limits['Канал'] = df_limits['Канал'].str.upper()
+            df_limits['Канал'].replace(
+                                {
+                                    'ПЕРВЫЙ': 'ПЕРВЫЙ КАНАЛ', 
+                                    '5 КАНАЛ': 'ПЯТЫЙ КАНАЛ', 
+                                    'РЕН': 'РЕН ТВ',
+                                    'ТВ3': 'ТВ-3', 
+                                    'ТНТ4': 'ТНТ 4',
+                                    '2Х2': '2X2',
+                                    'СТС ЛАВ': 'СТС LOVE'
+                                },
+                            inplace = True)
             df_limits.set_index('Канал', inplace = True)
             df_limits = df_limits.T
             return df_limits
+            
         except FileNotFoundError:
             print('Файл с Порогами не найден! Пожалуйста, вставьте его в соответствующую папку!')
         
@@ -174,13 +186,24 @@ class Federal_Processing:
     
 
     ### НОВАЯ ВЕРСИЯ МЕТОДА BY_DAYS ###
-    def BY_DAYS(self, folder_path: str, start_date: str, smi_criteria):
+    def BY_DAYS(
+            self, 
+            forecast_comparison_filepath: str,
+            kus_filepath: str, 
+            start_date: str, 
+            smi_criteria
+        ):
         """
             Функция для генерация комментариев по дням.
             Args:
-                folder_path: путь к папке, в которой хранятся файлы для анализа
-                start_date: Дата, от которой начинаем смотреть изменения
-                smi_criteria: критерий для отбора значений СМИ
+                forecast_comparison_filepath: str
+                    Путь к папке, в которой хранятся файлы, содержащие подстроку "Сравнение прогнозов"
+                kus_filepath: str
+                    Путь к папке, в которой хранятся файлы, содержащие прогноз КУС
+                start_date: str
+                    Дата, от которой начинаем смотреть изменения
+                smi_criteria: 
+                    Критерий для отбора значений СМИ
             Returns:
                 Обновленный файл с Комментариями
                 smi_by_days: Комментарии с изменениями объемов по дням
@@ -233,8 +256,8 @@ class Federal_Processing:
             df_by_dates_need_comment = by_dates_dict[year]
 
             # Поиск нужных файлов со Сравнением прогнозов и КУС, исходя из года и даты
-            self.forecast_comparison_file = Federal_Preprocessing.find_data_file(folder_path, start_date, year, 'Сравнение прогнозов')
-            kus_file = Federal_Preprocessing.find_data_file(folder_path, start_date, year, 'КУС')
+            self.forecast_comparison_file = Federal_Preprocessing.find_data_file(forecast_comparison_filepath, start_date, year, 'Сравнение прогнозов')
+            kus_file = Federal_Preprocessing.find_data_file(kus_filepath, start_date, year, 'КУС')
 
             if self.forecast_comparison_file is None:
                 print('\n')
@@ -460,13 +483,24 @@ class Federal_Processing:
     
 
     ### НОВАЯ ВЕРСИЯ МЕТОДА SUMM ###
-    def SUMM(self, folder_path, start_date: str, smi_criteria):
+    def SUMM(
+            self, 
+            forecast_comparison_filepath: str,
+            kus_filepath: str,
+            start_date: str, 
+            smi_criteria
+        ):
         """
             Функция для генерация накопленных комментариев за период.
             Args:
-                folder_path: путь к папке, в которой хранятся файлы для анализа
-                start_date: Дата, от которой начинаем смотреть изменения
-                smi_criteria: критерий для отбора значений СМИ
+                forecast_comparison_filepath: str
+                    Путь к папке, в которой хранятся файлы, содержащие подстроку "Сравнение прогнозов"
+                kus_filepath: str
+                    Путь к папке, в которой хранятся файлы, содержащие прогноз КУС
+                start_date: str
+                    Дата, от которой начинаем смотреть изменения
+                smi_criteria: 
+                    Критерий для отбора значений СМИ
             Returns:
                 Обновленный файл с Комментариями
                 smi_by_days: Комментарии с изменениями объемов по дням
@@ -522,8 +556,8 @@ class Federal_Processing:
             df_summ_need_comment = prepr.calculate_accumulated_diff(general_df_by_dates, df_limits)
 
             # Поиск нужных файлов со Сравнением прогнозов и КУС, исходя из года и даты
-            self.forecast_comparison_file = Federal_Preprocessing.find_data_file(folder_path, start_date, year, 'Сравнение прогнозов')
-            kus_file = Federal_Preprocessing.find_data_file(folder_path, start_date, year, 'КУС')
+            self.forecast_comparison_file = Federal_Preprocessing.find_data_file(forecast_comparison_filepath, start_date, year, 'Сравнение прогнозов')
+            kus_file = Federal_Preprocessing.find_data_file(kus_filepath, start_date, year, 'КУС')
 
             if self.forecast_comparison_file is None:
                 print('\n')
@@ -835,6 +869,7 @@ class Federal_Processing:
         comments_cleaned['Порог'] = comments_cleaned['Порог'].astype(int)
         comments_cleaned.rename(columns = {'условие': 'Доп столбец'}, inplace = True) 
         comments_cleaned = comments_cleaned[['Канал', 'Месяц', 'Дата', 'Изменение GRP', 'Порог', 'Доп столбец', 'Комментарий']]
+        
 
         res = []
 
@@ -890,10 +925,9 @@ class Federal_Processing:
             current_end = 0
             hist_start = 0
             hist_end = 0
-
             #Удаляем дублирующиеся комментарии за период. Оставляем нужные.
             for i in range(len(res_updated)):
-                
+
                 channel = res_updated.iloc[i]['Канал']
                 month = res_updated.iloc[i]['Месяц']
                 comments_per_week = res_updated.iloc[i]['Комментарий']
@@ -901,18 +935,14 @@ class Federal_Processing:
                 if not pd.isna(comments_per_week):
                     comment_per_week_splitted = comments_per_week.split('. ')
 
-
                     # Если комментарий не разделяется точками с пробелами, оставляем как есть
                     if len(comment_per_week_splitted) <= 1 and '. ' not in comments_per_week and 'доли' not in comments_per_week:
                         # Оставляем комментарий без изменений, если он не разделен точками
                         continue
 
                     filtered_df = comments_cleaned[((comments_cleaned['Канал'] == channel) & (comments_cleaned['Месяц'] == month))]
-
-
                     if len(filtered_df) != 0:
                         comments = list(filtered_df['Комментарий'])
-
 
                         def check_comments():
                             return all(map(lambda x: x is not None if isinstance(x, str) else not np.isnan(x), comments))
@@ -951,9 +981,6 @@ class Federal_Processing:
                                         # Приводим к типу данных float
                                         current_start = float(start_str)
                                         current_end = float(end_str)
-
-                                        #print('Последняя доля')
-                                        #print(current_start, current_end)
                                         
                                         #######################################################################
                                         
@@ -967,9 +994,6 @@ class Federal_Processing:
                                         # Приводим к типу данных float
                                         hist_start = float(start_hist_str)
                                         hist_end = float(end_hist_str)
-
-                                        #print('Историческая доля')
-                                        #print(hist_start, hist_end)
                         
                                         if 'Снижение' in current_part and 'Снижение' in hist_part:
                                             # Проверяем значения долей
@@ -980,8 +1004,6 @@ class Federal_Processing:
                                             # Проверяем значения долей
                                             if current_start == hist_start:
                                                 new_comment = f'Рост доли с {hist_end} до {current_end}'
-                                        
-                                        #print(new_comment)
                                     
                                     # Если только в последних комментариях встретилось сообщение об изменении доли
                                     elif 'доли' in current_part:
@@ -997,17 +1019,11 @@ class Federal_Processing:
                                         current_start = float(start_str)
                                         current_end = float(end_str)
 
-                                        #print('Свежая доля')
-                                        #print(current_start, current_end)
-
                                         if 'Снижение' in current_part:
                                             new_comment = f'Снижение доли с {current_start} до {current_end}'
                                         
                                         if 'Рост' in current_part:
                                             new_comment = f'Рост доли с {current_start} до {current_end}'
-                                        
-
-                                        #print(new_comment)
                                     
                             
                             # 2. Ищем все комментарии о долях. Заменяем комментарии в result_list
