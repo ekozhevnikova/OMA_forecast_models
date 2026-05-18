@@ -307,13 +307,16 @@ class Table:
                                             'bold': True,
                                             'text_wrap': True, #перенос текста
                                             'align': 'center', #выравнение текста в ячейке
-                                            'align': 'vcenter', #выравнение текста в ячейке
-                                            'center_across': True
+                                            'valign': 'vcenter', #выравнение текста в ячейке
+                                            'border': 0
+                                            #'center_across': True
                                         })
         table_fmt = workbook.add_format({'num_format': num_format, 
                                          'align': 'center', #выравнение текста в ячейке
                                          'align': 'vcenter', #выравнение текста в ячейке
-                                         'center_across': True})
+                                         'border': 0
+                                         #'center_across': True
+                                         })
 
         for col_num, value in enumerate(self.df.columns.values):
             worksheet.write(0, col_num + 1, value, header_format)
