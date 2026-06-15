@@ -625,7 +625,7 @@ class ForecastNewChannels:
             
             # Для исторических годов (не требующих прогноза) считаем ИТОГО сразу
             if year not in self.forecast_years:
-                start_letter = chr(ord('B') + 2)
+                start_letter = chr(ord('B') + 1)
                 end_letter = chr(ord('B') + len(df_copy.columns) - 1)
                 formula = f'=AVERAGE({start_letter}{excel_row + 1}:{end_letter}{excel_row + 1})'
                 worksheet.write(excel_row, total_col, formula, total_format)
@@ -890,6 +890,6 @@ class ForecastNewChannels:
                 worksheet.set_column('Q:Q', 14)
                 worksheet.set_column('R:Z', 15)
             
-            print(Color.BOLD + Color.GREEN + f"\n ✅ 🏁 Файл {'output_file'} успешно создан с {len(filtered_data)} листами!" + Color.END)
+            print(Color.BOLD + Color.GREEN + f"\n ✅ 🏁 Файл {self.output_file} успешно создан с {len(filtered_data)} листами!" + Color.END)
         
         return filtered_data
