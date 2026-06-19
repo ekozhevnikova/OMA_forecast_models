@@ -3,6 +3,7 @@ import numpy as np
 import datetime
 from datetime import datetime, timedelta
 import xlsxwriter
+import re
 
 from mediascope_api.mediavortex import catalogs as cwc
 cats = cwc.MediaVortexCats()
@@ -65,6 +66,50 @@ class ForecastNewChannels:
             5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
             9: 'Сентябрь', 10: 'Октябрь', 11: 'Ноябрь', 12: 'Декабрь',
         }
+    
+
+    @staticmethod
+    def assign_audiences_to_channels(target_channels: pd.DataFrame):
+
+        BCA_OPTIONS = {
+            1: 'Все 25-49',
+            2: 'Ж 25-49',
+            3: 'М 25-49',
+            4: 'Все 4-40'
+        }
+
+        def extract_digits_and_commas(text):
+            """
+                Оставляет только цифры и запятые
+            """
+            return re.sub(r'[^0-9,]', '', text)
+
+
+        print("Доступные БЦА:")
+        for key, value in BCA_OPTIONS.items():
+            print(f"  {key}. {value}")
+        print(Color.BOLD + Color.CORAL + "\nДля выбора нескольких БЦА введите номера через запятую" + Color.END)
+        print("Например: 1,2,3\n")
+
+
+        target_dict = {}
+
+        for idx, row in target_channels.iterrows():
+            print(Color.BLUE + f"\nКанал {row['name']} (ID: {row['id']})" + Color.END)
+            
+            choice = input("Введите номера БЦА: ").strip()
+            choice_cleaned = extract_digits_and_commas(choice)
+            numbers = [int(x.strip()) for x in choice_cleaned.split(',') if x.strip()]
+            
+            audiences = [BCA_OPTIONS[n] for n in numbers]
+            target_dict[row['name']] = audiences
+        
+        print(Color.BOLD + '\nПо итогу сгенерированы следующие параметры:' + Color.END)
+        for key, value in target_dict.items():
+            print(f'• {key}: {value}')
+        
+        return target_dict
+
     
 
     @staticmethod
@@ -893,3 +938,235 @@ class ForecastNewChannels:
             print(Color.BOLD + Color.GREEN + f"\n ✅ 🏁 Файл {self.output_file} успешно создан с {len(filtered_data)} листами!" + Color.END)
         
         return filtered_data
+
+
+
+class KUSChannelNearestNeighborPredictor:
+    """
+        Класс для поиска каналов-аналогов с целью формирования рекомендаций 
+        для прогнозирования показателей КУС
+    """
+    def __init__(self, channel_name: str, thematic_channels_guidebook_path: str, forecast_file: str):
+        self.channel_name = channel_name
+        self.thematic_channels_guidebook_path = thematic_channels_guidebook_path
+        self.forecast_file = forecast_file
+
+        print(Color.BOLD + 'Пожалуйста, задайте ' + Color.END + Color.BLUE + f'жанр, целевую аудиторию и географию.' + Color.END)
+
+        print(' ● В качестве ' + Color.BOLD + 'ЖАНРА' + Color.END + ' необходимо задать одно из следующих: ' + \
+              Color.DARK_GREEN + 'детские, документалистика, животные, кино, музыка, новости, патриотическое, развлекательное, спорт.' + Color.END)
+        
+        print(' ● В качестве ' + Color.BOLD + 'ЦЕЛЕВОЙ АУДИТОРИИ' + Color.END + ' необходимо задать одно из следующих: ' + \
+              Color.DARK_ORANGE + 'взрослые, дети, женщины, мужчины.' + Color.END)
+        print(' ● В качестве ' + Color.BOLD + 'ГЕОГРАФИИ' + Color.END + ' необходимо задать одно из следующих: ' + \
+              Color.DODGER_BLUE + 'россия, ссср, зарубежные.' + Color.END)
+
+        print('\n')
+        print(Color.MAGENTA + 'Если вы не знаете, что задать в качестве жанра / целевой аудитории / географии, поставьте прочерк "-"' + Color.END)
+        print('\n')
+
+
+        self.GENRE_OPTIONS = {
+            1: 'Детские',
+            2: 'Документалистика',
+            3: 'Животные',
+            4: 'Кино',
+            5: 'Музыка',
+            6: 'Патриотическое',
+            7: 'Развлекательное',
+            8: 'Спорт',
+            9: '-'
+        }
+
+        self.AUDIENCE_OPTIONS = {
+            1: 'Взрослые', 2: 'Дети', 3: 'Женщины', 4: 'Мужчины', 5: '-'
+        }
+
+        self.GEOGRAFIC_OPTIONS = {
+            1: 'Россия', 2: 'СССР', 3: 'Зарубежные', 4: '-'
+        }
+        
+
+        self.thematic_channels_data = pd.read_excel('Каналы Тематическое ТВ.xlsx')
+
+        for column in self.thematic_channels_data.columns[0:6]:
+            self.thematic_channels_data[column] = self.thematic_channels_data[column].str.lower()
+        
+
+    def option_suggestion(self):
+        """
+            Генерация вариантов для прогнозирования
+        """
+
+        # Генерация Жанра
+        print('Выберите ' + Color.BOLD + 'ЖАНР' + Color.END + ' из списка:')
+        for key, value in self.GENRE_OPTIONS.items():
+            print(f'{key}. {value}')
+
+        genre_choice = int(input('Введите номер: '))
+        self.movie_genre = self.GENRE_OPTIONS[genre_choice]
+        print('\n')
+
+        # Генерация Географии
+        print('Выберите ' + Color.BOLD + 'ГЕОГРАФИЮ' + Color.END + ' из списка:')
+        for key, value in self.GEOGRAFIC_OPTIONS.items():
+            print(f'{key}. {value}')
+
+        geografic_choice = int(input('Введите номер: '))
+        self.geografic = self.GEOGRAFIC_OPTIONS[geografic_choice]
+        print('\n')
+
+        # Генерация Аудитории
+        print('Выберите ' + Color.BOLD + 'АУДИТОРИЮ' + Color.END + ' из списка:')
+        for key, value in self.AUDIENCE_OPTIONS.items():
+            print(f'{key}. {value}')
+
+        audience_choice = int(input('Введите номер: '))
+        self.audience = self.AUDIENCE_OPTIONS[audience_choice]
+        print('\n')
+
+        print(Color.VIOLET + f"В качестве ")
+        print(f'•  Жанра выбрано:                {self.movie_genre}')
+        print(f'•  Географии выбрано:            {self.geografic}')
+        print(f'•  Целевой аудитории выбрано:    {self.audience}' + Color.END)
+
+        mask = None
+
+        if self.movie_genre == self.GENRE_OPTIONS[9]:
+            mask = (self.thematic_channels_data['Аудитория'].str.contains(self.audience.lower(), case = False, na = False)) & \
+                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
+        
+        elif self.audience == self.AUDIENCE_OPTIONS[5]:
+            mask = (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False)) & \
+                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
+        
+        elif self.geografic == self.GEOGRAFIC_OPTIONS[4]:
+            mask = (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False)) & \
+                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
+        
+        else:
+            mask = (self.thematic_channels_data['Аудитория'].str.contains(self.audience.lower(), case = False, na = False)) & \
+                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False)) & \
+                   (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False))
+
+        result_df = self.thematic_channels_data[mask].reset_index(drop = True)
+
+        print('\n')
+        print(Color.BOLD + Color.MAROON + f'Для канала {self.channel_name} сгенерировал следующие варианты. Пожалуйста, ознакомьтесь: ' + Color.END)
+
+        return result_df
+    
+
+    def select_special_columns(self, df, statistic: str):
+        """
+            Вспомогательный метод для отбора интересующих столбцов
+        """
+        months = ['январь', 'февраль', 'март', 'апрель', 'май', 'июнь', 
+          'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь', 'ГОД']
+
+        # Отбираем колонки с месяцами
+        month_cols = [col for col in df.columns if any(m in col for m in months)]
+
+        # Группируем по названию месяца и берём максимальный суффикс
+        selected_cols = []
+        for month in months:
+            # Все колонки для этого месяца
+            cols = [col for col in month_cols if col.startswith(month)]
+            if cols:
+                # Берём ту, у которой самый большой суффикс
+                max_col = max(cols, key=lambda x: int(x.split('.')[1]) if '.' in x else 0)
+                selected_cols.append(max_col)
+
+        df_new = df[['Канал+ЦА', 'Канал', 'ЦА'] + selected_cols]
+
+        rename_dict = {col: month for col, month in zip(selected_cols, months)}
+        df_new.rename(columns = rename_dict, inplace = True)
+
+        df_new = df_new[['Канал+ЦА', 'Канал', 'ЦА', 'ГОД']]
+
+        str_cols = ['Канал+ЦА', 'Канал', 'ЦА']
+        for col in str_cols:
+            df_new[col] = df_new[col].str.lower()
+        
+        df_new.rename(columns = {'ГОД': f"Прогноз {statistic}"}, inplace = True)
+
+        # Заменяем строковые варианты пустоты на реальный np.nan
+        df_new.replace(['NaN', 'nan', 'None', '', ' '], np.nan, inplace = True)
+        # Теперь удаляем строки, где есть хоть один np.nan
+        df_new.dropna(inplace = True)
+
+        return df_new
+
+    
+
+    def read_full_forecast_file(self, bca_list: list):
+        """
+            Метод для чтения фулл-считалки. Считывается лист с КУС
+        """
+        # Чтение данных из файла с прогнозом КУС
+        kus_df = pd.read_excel(self.forecast_file, sheet_name = 'КУС', skiprows = 1)
+
+        # Чтение данных из файла с прогнозом КУЧ
+        kuch_df = pd.read_excel(self.forecast_file, sheet_name = 'КУЧ', skiprows = 1)
+
+        for df in [kus_df, kuch_df]:
+            df.rename(columns = {
+                                    'Unnamed: 0': 'Канал+ЦА', 
+                                    'Unnamed: 1': 'Канал', 
+                                    'Unnamed: 2': 'ЦА'
+                                    }, inplace = True)
+        
+        forecast_kus = self.select_special_columns(kus_df, 'КУС')
+        forecast_kuch = self.select_special_columns(kuch_df, 'КУЧ')
+
+        full_df = pd.merge(forecast_kus, forecast_kuch, on = ['Канал+ЦА', 'Канал', 'ЦА'], how = 'inner')
+        
+        bca_list_lowered = []
+        for bca in bca_list:
+            bca_list_lowered.append(bca.lower())
+        pattern = '|'.join(bca_list_lowered)
+
+        mask = full_df['ЦА'].str.contains(pattern, case = False, na = False)
+        full_df_filtered = full_df[mask].reset_index(drop = True) 
+        return full_df_filtered
+    
+
+    def neighbor_pipeline(self, bca_list: list):
+        """
+            Пайплайн для генерации прогноза КУС и КУЧ на основании похожих каналов
+        """
+        bca_list_lowered = []
+        for bca in bca_list:
+            bca_list_lowered.append(bca.lower())
+
+        # Генерация наиболее похожих вариантов
+        neighbor_df = self.option_suggestion()
+
+        # Чтение прогнозных значений из файла "Данные ВРК full" по КУС и КУЧ
+        forecast_df = self.read_full_forecast_file(bca_list)
+
+        variants_df = pd.merge(forecast_df, neighbor_df, on = ['Канал'], how = 'inner')
+        variants_df = variants_df[[
+            'Канал', 'ЦА', 'Прогноз КУС', 'Прогноз КУЧ'
+        ]]
+
+        results_dict = {}
+        for bca in bca_list_lowered:
+            df = variants_df[variants_df['ЦА'] == bca].reset_index(drop = True)
+            df['Прогноз КУС'] = df['Прогноз КУС'].astype(float).round(2)
+            df['Прогноз КУЧ'] = df['Прогноз КУЧ'].astype(float).round(2)
+            results_dict[bca] = df
+        
+        for key, value in results_dict.items():
+            print(Color.GREEN + f'{key}' + Color.END)  
+            print(f'{value.to_string()}')
+            print('\n') 
+
+        #print("Все отобранные каналы, которые оказываются наиболее похожими на целевой канал: ")
+        neighbor_df_cleand = neighbor_df[['Канал', 'Аудитория', 'Жанр', 'География', 'Холдинг', 'Описание']]
+        
+        return neighbor_df_cleand, results_dict
+        
+        
+
+        

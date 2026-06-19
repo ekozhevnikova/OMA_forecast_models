@@ -340,13 +340,23 @@ class Simulation:
 
         for number_of_outputs, time_table in time_table_dict.items():
             if number_of_outputs == 0:
-                GRP_fact_dict[number_of_outputs] = 0
+                GRP_fact_dict[number_of_outputs] = [0, 0]
             else:
                 #time_table_new = time_table.rename(columns = {'Время': 'Время выхода'})
                 res_df = pd.merge(time_table, TVR_by_slots, on = ['Дата', 'Время выхода', 'Канал'], how = 'inner')
-                GRP_fact_dict[number_of_outputs] = res_df['TVR'].sum()
 
-        GRP_fact_df = pd.DataFrame(list(GRP_fact_dict.items()), columns = ['Кол-во выходов на каждом канале', 'GRP факт'])
+                new_GRP = res_df['TVR'].sum()
+                T = res_df['Количество респондентов'].sum() * 20
+    
+                GRP_fact_dict[number_of_outputs] = [new_GRP, T]
+
+        GRP_fact_df = pd.DataFrame.from_dict(GRP_fact_dict, orient = 'index', columns = ['GRP new', 'Объём'])
+        GRP_fact_df.reset_index(inplace = True)
+        GRP_fact_df.rename(columns = {'index': 'Кол-во выходов на каждом канале'}, inplace = True)
+        #GRP_fact_df = pd.DataFrame(GRP_fact_dict)
+        #print(GRP_fact_df.to_string())
+        #GRP_fact_df.columns = ['Количество выходов', 'GRP new', 'Объём']
+        #GRP_fact_df = pd.DataFrame(list(GRP_fact_dict.items()), columns = ['Кол-во выходов на каждом канале', 'GRP факт'])
         return GRP_fact_df
     
 
