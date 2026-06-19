@@ -23,7 +23,6 @@ class ForecastNewChannels:
             self, 
             start_date: str, 
             stop_date: str, 
-            targets: dict, 
             target_data_to_forecast: dict,
             forecast_years: list, 
             output_file: str
@@ -35,8 +34,6 @@ class ForecastNewChannels:
                     Стартовая дата для выгрузки данных в формате str "Y-m-d"
                 stop_date: str
                     Конечная дата для выгрузки данных в формате str "Y-m-d"
-                targets: dict
-                    Словарь из ЦА
                 target_data_to_forecast: dict
                     Словарь из Целевых Каналов и БЦА, которые попросили спрогнозировать
                 forecast_years: list
@@ -46,7 +43,6 @@ class ForecastNewChannels:
         """
         self.start_date = start_date
         self.stop_date = stop_date
-        self.targets = targets
         self.target_data_to_forecast = target_data_to_forecast
         self.forecast_years = forecast_years
         self.output_file = output_file
@@ -181,7 +177,7 @@ class ForecastNewChannels:
 
     def acquistare_data(
         self, type_of_grouping: str, company_filter: str, 
-        time_filter: str, statistics: list
+        statistics: list
         ):
         """
             Метод для выгрузки данных из БД.
@@ -202,6 +198,14 @@ class ForecastNewChannels:
                 result_by_bca: dict
                     Словарь, где ключ - БЦА, значение - датафрейм с данными по каналу для этой БЦА.
         """
+        # Словарь с целевыми аудиториями: ключ - название переменной (target), значение - ее синтаксис (syntax)
+        targets = {
+            'ВСЕ 25-49': 'age >= 25 AND age <= 49',
+            'М 25-49': 'age >= 25 AND age <= 49 AND sex = 1',
+            'Ж 25-49': 'age >= 25 AND age <= 49 AND sex = 2',
+        }
+
+
         sortings = {}
         slices = []
 
@@ -230,12 +234,12 @@ class ForecastNewChannels:
 
         for date_filter in self.periods:
 
-
+            # ВЫГРУЗКА ДАННЫХ ДЛЯ ВСЕХ АУДИТОРИЙ, КРОМЕ ДЕТСКОЙ
             # Формируем задачи в формате json
             tasks = BaseDataService._build_timeband_common_params(
                                                             date_filter = date_filter, company_filter = company_filter, 
                                                             basedemo_filter = None, regions_id = None,          # работаем в Федеральной Базе
-                                                            targets = self.targets, time_filter = time_filter, 
+                                                            targets = targets, time_filter = 'timeBand1 >= 60000 AND timeBand1 < 260000', 
                                                             statistics = statistics, slices = slices, 
                                                             sortings = sortings, options = self.options,
                                                             location_filter = self.location_filter, weekday_filter = self.weekday_filter,
@@ -243,8 +247,24 @@ class ForecastNewChannels:
                                                         )
             # Отправляем задачи на расчет
             df = BaseDataService._execute_tasks(tasks)
-        
-            final_results.append(df)
+
+            # ВЫГРУЗКА ДАННЫХ ДЛЯ ДЕТСКОЙ АУДИТОРИИ, У КОТОРОЙ СВОЙ ВКУС
+            child_tasks = BaseDataService._build_timeband_common_params(
+                                                            date_filter = date_filter, company_filter = company_filter, 
+                                                            basedemo_filter = 'age >= 4 AND age <= 40', regions_id = None,          # работаем в Федеральной Базе
+                                                            targets = None, time_filter = 'timeBand1 >= 60000 AND timeBand1 < 220000', 
+                                                            statistics = statistics, slices = slices, 
+                                                            sortings = sortings, options = self.options,
+                                                            location_filter = self.location_filter, weekday_filter = self.weekday_filter,
+                                                            daytype_filter = self.daytype_filter, targetdemo_filter = self.targetdemo_filter
+                                                        )
+            # Отправляем задачи на расчет
+            child_df = BaseDataService._execute_tasks(child_tasks)
+            child_df['prj_name'] = child_df['prj_name'].replace('Total. Ind', 'ВСЕ 4-40')
+            
+            full_df = pd.concat([df, child_df]).reset_index(drop = True)
+            
+            final_results.append(full_df)
         
         general_result = pd.concat(final_results).reset_index(drop = True)
         general_result['tvCompanyName'] = general_result['tvCompanyName'].apply(lambda x: x.removesuffix(' (СЕТЕВОЕ ВЕЩАНИЕ)'))
@@ -879,7 +899,7 @@ class ForecastNewChannels:
 
     def pipeline(
             self, type_of_grouping: str, 
-            company_filter: str, time_filter: str, 
+            company_filter: str, 
             statistics: list
             ):
         """
@@ -889,7 +909,7 @@ class ForecastNewChannels:
         self.periods = self.generate_periods()
 
         # Шаг 2. Выгрузка данных из БД
-        results = self.acquistare_data(type_of_grouping, company_filter, time_filter, statistics) 
+        results = self.acquistare_data(type_of_grouping, company_filter, statistics) 
 
         # Шаг 3. Преобразование данных для построения прогноза
         transformed_results = self.form_output_for_forecast(results)
