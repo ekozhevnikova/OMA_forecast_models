@@ -1,6 +1,6 @@
 import numpy as np
 import os
-import img2pdf
+#import img2pdf
 import pickle
 import pandas as pd
 from datetime import datetime
@@ -27,8 +27,12 @@ class Postprocessing:
         """
             Замена отрицательных значений на минимально возможное в столбце.
         """
+        # for column in self.forecast_df.columns:
+        #     self.forecast_df[self.forecast_df[column] < 0] = min(list(self.df[column]))
+        # return self.forecast_df
         for column in self.forecast_df.columns:
-            self.forecast_df[self.forecast_df[column] < 0] = min(list(self.df[column]))
+            mask = self.forecast_df[column]<0
+            self.forecast_df.loc[mask, column] = self.df[column].min()
         return self.forecast_df
 
 
@@ -492,3 +496,80 @@ class Postprocessing:
         with open(filename, 'wb') as f:
             pickle.dump(dict_mape_full, f)
         return dict_mape_full
+
+    
+    
+    def correction_final_forecast(self):
+
+        """
+            Функция для корректировки итогового прогноза доли с использованием среднего значения фактических данных за последние три месяца.
+            Если первый прогнозный месяц расходится с ср знач факта за последние три месяца более, чем на 15%, то:
+                1-ый прогнозный месяц = (исходный прогноз машины) * 0,6 + (ср знач факта) * 0,4
+                2-0й прогнозный месяц = (исходный прогноз машины) * 0,8 + (ср знач факта) * 0,2
+                3-ий прогнозный месяц = (исходный прогноз машины) * 0,9 + (ср знач факта) * 0,1
+            Returns:
+                Датафрейм со скорректированным прогнозом
+        """
+        
+        fact_values = self.df
+        forecast_values = self.forecast_df.drop(columns=['Date'])
+
+        fact_mean_3m = fact_values.tail(3).mean()
+        forecast_first = forecast_values.iloc[0]
+
+        # Рассчитываем разницу ср факта и прогноза
+        diff_pct = (forecast_first - fact_mean_3m) / fact_mean_3m * 100
+
+        # Каналы, где расхождение > 15% по модулю
+        bad_channels = diff_pct[diff_pct.abs() > 15].index
+
+        
+        # =========================== ПРИНТЫ ОТЧЕТА ================================
+
+        # total_channels = len(diff_pct)
+        # bad_count = len(bad_channels)
+        # good_count = total_channels - bad_count
+        # print("=" * 50)
+        # print("АНАЛИЗ ОТКЛОНЕНИЙ ПРОГНОЗА")
+        # print("=" * 50)
+
+        # print(f"Всего каналов: {total_channels}")
+        # print(f"Каналов с отклонением > 15%: {bad_count} ({bad_count / total_channels:.1%})")
+        # print(f"Каналов в пределах нормы: {good_count} ({good_count / total_channels:.1%})")
+
+        # if bad_count > 0:
+        #     print("\nПроблемные каналы:")
+        #     for ch in bad_channels:
+        #         print(f" - {ch}: {diff_pct[ch]:.2f}%")
+
+        # print("=" * 50)
+        # ==========================================================================
+
+        forecast_corrected = forecast_values.copy()
+
+        # Корректировка
+        for ch in bad_channels:
+            mean_val = fact_mean_3m[ch]
+
+            idx0 = forecast_corrected.index[0]
+            forecast_corrected.loc[idx0, ch] = (
+                    forecast_values.loc[idx0, ch] * 0.6 + mean_val * 0.4
+            )
+
+            if len(forecast_corrected) > 1:
+                idx1 = forecast_corrected.index[1]
+                forecast_corrected.loc[idx1, ch] = (
+                        forecast_values.loc[idx1, ch] * 0.8 + mean_val * 0.2
+                )
+
+            if len(forecast_corrected) > 2:
+                idx2 = forecast_corrected.index[2]
+                forecast_corrected.loc[idx2, ch] = (
+                        forecast_values.loc[idx2, ch] * 0.9 + mean_val * 0.1
+                )
+
+        forecast_corrected['Date'] = self.forecast_df['Date'].values
+
+        forecast_corrected = forecast_corrected[self.forecast_df.columns]
+
+        return forecast_corrected

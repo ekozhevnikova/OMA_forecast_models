@@ -5,10 +5,14 @@ from datetime import datetime, timedelta
 import xlsxwriter
 import re
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
 from mediascope_api.mediavortex import catalogs as cwc
 cats = cwc.MediaVortexCats()
 
 from OMA_tools.regions.data_extraction.task_builder import BaseDataService
+from OMA_tools.regions.data_extraction.data_coworker import EmployeeExportService
 from OMA_tools.io_data.colors import *
 
 import warnings
@@ -74,6 +78,8 @@ class ForecastNewChannels:
             4: 'Все 4-40'
         }
 
+        target_channels = target_channels.sort_values(by = 'name')
+
         def extract_digits_and_commas(text):
             """
                 Оставляет только цифры и запятые
@@ -133,7 +139,33 @@ class ForecastNewChannels:
         channels_dict_filtered = channels_dict_filtered.drop(['is_network_broadcast'], axis = 1)
         channels_dict_filtered['name'] = channels_dict_filtered['name'].apply(lambda x: x.removesuffix(' (СЕТЕВОЕ ВЕЩАНИЕ)'))
         channels_dict_filtered = channels_dict_filtered[['name', 'id']]
-        return channels_dict_filtered
+        channels_dict_filtered = channels_dict_filtered.sort_values(by = 'name')
+        return channels_dict_filtered.reset_index(drop = True)
+    
+
+    def normalize_channel_name(self, name: str) -> str:
+        """
+            Нормализует название канала, удаляя временные маркеры и суффиксы
+        """
+        if not isinstance(name, str):
+            return name
+        
+        # Удаляем все, что в скобках (включая даты, "СЕТЕВОЕ ВЕЩАНИЕ" и т.д.)
+        normalized = re.sub(r'\s*\([^)]*\)\s*', ' ', name)
+        
+        # Удаляем временные маркеры без скобок (если такие есть)
+        normalized = re.sub(r'\s*(ДО|С|ПО)\s+\d{2}[/.-]\d{2}[/.-]\d{4}\s*', ' ', normalized)
+        
+        # Удаляем лишние пробелы в начале и конце
+        normalized = normalized.strip()
+        
+        # Приводим к верхнему регистру (опционально)
+        # normalized = normalized.upper()
+        
+        # Удаляем множественные пробелы между словами
+        normalized = ' '.join(normalized.split())
+        
+        return normalized
     
 
     def generate_periods(self):
@@ -172,7 +204,22 @@ class ForecastNewChannels:
             # Переходим к следующему году
             current = datetime(current.year + 1, 1, 1)
         return self.periods
-    
+
+
+    def get_data(self, adult_tasks, child_tasks, max_workers = 10):
+        """
+        Метод для выгрузки данных из БД для взрослой аудитории: Все 25-49, Ж 25-49, М 25-49
+        """
+        try:
+            adult_df = BaseDataService._execute_tasks(adult_tasks)
+            child_df = BaseDataService._execute_tasks(child_tasks)
+            child_df['prj_name'] = child_df['prj_name'].replace('Total. Ind', 'ВСЕ 4-40')
+            full_df = pd.concat([adult_df, child_df]).reset_index(drop=True)
+            return full_df
+
+        except Exception as e:
+            print(f"❌ Ошибка при загрузке данных: {e}")
+            return pd.DataFrame()
 
 
     def acquistare_data(
@@ -227,47 +274,118 @@ class ForecastNewChannels:
             sortings = {'tvCompanyName': 'ASC'}
             slices = ['tvCompanyName']
 
+        ################################################### НОВЫЙ КУСОК ###################################################
+
+        # Разбивка периодов по годам для генерации задач в формате JSON для каждого года отдельно
+        periods_dict = {}
+        for item in self.periods:
+            start_date, end_date = item[0]
+            year = datetime.strptime(start_date, '%Y-%m-%d').year
+            periods_dict[year] = [(start_date, end_date)]
+        
+
+        import time
+
+        start = time.perf_counter()
+        print(Color.BOLD + Color.BLUE + '=== 🕑 ФОРМИРУЮ ЗАДАЧИ В ФОРМАТЕ JSON ДЛЯ ОТПРАВКИ НА СЕРВЕР ===' + Color.END)
+
+        adult_tasks_full = {}
+        children_json_tasks_full = {}
+        for year, date_filter in periods_dict.items():
+            # Генерация задач для взрослых аудиторий
+            adult_tasks_full[year] = BaseDataService._build_timeband_common_params(
+                            date_filter = date_filter, company_filter = company_filter, 
+                            basedemo_filter = None, regions_id = None,          # работаем в Федеральной Базе
+                            targets = targets, time_filter = 'timeBand1 >= 60000 AND timeBand1 < 260000', 
+                            statistics = statistics, slices = slices, 
+                            sortings = sortings, options = self.options,
+                            location_filter = self.location_filter, weekday_filter = self.weekday_filter,
+                            daytype_filter = self.daytype_filter, targetdemo_filter = self.targetdemo_filter
+                    )
+            
+            # Генерация задач для детской аудитории
+            children_json_tasks_full[year] = BaseDataService._build_timeband_common_params(
+                            date_filter = date_filter, company_filter = company_filter, 
+                            basedemo_filter = 'age >= 4 AND age <= 40', regions_id = None,          # работаем в Федеральной Базе
+                            targets = None, time_filter = 'timeBand1 >= 60000 AND timeBand1 < 220000', 
+                            statistics = statistics, slices = slices, 
+                            sortings = sortings, options = self.options,
+                            location_filter = self.location_filter, weekday_filter = self.weekday_filter,
+                            daytype_filter = self.daytype_filter, targetdemo_filter = self.targetdemo_filter
+                    )
+        
+        end = time.perf_counter()
+
+        print(Color.BOLD + Color.GREEN + '⭐ СФОРМИРОВАЛ ЗАДАЧИ!' + Color.END)
+        print(f'Время формирования задач по факту вышло: {((end - start)):0.1f} сек.')
 
         print(Color.BOLD + Color.VIOLET + '=== НАЧИНАЮ ВЫГРУЗКУ ДАННЫХ ===' + Color.END)
-
+        # Параллельная обработка годов
         final_results = []
+        max_workers = min(len(periods_dict), 10)
 
-        for date_filter in self.periods:
-
-            # ВЫГРУЗКА ДАННЫХ ДЛЯ ВСЕХ АУДИТОРИЙ, КРОМЕ ДЕТСКОЙ
-            # Формируем задачи в формате json
-            tasks = BaseDataService._build_timeband_common_params(
-                                                            date_filter = date_filter, company_filter = company_filter, 
-                                                            basedemo_filter = None, regions_id = None,          # работаем в Федеральной Базе
-                                                            targets = targets, time_filter = 'timeBand1 >= 60000 AND timeBand1 < 260000', 
-                                                            statistics = statistics, slices = slices, 
-                                                            sortings = sortings, options = self.options,
-                                                            location_filter = self.location_filter, weekday_filter = self.weekday_filter,
-                                                            daytype_filter = self.daytype_filter, targetdemo_filter = self.targetdemo_filter
-                                                        )
-            # Отправляем задачи на расчет
-            df = BaseDataService._execute_tasks(tasks)
-
-            # ВЫГРУЗКА ДАННЫХ ДЛЯ ДЕТСКОЙ АУДИТОРИИ, У КОТОРОЙ СВОЙ ВКУС
-            child_tasks = BaseDataService._build_timeband_common_params(
-                                                            date_filter = date_filter, company_filter = company_filter, 
-                                                            basedemo_filter = 'age >= 4 AND age <= 40', regions_id = None,          # работаем в Федеральной Базе
-                                                            targets = None, time_filter = 'timeBand1 >= 60000 AND timeBand1 < 220000', 
-                                                            statistics = statistics, slices = slices, 
-                                                            sortings = sortings, options = self.options,
-                                                            location_filter = self.location_filter, weekday_filter = self.weekday_filter,
-                                                            daytype_filter = self.daytype_filter, targetdemo_filter = self.targetdemo_filter
-                                                        )
-            # Отправляем задачи на расчет
-            child_df = BaseDataService._execute_tasks(child_tasks)
-            child_df['prj_name'] = child_df['prj_name'].replace('Total. Ind', 'ВСЕ 4-40')
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(self.get_data, adult_tasks_full[year], children_json_tasks_full[year]): year 
+                for year in periods_dict.keys()
+            }
             
-            full_df = pd.concat([df, child_df]).reset_index(drop = True)
-            
-            final_results.append(full_df)
-        
-        general_result = pd.concat(final_results).reset_index(drop = True)
+            for future in as_completed(futures):
+                year = futures[future]
+                try:
+                    result = future.result()
+                    if result is not None and not result.empty:
+                        final_results.append(result)
+                        print(f"✅ Год {year} обработан успешно")
+                except Exception as e:
+                    print(f"❌ Ошибка при обработке года {year}: {e}")
+
+        general_result = pd.concat(final_results, ignore_index = True) if final_results else pd.DataFrame()
         general_result['tvCompanyName'] = general_result['tvCompanyName'].apply(lambda x: x.removesuffix(' (СЕТЕВОЕ ВЕЩАНИЕ)'))
+
+        ########################################### НОВЫЙ КУСОК ###########################################
+        # Добавляем нормализованное имя
+        general_result['normalized_name'] = general_result['tvCompanyName'].apply(
+            self.normalize_channel_name
+        )
+        
+        # Логируем объединение
+        print(Color.BOLD + Color.BLUE + "\n=== ОБЪЕДИНЕНИЕ КАНАЛОВ ПО НОРМАЛИЗОВАННЫМ НАЗВАНИЯМ ===" + Color.END)
+        
+        # Группируем данные по нормализованному имени
+        grouped_data = []
+        
+        for normalized_name in general_result['normalized_name'].unique():
+            # Берем все данные для этого нормализованного имени
+            channel_data = general_result[general_result['normalized_name'] == normalized_name].copy()
+            
+            # Получаем все оригинальные названия для логирования
+            original_names = channel_data['tvCompanyName'].unique()
+            
+            if len(original_names) > 1:
+                print(f"📌 Объединены в '{normalized_name}':")
+                for name in original_names:
+                    print(f"   - {name}")
+            
+            # Заменяем tvCompanyName на нормализованное имя
+            channel_data['tvCompanyName'] = normalized_name
+            
+            # Удаляем служебные колонки
+            channel_data = channel_data.drop(['normalized_name'], axis=1)
+            
+            # Удаляем ID (он больше не нужен)
+            if 'id' in channel_data.columns:
+                channel_data = channel_data.drop(['id'], axis=1)
+            
+            # Удаляем полные дубликаты строк (если данные одинаковые)
+            channel_data = channel_data.drop_duplicates()
+            
+            grouped_data.append(channel_data)
+        
+        general_result = pd.concat(grouped_data, ignore_index=True)
+        
+        print(f"\n✅ После объединения: {general_result['tvCompanyName'].nunique()} уникальных каналов")
+        ########################################### КОНЕЦ НОВОГО КУСКА ###########################################
 
         if type_of_grouping == 'by dates':
             general_result.rename(
@@ -323,7 +441,9 @@ class ForecastNewChannels:
                         ЗНАЧЕНИЕ: словарь из данных, где
                             ключ: БЦА
                             значение: датафрейм с данными
-        """        
+        """      
+        month_indices = list(range(1, 13))  # [1, 2, 3, ..., 12]
+
         transformed_dict = {}
         
         for channel, bca_dict in dict_data.items():
@@ -335,26 +455,50 @@ class ForecastNewChannels:
                             "Отсутствует столбец с названием 'Месяц'. Я не смогу трансформировать таблицы."
                     )
                     
-                data = data.drop(['БЦА', 'Канал'], axis = 1)
+                data = data.drop(['БЦА', 'Канал'], axis=1)
                 data['Год'] = pd.to_datetime(data['Месяц']).dt.year
                 data['month'] = pd.to_datetime(data['Месяц']).dt.month
-                data['month'].replace(self.MONTHS, inplace = True)
+
+                # Создаем словарь {год: [месяцы, которые были в этом году]}
+                original_months_by_year = {}
+                for year in data['Год'].unique():
+                    # Сохраняем индексы месяцев (числа от 1 до 12)
+                    original_months_by_year[year] = data[data['Год'] == year]['month'].unique().tolist()
+                    #print(f"📊 Год {year}: индексы месяцев с данными = {original_months_by_year[year]}")
+
+
+                #data['month'].replace(self.MONTHS, inplace = True)
                 
                 data_transformed = data.pivot_table(
-                    index = 'Год', 
-                    columns = 'month', 
-                    values = 'Share'
+                    index='Год', 
+                    columns='month',  # здесь month - это числа (1-12)
+                    values='Share'
                 ).reset_index()
+
+                # Переименовываем столбцы в названия месяцев для отображения
+                data_transformed.columns = ['Год'] + [self.MONTHS[i] for i in range(1, 13)]
                 
                 # Переименуем столбцы (уберем имя 'month' и сделаем нормальные названия)
-                data_transformed.columns.name = None
+                data_transformed = data_transformed.fillna(0)
                 
-                # Если нужно отсортировать месяцы в правильном порядке
-                month_order = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 
-                            'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь']
+                # Заменяем на NaN только те месяцы, которых НЕ БЫЛО в исходных данных
+                # И только для прогнозных лет
+                if hasattr(self, 'forecast_years') and self.forecast_years:
+                    for year in self.forecast_years:
+                        if year in data_transformed['Год'].values:
+                            mask = data_transformed['Год'] == year
+                            original_months_for_year = original_months_by_year.get(year, [])
+                            #print(f"🔍 Год {year}: оригинальные индексы месяцев = {original_months_for_year}")
+                            
+                            for month_idx in range(1, 13):
+                                month_name = self.MONTHS[month_idx]
+                                # Сравниваем числа (индексы) с числами
+                                if month_idx not in original_months_for_year:
+                                    #print(f"  ❌ Месяц {month_name} (индекс {month_idx}) не был в исходных данных, заменяем на NaN")
+                                    data_transformed.loc[mask, month_name] = np.nan
+                                #else:
+                                #    print(f"  ✅ Месяц {month_name} (индекс {month_idx}) был в исходных данных, оставляем как есть")
                 
-                data_transformed = data_transformed[['Год'] + month_order]
-
                 by_bca[bca] = data_transformed
             
             transformed_dict[channel] = by_bca
@@ -487,32 +631,42 @@ class ForecastNewChannels:
         filtered_data = {}
 
         for channel, bcas_to_keep in self.target_data_to_forecast.items():
-            # Приводим названия БЦА к нижнему регистру, чтобы было легче сопоставлять
-            lowercase_bcas_to_keep = [x.lower() for x in bcas_to_keep]
-
-            # Проверяем, есть ли такой канал в исходных данных
-            if channel not in all_results:
-                print(f" 🚩 WARNING: Канал '{channel}' не найден в исходных данных. Проверьте название. Оно должно совпадать с названием Mediascope.")
+            # Нормализуем имя канала из запроса
+            normalized_target = self.normalize_channel_name(channel)
+            
+            # Ищем соответствие в выгруженных данных
+            found_channel = None
+            for available_channel in all_results.keys():
+                if self.normalize_channel_name(available_channel) == normalized_target:
+                    found_channel = available_channel
+                    break
+            
+            if found_channel is None:
+                print(f" 🚩 WARNING: Канал '{channel}' не найден в исходных данных. Проверьте название.")
                 continue
 
             # Получаем словарь БЦА для этого канала
-            channel_data = all_results[channel]
+            channel_data = all_results[found_channel]
             # Приводим ключи к нижнему регистру, чтобы проще было совмещать
             lower_channel_data = {k.lower(): v for k, v in channel_data.items()}
 
             # Отбираем только нужные БЦА
             filtered_channel_data = {}
-            for bca in lowercase_bcas_to_keep:
-                if bca in lower_channel_data:
-                    filtered_channel_data[bca] = lower_channel_data[bca]
+            for bca in bcas_to_keep:
+                if bca.lower() in lower_channel_data:
+                    filtered_channel_data[bca] = lower_channel_data[bca.lower()]
                 else:
-                    print(f" ⏭️ Для канала '{channel}' БЦА '{bca}' не просят спрогнозировать! Я не буду добавлять её в отчёт.")
-            
-            # Добавляем канал в результат, только если есть хотя бы одна БЦА
-            if filtered_channel_data:
-                filtered_data[channel] = filtered_channel_data
+                    print(f" ⏭️ Для канала '{found_channel}' БЦА '{bca}' не найдена")
 
-        print(Color.ROYAL_BLUE + f"🚀 Итог: отобрано {len(filtered_data)} каналов из {len(all_results)}" + Color.END)
+            # Добавляем канал в результат
+            if filtered_channel_data:
+                # Используем НОРМАЛИЗОВАННОЕ имя как ключ
+                filtered_data[normalized_target] = filtered_channel_data
+                print(f"✅ Найден канал: '{normalized_target}' (исходный запрос: '{channel}')")
+            else:
+                print(f" ⚠️ Для канала '{found_channel}' не найдено ни одной БЦА")
+
+        print(Color.ROYAL_BLUE + f"\n🚀 Итог: отобрано {len(filtered_data)} каналов из {len(all_results)}" + Color.END)
     
         return filtered_data
 
@@ -739,13 +893,13 @@ class ForecastNewChannels:
         # ============= СЕЗОННЫЕ КОЭФФИЦИЕНТЫ =============
         season_start_row = data_start_row + len(df_copy) + 2
         season_start_col = start_col
-        
+
         for col_idx, col_name in enumerate(df_copy.columns):
             worksheet.write(season_start_row, season_start_col + col_idx, col_name, header_format)
-        
+
         season_row = season_start_row + 1
         season_rows_list = []
-        
+
         # Собираем сезонные коэффициенты для всех полностью заполненных исторических годов
         for row_idx in range(len(df_copy)):
             year = df_copy.loc[row_idx, 'Год']
@@ -768,7 +922,7 @@ class ForecastNewChannels:
                 
                 season_rows_list.append(season_row)
                 season_row += 1
-        
+
         # Прогнозные сезонные коэффициенты (усредненные по всем историческим годам)
         if season_rows_list:
             # Для каждого года, требующего прогноза, создаем строку сезонных коэффициентов
@@ -776,15 +930,29 @@ class ForecastNewChannels:
             
             for forecast_year in self.forecast_years:
                 forecast_season_row = season_row
+                forecast_row_idx = df_copy[df_copy['Год'] == forecast_year].index[0]
+                excel_data_row = data_start_row + forecast_row_idx
+                
                 worksheet.write(forecast_season_row, season_start_col, int(forecast_year), forecast_year_format)
                 
                 for col_idx in range(1, len(df_copy.columns)):
+                    month_name = df_copy.columns[col_idx]
+                    current_value = df_copy.iloc[forecast_row_idx, col_idx]
                     month_col_letter = chr(ord('B') + col_idx)
-                    first_row = season_start_row + 2
-                    last_row = season_rows_list[-1] + 1
-                    cell_range = f'{month_col_letter}{first_row}:{month_col_letter}{last_row}'
-                    formula = f'=AVERAGE({cell_range})'
-                    worksheet.write(forecast_season_row, season_start_col + col_idx, formula, forecast_data_format)
+                    
+                    # Проверяем, есть ли фактические данные для этого месяца
+                    if pd.notna(current_value):
+                        # Для месяцев с фактическими данными - рассчитываем коэффициент как отношение к итогу
+                        total_col_letter = chr(ord('A') + total_col)
+                        season_formula = f'={month_col_letter}{excel_data_row + 1}/${total_col_letter}${excel_data_row + 1}'
+                        worksheet.write(forecast_season_row, season_start_col + col_idx, season_formula, data_format)
+                    else:
+                        # Для прогнозных месяцев - используем среднее по историческим годам
+                        first_row = season_start_row + 2
+                        last_row = season_rows_list[-1] + 1
+                        cell_range = f'{month_col_letter}{first_row}:{month_col_letter}{last_row}'
+                        formula = f'=AVERAGE({cell_range})'
+                        worksheet.write(forecast_season_row, season_start_col + col_idx, formula, forecast_data_format)
                 
                 forecast_season_rows[forecast_year] = forecast_season_row
                 season_row += 1
@@ -987,15 +1155,20 @@ class KUSChannelNearestNeighborPredictor:
 
 
         self.GENRE_OPTIONS = {
-            1: 'Детские',
-            2: 'Документалистика',
+            1: 'Детское',
+            2: 'Документальное',
             3: 'Животные',
-            4: 'Кино',
-            5: 'Музыка',
-            6: 'Патриотическое',
-            7: 'Развлекательное',
-            8: 'Спорт',
-            9: '-'
+            4: 'Здоровье',
+            5: 'Кино',
+            6: 'Кулинария',
+            7: 'Музыка',
+            8: 'Новости',
+            9: 'Патриотическое',
+            10: 'Познавательное',
+            11: 'Развлекательное',
+            12: 'Сериалы',
+            13: 'Спорт',
+            14: '-'
         }
 
         self.AUDIENCE_OPTIONS = {
@@ -1007,7 +1180,7 @@ class KUSChannelNearestNeighborPredictor:
         }
         
 
-        self.thematic_channels_data = pd.read_excel('Каналы Тематическое ТВ.xlsx')
+        self.thematic_channels_data = pd.read_excel(self.thematic_channels_guidebook_path)
 
         for column in self.thematic_channels_data.columns[0:6]:
             self.thematic_channels_data[column] = self.thematic_channels_data[column].str.lower()
@@ -1018,61 +1191,128 @@ class KUSChannelNearestNeighborPredictor:
             Генерация вариантов для прогнозирования
         """
 
-        # Генерация Жанра
+        # Генерация Жанра (множественный выбор)
         print('Выберите ' + Color.BOLD + 'ЖАНР' + Color.END + ' из списка:')
+        print('Выберите ' + Color.BOLD + 'ЖАНР' + Color.END + ' из списка (введите номера через запятую, если требуется выбрать несколько. Например: 1,3,5):')
         for key, value in self.GENRE_OPTIONS.items():
             print(f'{key}. {value}')
 
-        genre_choice = int(input('Введите номер: '))
-        self.movie_genre = self.GENRE_OPTIONS[genre_choice]
+        genre_input = input('Введите номера: ')
+        genre_choices = [int(x.strip()) for x in genre_input.split(',')]
+        
+        # Проверка на наличие опции "-" (все жанры)
+        if self.GENRE_OPTIONS[9] in [self.GENRE_OPTIONS[choice] for choice in genre_choices]:
+            self.movie_genres = [self.GENRE_OPTIONS[9]]  # Если выбран "-", то только он
+        else:
+            self.movie_genres = [self.GENRE_OPTIONS[choice] for choice in genre_choices if choice in self.GENRE_OPTIONS]
         print('\n')
 
         # Генерация Географии
-        print('Выберите ' + Color.BOLD + 'ГЕОГРАФИЮ' + Color.END + ' из списка:')
+        print('Выберите ' + Color.BOLD + 'ГЕОГРАФИЮ' + Color.END + ' из списка: (введите номера через запятую, если требуется выбрать несколько. Например: 1,3,5):')
         for key, value in self.GEOGRAFIC_OPTIONS.items():
             print(f'{key}. {value}')
 
-        geografic_choice = int(input('Введите номер: '))
-        self.geografic = self.GEOGRAFIC_OPTIONS[geografic_choice]
+        geografic_input = input('Введите номера: ')
+        geografic_choices = [int(x.strip()) for x in geografic_input.split(',')]
+        
+        # Проверка на наличие опции "-" (все географии)
+        if self.GEOGRAFIC_OPTIONS[4] in [self.GEOGRAFIC_OPTIONS[choice] for choice in geografic_choices]:
+            self.geografics = [self.GEOGRAFIC_OPTIONS[4]]  # Если выбран "-", то только он
+        else:
+            self.geografics = [self.GEOGRAFIC_OPTIONS[choice] for choice in geografic_choices if choice in self.GEOGRAFIC_OPTIONS]
         print('\n')
 
         # Генерация Аудитории
-        print('Выберите ' + Color.BOLD + 'АУДИТОРИЮ' + Color.END + ' из списка:')
+        print('Выберите ' + Color.BOLD + 'АУДИТОРИЮ' + Color.END + ' из списка: (введите номера через запятую, если требуется выбрать несколько. Например: 1,3,5):')
         for key, value in self.AUDIENCE_OPTIONS.items():
             print(f'{key}. {value}')
 
-        audience_choice = int(input('Введите номер: '))
-        self.audience = self.AUDIENCE_OPTIONS[audience_choice]
+        audience_input = input('Введите номера: ')
+        audience_choices = [int(x.strip()) for x in audience_input.split(',')]
+        
+        # Проверка на наличие опции "-" (все аудитории)
+        if self.AUDIENCE_OPTIONS[5] in [self.AUDIENCE_OPTIONS[choice] for choice in audience_choices]:
+            self.audiences = [self.AUDIENCE_OPTIONS[5]]  # Если выбран "-", то только он
+        else:
+            self.audiences = [self.AUDIENCE_OPTIONS[choice] for choice in audience_choices if choice in self.AUDIENCE_OPTIONS]
         print('\n')
 
         print(Color.VIOLET + f"В качестве ")
-        print(f'•  Жанра выбрано:                {self.movie_genre}')
-        print(f'•  Географии выбрано:            {self.geografic}')
-        print(f'•  Целевой аудитории выбрано:    {self.audience}' + Color.END)
+        print(f'•  Жанра выбрано:                {", ".join(self.movie_genres)}')
+        print(f'•  Географии выбрано:            {", ".join(self.geografics)}')
+        print(f'•  Целевой аудитории выбрано:    {", ".join(self.audiences)}' + Color.END)
 
+        #mask = None
+#
+        #if self.movie_genre == self.GENRE_OPTIONS[9]:
+        #    mask = (self.thematic_channels_data['Аудитория'].str.contains(self.audience.lower(), case = False, na = False)) & \
+        #           (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
+        #
+        #elif self.audience == self.AUDIENCE_OPTIONS[5]:
+        #    mask = (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False)) & \
+        #           (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
+        #
+        #elif self.geografic == self.GEOGRAFIC_OPTIONS[4]:
+        #    mask = (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False)) & \
+        #           (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
+        #
+        #else:
+        #    mask = (self.thematic_channels_data['Аудитория'].str.contains(self.audience.lower(), case = False, na = False)) & \
+        #           (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False)) & \
+        #           (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False))
+#
+        #result_df = self.thematic_channels_data[mask].reset_index(drop = True)
+
+        # Формирование маски для фильтрации
         mask = None
 
-        if self.movie_genre == self.GENRE_OPTIONS[9]:
-            mask = (self.thematic_channels_data['Аудитория'].str.contains(self.audience.lower(), case = False, na = False)) & \
-                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
-        
-        elif self.audience == self.AUDIENCE_OPTIONS[5]:
-            mask = (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False)) & \
-                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
-        
-        elif self.geografic == self.GEOGRAFIC_OPTIONS[4]:
-            mask = (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False)) & \
-                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False))
-        
+        # Фильтрация по жанрам (если не выбран "-")
+        if self.GENRE_OPTIONS[9] in self.movie_genres:
+            # Если выбран "-", пропускаем фильтр по жанру
+            pass
         else:
-            mask = (self.thematic_channels_data['Аудитория'].str.contains(self.audience.lower(), case = False, na = False)) & \
-                   (self.thematic_channels_data['География'].str.contains(self.geografic.lower(), case = False, na = False)) & \
-                   (self.thematic_channels_data['Жанр'].str.contains(self.movie_genre.lower(), case = False, na = False))
+            # Собираем все жанры через OR
+            genre_condition = False
+            for genre in self.movie_genres:
+                genre_condition |= self.thematic_channels_data['Жанр'].str.contains(genre.lower(), case=False, na=False)
+            mask = genre_condition
 
-        result_df = self.thematic_channels_data[mask].reset_index(drop = True)
+        # Фильтрация по географии (если не выбран "-")
+        if self.GEOGRAFIC_OPTIONS[4] in self.geografics:
+            # Если выбран "-", пропускаем фильтр по географии
+            pass
+        else:
+            geografic_condition = False
+            for geografic in self.geografics:
+                geografic_condition |= self.thematic_channels_data['География'].str.contains(geografic.lower(), case=False, na=False)
+            
+            if mask is None:
+                mask = geografic_condition
+            else:
+                mask &= geografic_condition
+
+        # Фильтрация по аудитории (если не выбрана "-")
+        if self.AUDIENCE_OPTIONS[5] not in self.audiences:
+            audience_condition = False
+            for audience in self.audiences:
+                audience_condition |= self.thematic_channels_data['Аудитория'].str.contains(audience.lower(), case=False, na=False)
+            
+            if mask is None:
+                mask = audience_condition
+            else:
+                mask &= audience_condition
+
+        # Если ничего не выбрано (все "-"), то показываем все
+        if mask is None:
+            mask = pd.Series([True] * len(self.thematic_channels_data))
+
+        result_df = self.thematic_channels_data[mask].reset_index(drop=True)
 
         print('\n')
-        print(Color.BOLD + Color.MAROON + f'Для канала {self.channel_name} сгенерировал следующие варианты. Пожалуйста, ознакомьтесь: ' + Color.END)
+        if len(result_df) == 0:
+            print(Color.BOLD + Color.RED + f'Для канала {self.channel_name} не нашлось похожих. Рекомендую в качестве прогноза взять среднее по всему ВК.')
+        else:
+            print(Color.BOLD + Color.MAROON + f'Для канала {self.channel_name} сгенерировал следующие варианты. Пожалуйста, ознакомьтесь: ' + Color.END)
 
         return result_df
     
@@ -1094,7 +1334,7 @@ class KUSChannelNearestNeighborPredictor:
             cols = [col for col in month_cols if col.startswith(month)]
             if cols:
                 # Берём ту, у которой самый большой суффикс
-                max_col = max(cols, key=lambda x: int(x.split('.')[1]) if '.' in x else 0)
+                max_col = max(cols, key = lambda x: int(x.split('.')[1]) if '.' in x else 0)
                 selected_cols.append(max_col)
 
         df_new = df[['Канал+ЦА', 'Канал', 'ЦА'] + selected_cols]
@@ -1170,22 +1410,55 @@ class KUSChannelNearestNeighborPredictor:
             'Канал', 'ЦА', 'Прогноз КУС', 'Прогноз КУЧ'
         ]]
 
-        results_dict = {}
-        for bca in bca_list_lowered:
-            df = variants_df[variants_df['ЦА'] == bca].reset_index(drop = True)
-            df['Прогноз КУС'] = df['Прогноз КУС'].astype(float).round(2)
-            df['Прогноз КУЧ'] = df['Прогноз КУЧ'].astype(float).round(2)
-            results_dict[bca] = df
-        
-        for key, value in results_dict.items():
-            print(Color.GREEN + f'{key}' + Color.END)  
-            print(f'{value.to_string()}')
-            print('\n') 
+        if len(variants_df) == 0:
+            forecast_results = []
+            for bca in bca_list_lowered:
+                df = forecast_df[forecast_df['ЦА'] == bca].reset_index(drop = True)
 
-        #print("Все отобранные каналы, которые оказываются наиболее похожими на целевой канал: ")
-        neighbor_df_cleand = neighbor_df[['Канал', 'Аудитория', 'Жанр', 'География', 'Холдинг', 'Описание']]
-        
-        return neighbor_df_cleand, results_dict
+                kus_forecast = df['Прогноз КУС'].mean()
+                kuch_forecast = df['Прогноз КУЧ'].mean()
+
+                forecast_df = pd.DataFrame(
+                    [[self.channel_name, bca, kus_forecast, kuch_forecast]],
+                    columns = ['Канал', 'ЦА', 'Прогноз КУС', 'Прогноз КУЧ']
+                )
+                forecast_results.append(forecast_df)
+            
+            forecast_result_df = pd.concat(forecast_results).reset_index(drop = True)
+            return pd.DataFrame(), {}, forecast_result_df
+            
+        else:
+            results_dict = {}
+            forecast_results = []
+            for bca in bca_list_lowered:
+                df = variants_df[variants_df['ЦА'] == bca].reset_index(drop = True)
+
+                kus_forecast = df['Прогноз КУС'].mean()
+                kuch_forecast = df['Прогноз КУЧ'].mean()
+
+                forecast_df = pd.DataFrame(
+                    [[self.channel_name, bca, kus_forecast, kuch_forecast]],
+                    columns = ['Канал', 'ЦА', 'Прогноз КУС', 'Прогноз КУЧ']
+                )
+                forecast_results.append(forecast_df)
+
+
+                df['Прогноз КУС'] = df['Прогноз КУС'].astype(float).round(2)
+                df['Прогноз КУЧ'] = df['Прогноз КУЧ'].astype(float).round(2)
+
+                results_dict[bca] = df
+            
+            for key, value in results_dict.items():
+                print(Color.GREEN + f'{key}' + Color.END)  
+                print(f'{value.to_string()}')
+                print('\n') 
+
+            #print("Все отобранные каналы, которые оказываются наиболее похожими на целевой канал: ")
+            neighbor_df_cleand = neighbor_df[['Канал', 'Аудитория', 'Жанр', 'География', 'Холдинг', 'Описание']]
+
+            forecast_result_df = pd.concat(forecast_results).reset_index(drop = True)
+            
+            return neighbor_df_cleand, results_dict, forecast_result_df
         
         
 

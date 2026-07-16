@@ -82,7 +82,7 @@ class BaseDataService:
 
         # 1. Случай, когда задан словарь с regions_id
         if regions_id is not None and basedemo_filter is not None and targets is None:
-            print(Color.VIOLET + 'Заданы словарь из ID регионов, также БЦА. Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
+            #print(Color.VIOLET + 'Заданы словарь из ID регионов, также БЦА. Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
             tasks = []
             for reg_id, reg_name in safe_regions_id.items():
                 current_company_filter = safe_params['company_filter']
@@ -117,7 +117,7 @@ class BaseDataService:
 
         # 2. Случай, когда задан словарь с ЦА targets
         elif targets is not None and regions_id is None and basedemo_filter is None:
-            print(Color.BROWN + 'Задан словарь из ЦА. Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
+            #print(Color.BROWN + 'Задан словарь из ЦА. Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
             tasks = []
             for target, syntax in safe_targets.items():
                 basedemo_filter = syntax
@@ -147,7 +147,7 @@ class BaseDataService:
         
         # 2. Случай, когда задан словарь с ЦА targets и регионами
         elif targets is not None and regions_id is not None and basedemo_filter is None:
-            print(Color.TEAL + 'Заданы словари из ЦА и ID регионов. Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
+            #print(Color.TEAL + 'Заданы словари из ЦА и ID регионов. Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
             if type(regions_id) == int:
                 current_company_filter = safe_params['company_filter'] + f' AND regionId IN ({regions_id})' 
 
@@ -180,7 +180,7 @@ class BaseDataService:
         
         # 3. Случай, когда задан только basedemo_filter, а targets и regions_id не заданы
         elif basedemo_filter is not None and regions_id is None and targets is None:
-            print(Color.TEAL + 'Задан только параметр с ЦА "basedemo_filter". Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
+            #print(Color.TEAL + 'Задан только параметр с ЦА "basedemo_filter". Генерирую задачи в формате JSON. Пожалуйста, подождите ...' + Color.END)
             task = mtask.build_timeband_task(
                                 date_filter = safe_params['date_filter'], 
                                 weekday_filter = safe_params['weekday_filter'], 

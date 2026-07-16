@@ -154,6 +154,12 @@ class Ensemble_Pipeline:
         forecast_df = self.main(config_filepath)
         forecast_df = forecast_df.reset_index()
         forecast_df = forecast_df.rename(columns = {forecast_df.columns[0]: 'Date'})
+
+        ############################## NEW #####################################
+        corrector = Postprocessing(self.df, forecast_df)
+        forecast_df = corrector.correction_final_forecast()
+        ############################## END #####################################
+
         output_filename = File.generate_filename(output_filepath, '.xlsx')
         forecast_df.to_excel(output_filename)
         #Установка внешнего вида итоговой таблицы с прогнозом

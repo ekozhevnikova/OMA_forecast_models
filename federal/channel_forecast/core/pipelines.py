@@ -509,7 +509,6 @@ class ChannelForecasterMaster:
 
         # ПОДГОТОВКА ДАННЫХ Palomars
         fact_part_of_month = pd.DataFrame()
-        by_programs_fact = pd.DataFrame()
         train = pd.DataFrame()
         vimb_init = pd.DataFrame()
 
@@ -519,10 +518,6 @@ class ChannelForecasterMaster:
             # Выделяем фактические значения долей из файла с фактическими данными
             mask_fact = (self.share_fact_df['Дата'] >= self.params['start_month']) & (self.share_fact_df['Дата'] <= self.params['last_fact_date'])
             fact_part_of_month = self.share_fact_df[mask_fact].reset_index(drop = True)
-
-            mask_by_programs = (historical_data_copy['Дата'] >= self.params['start_month']) & \
-                               (historical_data_copy['Дата'] <= self.params['last_fact_date'])
-            by_programs_fact = historical_data_copy[mask_by_programs].reset_index(drop = True)
             #fact_part_of_month.rename(columns = {f'{self.channel}': 'Share'}, inplace = True)
         
             # Отделяем тренировочную выборку, которую будем использовать для прогнозирования
@@ -546,8 +541,7 @@ class ChannelForecasterMaster:
 
         self.input_params = {
             'train_df': train,
-            'fact_df_by_dates': fact_part_of_month,
-            'fact_by_programs': by_programs_fact,
+            'fact_df': fact_part_of_month,
             'vimb_df': vimb_init
         }
         
@@ -570,7 +564,7 @@ class ChannelForecasterMaster:
 
         # Итоговая таблица с прогнозом
         forecast_df = model.pipeline_forecaster(
-            all_programs_to_forecast, self.input_params['fact_df_by_dates'], self.n_weeks_ago
+            all_programs_to_forecast, self.input_params['fact_df'], self.n_weeks_ago
         )
         return forecast_df
     
@@ -592,49 +586,16 @@ class ChannelForecasterMaster:
         data_forecast = forecast_df.groupby('Дата', as_index = False)['Share'].sum()
         data_forecast.rename(columns = {'Share': f'{self.channel}'}, inplace = True)
 
-        forecast_daily = pd.DataFrame()
-        forecast_by_programs = pd.DataFrame()
+        forecast_df = pd.DataFrame()
         # Если есть накопленный факт, то мы соединяем между собой две таблицы
-        if len(self.input_params['fact_df_by_dates']) != 0:
-            df_fact = self.input_params['fact_df_by_dates'][['Дата', f'{self.channel}']]
+        if len(self.input_params['fact_df']) != 0:
+            df_fact = self.input_params['fact_df'][['Дата', f'{self.channel}']]
             #df_fact.rename(columns = {f'{self.channel}': 'Share'}, inplace = True)
-            forecast_daily = pd.concat([df_fact, data_forecast]).reset_index(drop = True)
-
-            ########## НОВЫЙ КУСОК ##########
-            forecast = forecast_df[['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share']]
-
-            fact_df = self.input_params['fact_by_programs'][['Дата', 'Название программы', 'Время выхода', 'Время окончания', 'Share_weighted']]
-            fact_df.rename(columns = {'Share_weighted': 'Share'}, inplace = True)
-
-            full = pd.concat([fact_df, forecast])
-
-            full['Дата'] = pd.to_datetime(full['Дата'])
-            sorted_webs = full.sort_values('Дата').reset_index(drop = True)
-            
-            res = []
-            for date in sorted_webs['Дата'].unique():
-                date_dt = pd.to_datetime(date)
-                t = sorted_webs[sorted_webs['Дата'] == date_dt]
-                t['sort_key'] = t['Время выхода'].apply(BaseParser.get_sort_key)
-                final = t.sort_values('sort_key').reset_index(drop = True)
-                final = final.drop('sort_key', axis = 1)
-                res.append(final)
-            
-            forecast_by_programs = pd.concat(res).reset_index(drop = True)
-            forecast_by_programs['Дата'] = forecast_by_programs['Дата'].dt.strftime('%Y-%m-%d')
-
-            ########## КОНЕЦ НОВОГО КУСКА ##########
-
+            forecast_df = pd.concat([df_fact, data_forecast]).reset_index(drop = True)
 
         else:
-            forecast_daily = data_forecast
-            forecast_by_programs = forecast_df
+            forecast_df = data_forecast
 
         print(Color.BOLD + Color.CRIMSON + '⭐ Прогноз завершён!' + Color.END + '\n')
 
-        result = {
-            'by_programs': forecast_by_programs,
-            'by_days': forecast_daily
-        }
-
-        return result
+        return forecast_df

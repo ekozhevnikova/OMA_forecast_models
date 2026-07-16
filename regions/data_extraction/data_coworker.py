@@ -347,13 +347,12 @@ class EmployeeExportService:
         for key, df in df_dict.items():
             df_dict[key][date_column] = df_dict[key][date_column].apply(lambda x: pd.to_datetime(x))
 
-        #data_old = File(historical_filepath_by_days).from_file(0)
+        data_old = File(historical_filepath_by_days).from_file(0)
         data_new = File(filename = historical_filepath_by_days).update_file(
                                                             df_dict,
                                                             date_column, 
                                                             DataConfig.BCA_LIST
                                                                 )
-        
         try:
             # Установка внешнего вида итоговой таблицы по дням за последние 28 дней
             writer = pd.ExcelWriter(historical_filepath_by_days, engine = 'xlsxwriter')

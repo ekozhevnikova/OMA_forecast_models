@@ -282,7 +282,6 @@ class AdvertisingCampaign:
             print(res_df.to_string(index=False))
         
         return df_selected, res_df
-    
 
     def aggregate_rows(self, rows, shifts, target):
         """
@@ -890,12 +889,9 @@ class SimulationClass:
                 df.rename(columns = {'Время': 'Время выхода'}, inplace = True)
                 df_to_calculate_grp = pd.merge(df, data_result_TVR, on = ['Дата', 'Канал', 'Время выхода'], how = 'inner')
                 GRP_new = df_to_calculate_grp['TVR'].sum()
-                T = df_to_calculate_grp['Количество респондентов'].sum() * 60
-                new_target_GRP[number_of_outputs] = [GRP_new, T]
+                new_target_GRP[number_of_outputs] = GRP_new
         # Создаем новый DataFrame с новыми GRP
-        new_GRP_df = pd.DataFrame(new_target_GRP)
-        new_GRP_df.columns = ['Количество выходов', 'GRP new', 'Объём']
-        #new_GRP_df = pd.DataFrame(list(new_target_GRP.items()), columns = ['Количество выходов', 'GRP new'])
+        new_GRP_df = pd.DataFrame(list(new_target_GRP.items()), columns = ['Количество выходов', 'GRP new'])
         return new_GRP_df
 
 
@@ -967,8 +963,6 @@ class SimulationClass:
 
         # ШАГ 5. РАСЧЕТ ФАКТИЧЕСКИХ GRP КАМПАНИИ ЧЕРЕЗ РЕЙТИНГИ СЛОТОВ, В КОТОРЫХ ОНИ РАЗМЕСТИЛИСЬ
         new_GRP_df = self.make_new_GRP(time_table_dict, data_result_TVR)
-
-        print(new_GRP_df)
 
         # ШАГ 6. РАСЧЁТ НАКОПЛЕННОГО REACH КАК СУММА ВЕСОВ УНИКАЛЬНЫХ РЕСПОДЕНТОВ ЗА ВЕСЬ ПЕРИОД
         reach_df = self.calculate_reach(time_table_dict, minutely_df, new_GRP_df, GRP_and_points, mean_weight_df)

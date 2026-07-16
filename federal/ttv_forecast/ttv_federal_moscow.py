@@ -195,7 +195,7 @@ class TTV:
 
             tmp = forecast.loc[:, ['ds', 'yhat', 'yhat_lower', 'yhat_upper']]
             forecast_cut = tmp[tmp.ds > self.last_fact_date]
-            train_df = train_df[pd.to_datetime(train_df.ds, format = '%Y-%m-%d') >= dt.datetime(self.last_fact_date.year - 1, 1, 1)]
+            train_df = train_df[pd.to_datetime(train_df.ds, format = '%Y-%m-%d') >= dt.datetime(self.last_fact_date.year - 4, 1, 1)]
             result = pd.concat([train_df, forecast_cut], axis = 0)
             result['bca'] = key
             TTV.to_file(path_to_save, key, result_df = result)

@@ -458,15 +458,19 @@ class KUS_Forecast:
                                         'Открытый WGRP без учета квот' : 'GRP',
                                         'Базовая ЦА' : 'BCA',
                                         'Ср. рейтинг' : 'tvr_adv',
-                                        'Канал': 'Channel'})
+                                        'Канал': 'Channel'})  
+
         table['BCA'] = table['BCA'].str.split(' ', expand = True)[0].str.lower() + ' ' + table['BCA'].str.split(' ', expand = True)[1]
         table['Channel'] = table['Channel'].str.lower()
     
         if is_current_month is not True:
             table['time'] = table['time'].astype(str)
 
-        for i in range(len(table)):
-            table['Month'][i] = datetime.strftime(table['Month'][i], '%B %Y')
+        if not pd.api.types.is_datetime64_any_dtype(table['Month']):
+            table['Month'] = pd.to_datetime(table['Month'])
+        
+        # Теперь применяем strftime ко всему столбцу (векторизованно, без цикла)
+        table['Month'] = table['Month'].dt.strftime('%B %Y')
 
         return table
     
@@ -500,9 +504,10 @@ class KUS_Forecast:
         zakr_piv = table[(table['Month'] >= first_date) & (table['Month'] < last_fact_date)]
         zakr_piv = zakr_piv.pivot_table(index = 'Channel', columns = ['Month'], values = ['TVR Total', 'Volume', 'GRP'],
                          aggfunc = {'TVR Total': 'mean', 'Volume': 'sum','GRP': 'sum'})
-        if zakr_piv.empty!=True:
+
+        if zakr_piv.empty != True:
             df_zakrytye = zakr_piv['GRP'] * 20 / (zakr_piv['Volume'] * zakr_piv['TVR Total'])
-            print(zakr_piv)
+            
         else:
             df_zakrytye=pd.DataFrame(index=pd.Index(table['Channel'].unique(),name='Channel'))
             print('Нет месяцев в факте!')
@@ -526,7 +531,7 @@ class KUS_Forecast:
         ############################# ПОДСЧЕТ ТЕКУЩЕГО МЕСЯЦА #####################################################
         # Если текущий месяц январь
         if today.month == 1:
-            if today.day > 15:
+            if today.day > 14:
                 print('Реализуем обновление в середине месяца')
                 if today.day < 21:
                     fact_w = 0.5
@@ -573,6 +578,8 @@ class KUS_Forecast:
                                     usecols = [0, 5, 6, 7, 12, 13])
                 adv_tec = KUS_Forecast.parse_VIMB(adv_tec)
                 tvr_prog_tec = data_api
+                print(adv_tec)
+                print(adv_tec.dtypes)
                 tec_main = pd.merge(tvr_prog_tec, adv_tec, how = "right", on = ['Channel', 'BCA', "Month"])
 
                         #Подсчет факта

@@ -383,7 +383,7 @@ class LeaderShipDataExtractor:
             Метод реализует выгрузку данных для руководителей групп для серии временных периодов
         """
         results = {}
-        for period in selected_periods:
+        for index, period in enumerate(selected_periods):
             date_filter = date_periods[period]
             
             # Формирование задач в формате json
@@ -395,12 +395,11 @@ class LeaderShipDataExtractor:
             #for key, params in regions_params.items():
             #    json_tasks[key] = LeaderShipDataExtractor.build_json_tasks(date_filter, *params)
             #####################################################################################################
-            #df = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
-            #df.to_excel(f'/Users/kkozhevnikova/Documents/NSC/РЕГИОНЫ/{period}.xlsx')
-            
             results[period] = LeaderShipDataExtractor.make_api_calculation(date_filter, json_tasks, share_table)
 
-            time.sleep(45)
+            # Добавляем задержку только если это не последний период
+            if index != len(selected_periods) - 1:
+                time.sleep(120)
     
         return results
         

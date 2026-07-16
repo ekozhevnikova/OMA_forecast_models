@@ -147,8 +147,8 @@ class Constants:
         DATE_FILTER_PREV_TO_FACT_MONTH = None
 
         ################## ГЕНЕРАЦИЯ ПЕРИОДОВ: НЕДЕЛЬНЫЕ И 50 ДНЕЙ ##################
-        if local_time.hour < 12:
-            # ПОСЛЕДНИЕ 2 НЕДЕЛИ
+        if local_time.hour < 12:                                                                              # ПОМЕНЯТЬ НА 12
+         # ПОСЛЕДНИЕ 2 НЕДЕЛИ
             DATE_FILTER_LAST_14_DAYS = Dates_Operations(number_of_previous_days=[-16, -3]).date_filter
             
             # ПОСЛЕДНИЕ 3 НЕДЕЛИ
@@ -158,25 +158,25 @@ class Constants:
             DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-30, -17]).date_filter
             
             # ПОСЛЕДНИЕ 50 ДНЕЙ
-            date_start = datetime.now() + timedelta(days=-51)
+            date_start = datetime.now() + timedelta(days = -51)
             start_date = date_start.strftime('%Y-%m-%d')
-            date_stop = datetime.now() + timedelta(days=-3)
+            date_stop = datetime.now() + timedelta(days = -3)
             stop_date = date_stop.strftime('%Y-%m-%d')
             DATE_FILTER_BY_DATES = [(start_date, stop_date)]
         else:
             # ПОСЛЕДНИЕ 2 НЕДЕЛИ
-            DATE_FILTER_LAST_14_DAYS = Dates_Operations(number_of_previous_days=[-17, -4]).date_filter #заменить на -15, -2
+            DATE_FILTER_LAST_14_DAYS = Dates_Operations(number_of_previous_days=[-15, -2]).date_filter # ПОМЕНЯТЬ НА -15, -2, (-18, -5)
             
             # ПОСЛЕДНИЕ 3 НЕДЕЛИ
-            DATE_FILTER_LAST_21_DAYS = Dates_Operations(number_of_previous_days=[-24, -4]).date_filter #заменить на -22, -2
+            DATE_FILTER_LAST_21_DAYS = Dates_Operations(number_of_previous_days=[-22, -2]).date_filter # ПОМЕНЯТЬ НА -22, -2, (-25, -5)
             
             # ДВЕ НЕДЕЛИ ПЕРЕД ПОСЛЕДНИМИ ДВУМЯ НЕДЕЛЯМИ
-            DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-31, -18]).date_filter #заменить на -29, -16
+            DATE_FILTER_PREV_14 = Dates_Operations(number_of_previous_days=[-29, -16]).date_filter # ПОМЕНЯТЬ НА -29, -16, (-32, -19)
             
             # ПОСЛЕДНИЕ 50 ДНЕЙ
-            date_start = datetime.now() + timedelta(days=-70) #заменить на -50
+            date_start = datetime.now() + timedelta(days = -55)  # ПОМЕНЯТЬ НА -50, (-53)
             start_date = date_start.strftime('%Y-%m-%d')
-            date_stop = datetime.now() + timedelta(days=-4) #заменить на -2
+            date_stop = datetime.now() + timedelta(days = -2)   # ПОМЕНЯТЬ НА -2, (-5)
             stop_date = date_stop.strftime('%Y-%m-%d')
             DATE_FILTER_BY_DATES = [(start_date, stop_date)]
 
@@ -193,8 +193,8 @@ class Constants:
         start_of_curr_month = f'{current_date.year}-{curr_month:02d}-01'
         
         # Определяем смещение для last_fact_date в зависимости от часа
-        days_offset = -3 if local_time.hour < 12 else -2
-        
+        days_offset = -3 if local_time.hour < 12 else -2  #РАССКОМЕНТИРОВАТЬ
+        #days_offset = -5                                                                 # УБРАТЬ ЭТУ СТРОКУ
         # Генерация ФАКТА ТЕКУЩЕГО МЕСЯЦА
         date_stop = datetime.now() + timedelta(days=days_offset)
         last_fact_date = date_stop.strftime('%Y-%m-%d')

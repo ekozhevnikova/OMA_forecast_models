@@ -30,7 +30,7 @@ class Dates_Operations:
         date_stop = datetime.now() + timedelta(days = number_of_previous_days[1])
         stop_date = date_stop.strftime('%Y-%m-%d')
         
-        print('start date: ' + start_date + '; ' + 'stop_date: ' + stop_date)
+        #print('start date: ' + start_date + '; ' + 'stop_date: ' + stop_date)
         return [(start_date, stop_date)]
     
     
@@ -153,8 +153,8 @@ class Dates_Operations:
             return [month.inflect({'ablt'}).word, month.inflect({'ablt'}).word.capitalize()]
         elif case == 'Предложный':
             return [month.inflect({'loct'}).word, month.inflect({'loct'}).word.capitalize()]
+            
         
-
     @staticmethod    
     def convert_dates_from_str_to_datetime_format(df, date_column_name: str, date_format_init: str, type_of_split: str, lang: str):
         """
@@ -178,6 +178,7 @@ class Dates_Operations:
             else:
                 dates_converted.append(datetime.strptime(i, date_format_init).strftime('%d.%m.%Y'))
 
+
             #dates_converted.append(datetime.strptime(i, date_format_init).strftime('%Y.%m.%d'))
         df[date_column_name] = df[date_column_name].replace(dates, dates_converted)
         df[date_column_name] = df[date_column_name].apply(lambda x: pd.to_datetime(x))
@@ -198,36 +199,3 @@ class Dates_Operations:
         stop_date = pd.to_datetime(stop_date, format = '%d.%m.%Y')
         n = np.abs((start_date.year - stop_date.year) * 12 + (start_date.month - stop_date.month))
         return int(n)
-
-    @staticmethod
-    def get_last_4_weeks(start_date, n: int = 4):
-        """
-            Функция ддля генерации последних n недель.
-            Args:
-                n: кол-во недель (7 * n), по дефолту последние 4 недели.
-                start_date: дата в формате timestamp
-            Returns:
-                dates: Список из дат за последние n недель
-        """
-        try:
-            # Пытаемся преобразовать в единичный Timestamp
-            if hasattr(start_date, 'iloc'):
-                start_date = start_date.iloc[0]
-            elif hasattr(start_date, '__len__') and len(start_date) > 0:
-                start_date = start_date[0] if hasattr(start_date, '__getitem__') else start_date
-            
-            start_date = pd.Timestamp(start_date)
-            
-            # Генерируем даты
-            dates = []
-            for i in range(7 * n, 0, -1):
-                date = start_date - pd.Timedelta(days=i)
-                dates.append(date.strftime('%Y-%m-%d'))
-            
-            return dates
-            
-        except Exception as e:
-            print(f"Ошибка в get_last_4_weeks: {e}")
-            print(f"Тип start_date: {type(start_date)}")
-            print(f"Значение start_date: {start_date}")
-            return []

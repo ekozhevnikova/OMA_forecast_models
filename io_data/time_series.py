@@ -7,6 +7,8 @@ from scipy.stats import kendalltau
 from sklearn.preprocessing import MinMaxScaler
 
 
+
+
 class TimeSeriesTransformer:
     """
         Класс для предобработки Временных Рядов.
@@ -179,12 +181,12 @@ class TimeSeriesTransformer:
             else:
                 stationary_series = self.series.diff(optimal_diff).dropna()
             print('Ряд приведен к стационарному виду.')
-            return stationary_series, log_transform
+            return stationary_series, optimal_diff, p_value, log_transform
         else:
             optimal_diff = 0
             p_value = 0
             log_transform = False
-            return self.series, log_transform
+            return self.series, optimal_diff, p_value, log_transform
     
 
     @staticmethod
@@ -216,28 +218,6 @@ class TimeSeriesTransformer:
                     gaps.append(current_gap_date.strftime('%Y-%m-%d'))
                     current_gap_date += timedelta(days = 1)
         return len(gaps)
-    
-
-    @staticmethod
-    def create_reverse_dates_from_target(df, date_column: str, target_column: str) -> pd.DataFrame:
-        """
-            Создает список дат от самой последней к самой старой на основе длины целевого столбца.
-            Args:
-                df:
-                date_column: столбец с датой, который нуждается в реконструкции
-                target_column: столбец с целевой переменной, на который будем ориентироваться при генерации 
-                               новой последовательности дат.
-            Returns:
-                data__new: Новый DataFrame с новым порядком дат.
-        """
-        #Определение количества дней для генерации списка дат
-        n_days = len(df[target_column])
-        #Поиск максимальной даты в исходном DataFrame
-        end_date = df[date_column].max()
-        #Создаем даты от самой новой к самой старой
-        dates = list(reversed([end_date - pd.Timedelta(days = i) for i in range(n_days)]))
-        data_new = pd.DataFrame(list(zip(dates, list(df[target_column]))), columns = [date_column, target_column])
-        return data_new
 
 
     @staticmethod
@@ -301,7 +281,7 @@ class TimeSeriesTransformer:
         return df
     
 
-    def check_scale_and_modify_scale_if_need(self):
+    def check_scale_and_modify_scale_if_need(data, target_column: str = 'Share', date_column: str = 'Date'):
         """
             Проверяет на одинаковость масштаба данных.
             Args:
@@ -312,19 +292,15 @@ class TimeSeriesTransformer:
                 data: если масштаб одинаковый
                 df: отмасштабированный data
         """
-        scaler = False
 
-        if min(self.series) == 0.0:
-            epsilon = 1e-8
-            target_values_adj = [x + epsilon for x in self.series]
-            range_ratio = max(target_values_adj) / min(target_values_adj)
-        else:
-            #Разброс значений
-            range_ratio = max(self.series) / min(self.series)
+        target_values = list(data[target_column])
+
+        #Разброс значений
+        range_ratio = max(target_values) / min(target_values)
         #Стандартное отклонение
-        std = np.std(self.series)
+        std = np.std(target_values)
         #Среднее значение
-        mean = np.mean(self.series)
+        mean = np.mean(target_values)
         #коэффициент ковариации в %
         covariation = (std / mean) * 100
 
@@ -334,21 +310,21 @@ class TimeSeriesTransformer:
                 print('-' * 20)
                 print('Нормализую ...')
                 scaler = MinMaxScaler()
-                X = np.array(self.series).reshape(-1, 1)
+                X = data[target_column].values.reshape(-1, 1)
                 scaler.fit(X)
                 X_scaled = scaler.transform(X)
                 scaled_values_list = [i[0] for i in X_scaled]
-                #data['target'] = scaled_values_list
-                #df = data[[date_column, 'target']]
-                #df.rename(columns = {'target': target_column}, inplace = True)
-                return scaled_values_list, scaler
+                data['target'] = scaled_values_list
+                df = data[[date_column, 'target']]
+                df.rename(columns = {'target': target_column}, inplace = True)
+                return df, scaler
         else:
             print("Признаки имеют ОДИНАКОВЫЙ масштаб.")
-            scaler = False
-            return self.series, scaler
+            scaler = None
+            return data, scaler
     
 
-    def detect_outliers(self):
+    def detect_outliers(data, target: str = 'Share'):
         """
             Функция для замены выбросов на значения медианы.
             Args:
@@ -357,20 +333,11 @@ class TimeSeriesTransformer:
             Retuns:
                 data: измененный/не измененный data
         """
-        # Если self.series это np.ndarray, то делаем конвертацию в pd.Series
-        if isinstance(self.series, np.ndarray):
-            series_pd = pd.Series(self.series)
-        # Если self.series это list, то делаем конвертацию в pd.Series
-        elif isinstance(self.series, list):
-            series_pd = pd.Series(self.series)
-        else:
-            series_pd = self.series
         #Замена выбросов на значения медианы
-        #series_array = np.array(my_list)
-        med = series_pd.quantile(0.5)
-        values_init = series_pd.copy()
+        med = np.quantile(data[target], 0.5)
+        values_init = list(data[target])
         
-        Q1, Q3 = series_pd.quantile([0.25, 0.75])
+        Q1, Q3 = data[target].quantile([0.25, 0.75])
         IQR = Q3 - Q1
         lower_limit = Q1 - 1.5 * IQR
         upper_limit = Q3 + 1.5 * IQR  
@@ -378,41 +345,18 @@ class TimeSeriesTransformer:
         num_of_outlier_lower = sum(i > lower_limit for i in values_init)
         num_of_outlier_upper = sum(i > upper_limit for i in values_init)
         number = num_of_outlier_lower + num_of_outlier_upper
-
         if number > 0:
             print('В выборке присутствуют выбросы! Заменяю их на значения медианы.')
-    
-        # Векторизованная замена (быстрее чем цикл)
-        values_init = np.where((values_init < lower_limit) | (values_init > upper_limit), med, values_init)
+        
+        for i in range(len(values_init)):
+            if values_init[i] < lower_limit:
+                values_init[i] = med
+            elif values_init[i] > upper_limit:
+                values_init[i] = med
         
         #Замена выбросов
-        #data[target].replace(list(data[target]), values_init, inplace = True)
-        return values_init
-    
-
-    def replace_outliers_with_median(self, lower_quantile: float = 0.05, upper_quantile: float = 0.95) -> list:
-        """
-            Функция для замены выбросов на значения медианы.
-            Выбросы определяются как значения за пределами [lower_quantile, upper_quantile].
-            Args:
-                data (list): Входной список числовых данных.
-                lower_quantile (float): Нижний квантиль (по умолчанию 0.05).
-                upper_quantile (float): Верхний квантиль (по умолчанию 0.95).
-
-            Returns:
-                list: Список с обработанными данными.
-        """
-        data_array = np.array(self.series.tolist())
-        lower_bound = np.quantile(data_array, lower_quantile)
-        upper_bound = np.quantile(data_array, upper_quantile)
-
-        median_val = np.median(data_array)
-
-        # Создаем копию, чтобы не менять исходные данные
-        processed_data = data_array.copy()
-        processed_data[(data_array < lower_bound) | (data_array > upper_bound)] = median_val
-
-        return processed_data.tolist()
+        data[target].replace(list(data[target]), values_init, inplace = True)
+        return data
 
 
 class TimeSeriesTrendAnalyze:
@@ -464,35 +408,22 @@ class TimeSeriesTrendAnalyze:
         return mean_abs_diff, diff_ratio
     
 
-    def extract_trend_with_ma(self, window_size, target_column: str = 'Share', center=True, min_periods=None):
+    def extract_trend_with_ma(self, window_size, target_column: str = 'Share', center = True, min_periods = None):
         """
-        Выделяет тренд с помощью скользящего среднего.
-        Args:
-            window_size: размер окна (должен быть целым числом ≥ 0)
-            target_column: название колонки с данными
-            center: центрирование окна
-            min_periods: минимальное количество точек для вычисления
-        Returns:
-            tuple: (детрендированный ряд, тренд)
+            Выделяет тренд с помощью скользящего среднего.
+            Args:
+                data: Временной ряд
+                window_size: размер окна
+                center: центрирование окна
+                min_periods: минимальное количество точек для вычисления
+            Returns:
+                Series с выдеделенным трендом
         """
-        # Проверка window_size
-        if not isinstance(window_size, int) or window_size <= 0:
-            raise ValueError("window_size must be an integer greater than 0")
-        
-        # Установка min_periods по умолчанию
-        if min_periods is None:
+        values_init = list(self.data[target_column])
+        if min_periods is not None:
             min_periods = window_size // 2
-        
-        # Вычисление тренда
-        trend = self.data[target_column].rolling(
-            window=window_size, 
-            center=center, 
-            min_periods=min_periods
-        ).mean()
-        
-        # Детрендирование (вычитание тренда из исходных данных)
-        detrend_series = self.data[target_column] - trend
-        
+        trend = self.data[target_column].rolling(window = window_size, center = center, min_periods = min_periods).mean()
+        detrend_series = values_init - trend
         return detrend_series, trend
     
 

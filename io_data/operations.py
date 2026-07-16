@@ -7,6 +7,8 @@ from docx.shared import Inches, Cm
 import pickle
 import copy
 import locale
+from openpyxl import load_workbook
+import xlsxwriter
 from OMA_tools.io_data.dates import Dates_Operations
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8')
 
@@ -31,6 +33,13 @@ class File:
             data[sheet_num] = excel_reader.parse(sheet_name, index_col = index_col, skiprows = skiprows)
         #excel_reader.close()
         return data
+
+
+        data = {}
+        with pd.ExcelFile(self.filename) as excel_reader:
+            for sheet_num, sheet_name in enumerate(excel_reader.sheet_names):
+                data[sheet_num] = excel_reader.parse(sheet_name, index_col=index_col, skiprows=skiprows)
+        return data
     
     
     def to_file(self, df):
@@ -40,7 +49,7 @@ class File:
         with pd.ExcelWriter(self.filename, engine = 'openpyxl', mode = 'a', if_sheet_exists = 'replace') as excel_writer:
             for i, df_i in enumerate(df):
                 df[df_i].to_excel(excel_writer, sheet_name = df_i)
-                
+
                 
     def to_file_by_list_names(self, df, list_names = []):
         """
@@ -133,7 +142,10 @@ class File:
             updated[key] = new
         
         # Сохраняем в файл
-        self.to_file(updated)
+        try:
+            self.to_file(updated)
+        except Exception as e:
+            print(f"Не удалось сохранить Excel: {e}")
         
         return updated
     

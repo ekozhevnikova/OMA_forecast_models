@@ -255,22 +255,26 @@ class Simulation:
         return selected_slots_general, TVR_by_slots_general, TVR_mean_per_month
 
     
-    def round_math(self, value, decimals = 0):
+    def round_math(self, value: float, decimals: int = 0):
         """
             Математическое округление числа.
             
             Параметры:
-            - value: число для округления
-            - decimals: количество знаков после запятой (по умолчанию 0)
+            ----------
+                value: float
+                    Число для округления
+                decimals: int
+                    Количество знаков после запятой (по умолчанию 0)
             
-            Возвращает:
-            - Округленное число
+            Returns:
+            ----------
+                Округленное число
         """
         multiplier = 10 ** decimals
         return int(value * multiplier + (0.5 if value >= 0 else -0.5)) / multiplier
 
 
-    def calculate_number_of_airings(self, TVR_mean, debug = False):
+    def calculate_number_of_airings(self, TVR_mean: float, debug: bool = True):
         """
             Метод рассчитывает необходимое количество выпусков рекламных роликов в месяц, а также на каждом канале в зависимости от целевого GRP.
         """
@@ -328,35 +332,32 @@ class Simulation:
 
     def calculate_GRP_fact(self, time_table_dict: dict, TVR_by_slots: pd.DataFrame):
         """
+            Метод для расчета фактического GRP рекламной кампании, основываясь на рейтингах слотов, в которые размещается реклама.
+
             Параметры:
             ----------
                 time_table_dict: dict
                     Словарь с распределением количества выходов по каналам и слотам
                 TVR_by_slots: pd.DataFrame
                     Таблица с рейтингами каждого слота по каналам
+            
+            Returns:
+            ----------
+                GRP_fact_df: pd.DataFrame
+                        Таблица с результатами расчета Фактического GRP кампании. Содержит столбцы: Кол-во выходов на каждом канале, GRP факт
         """
         # Расчет фактического GRP, основываясь на количестве выходов на каждом канале, а также на TVR слотов
         GRP_fact_dict = {}
 
         for number_of_outputs, time_table in time_table_dict.items():
             if number_of_outputs == 0:
-                GRP_fact_dict[number_of_outputs] = [0, 0]
+                GRP_fact_dict[number_of_outputs] = 0
             else:
                 #time_table_new = time_table.rename(columns = {'Время': 'Время выхода'})
                 res_df = pd.merge(time_table, TVR_by_slots, on = ['Дата', 'Время выхода', 'Канал'], how = 'inner')
+                GRP_fact_dict[number_of_outputs] = res_df['TVR'].sum()
 
-                new_GRP = res_df['TVR'].sum()
-                T = res_df['Количество респондентов'].sum() * 20
-    
-                GRP_fact_dict[number_of_outputs] = [new_GRP, T]
-
-        GRP_fact_df = pd.DataFrame.from_dict(GRP_fact_dict, orient = 'index', columns = ['GRP new', 'Объём'])
-        GRP_fact_df.reset_index(inplace = True)
-        GRP_fact_df.rename(columns = {'index': 'Кол-во выходов на каждом канале'}, inplace = True)
-        #GRP_fact_df = pd.DataFrame(GRP_fact_dict)
-        #print(GRP_fact_df.to_string())
-        #GRP_fact_df.columns = ['Количество выходов', 'GRP new', 'Объём']
-        #GRP_fact_df = pd.DataFrame(list(GRP_fact_dict.items()), columns = ['Кол-во выходов на каждом канале', 'GRP факт'])
+        GRP_fact_df = pd.DataFrame(list(GRP_fact_dict.items()), columns = ['Кол-во выходов на каждом канале', 'GRP факт'])
         return GRP_fact_df
     
 
@@ -367,7 +368,12 @@ class Simulation:
                 time_table_dict: dict
                     Словарь с распределением количества выходов по каналам и слотам
                 selected_slots_df: pd.DataFrame
-                    Таблица с выбранными слотами для анализа
+                    Таблица с выбранными слотами для анализ
+            
+            Returns:
+            ----------
+                reach_df: pd.DataFrame
+                    Таблица с результатами расчета Reach. Содержит столбцы: Кол-во выходов на каждом канале, Reach
         """
         # Расчет накопленного охвата рекламной компании
         reach_dict = {}
@@ -384,7 +390,23 @@ class Simulation:
         return reach_df
 
 
-    def simulation_pipeline(self, resps_weights_mean_df, target_date = '01.03.2026'):
+    def simulation_pipeline(self, resps_weights_mean_df: pd.DataFrame, target_date: str = '01.03.2026'):
+        """
+            Полный пайплайн для моделирования рекламной кампании (Анализ ТВ & Радио)
+
+            Параметры:
+            ----------
+                resps_weights_mean_df: pd.DataFrame
+                    Таблица со средними весами респондентов
+                
+                target_date: str
+                    Произвольная дата месяца для получения количества дней
+            
+            Returns:
+            ----------
+                required_outputs_df: pd.DataFrame
+                    Таблица с результатами моделирования
+        """
         # ШАГ 1. Расчет TVR
         selected_slots_df, TVR_by_slots_df, TVR_mean_per_month = self.TVR_calculation(resps_weights_mean_df)
 
