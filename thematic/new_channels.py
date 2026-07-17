@@ -187,7 +187,7 @@ class ForecastNewChannels:
         start = datetime.strptime(self.start_date, '%Y-%m-%d')
         stop = datetime.strptime(self.stop_date, '%Y-%m-%d')
         
-        self.periods = []
+        periods = []
         
         # Генерируем периоды по годам
         current = start
@@ -199,11 +199,11 @@ class ForecastNewChannels:
             if year_end > stop:
                 year_end = stop
             
-            self.periods.append([ (year_start.strftime('%Y-%m-%d'), year_end.strftime('%Y-%m-%d')) ])
+            periods.append([ (year_start.strftime('%Y-%m-%d'), year_end.strftime('%Y-%m-%d')) ])
             
             # Переходим к следующему году
             current = datetime(current.year + 1, 1, 1)
-        return self.periods
+        return periods
 
 
     def get_data(self, adult_tasks, child_tasks, max_workers = 10):
@@ -224,7 +224,7 @@ class ForecastNewChannels:
 
     def acquistare_data(
         self, type_of_grouping: str, company_filter: str, 
-        statistics: list
+        statistics: list, periods: list
         ):
         """
             Метод для выгрузки данных из БД.
@@ -278,7 +278,7 @@ class ForecastNewChannels:
 
         # Разбивка периодов по годам для генерации задач в формате JSON для каждого года отдельно
         periods_dict = {}
-        for item in self.periods:
+        for item in periods:
             start_date, end_date = item[0]
             year = datetime.strptime(start_date, '%Y-%m-%d').year
             periods_dict[year] = [(start_date, end_date)]
@@ -1074,10 +1074,10 @@ class ForecastNewChannels:
             Полный пайплайн
         """
         # Шаг 1. Генерация периодов для выгрузки данных
-        self.periods = self.generate_periods()
+        periods = self.generate_periods()
 
         # Шаг 2. Выгрузка данных из БД
-        results = self.acquistare_data(type_of_grouping, company_filter, statistics) 
+        results = self.acquistare_data(type_of_grouping, company_filter, statistics, periods) 
 
         # Шаг 3. Преобразование данных для построения прогноза
         transformed_results = self.form_output_for_forecast(results)
